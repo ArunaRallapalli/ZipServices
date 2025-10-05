@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Nearby Marketplace App",
+    "slug": "nearbymarketplaceapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+
+    "ios": {
+      "supportsTablet": true,
+
+     
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,         
+          "NSExceptionDomains": {
+            "localhost": { "NSExceptionAllowsInsecureHTTPLoads": true },
+            "192.168.0.0/16": { "NSExceptionAllowsInsecureHTTPLoads": true }
+          }
+        },
+       
+        "NSCameraUsageDescription": "This app may use the camera to let you upload profile pictures.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to upload images."
+      },
+
+      "bundleIdentifier": "com.anonymous.nearbymarketplaceapp"
+    },
+
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.nearbymarketplaceapp",
+      "usesCleartextTraffic": true 
+    },
+
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

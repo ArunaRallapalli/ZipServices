@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "Brand_name": "Maybelline",
+    "Product_name": "Fit Me Matte + Poreless Foundation",
+    "Shade_name": "220 Natural Beige"
+  },
+  {
+    "id": 2,
+    "Brand_name": "Fenty Beauty",
+    "Product_name": "Pro Filt’r Soft Matte Longwear Foundation",
+    "Shade_name": "310 Warm Olive"
+  },
+  {
+    "id": 3,
+    "Brand_name": "Estée Lauder",
+    "Product_name": "Double Wear Stay-in-Place Foundation",
+    "Shade_name": "2W2 Rattan"
+  }
+]

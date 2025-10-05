@@ -1,0 +1,13 @@
+{
+    "java.compile.nullAnalysis.mode": "disabled",
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.project.explorer.showNonJavaResources": false,
+    
+    // Ignore node_modules to remove false Gradle/Java errors
+    "java.project.excludePaths": [
+        "**/node_modules/**"
+    ],
+    "java.errors.incompleteClasspath.severity": "ignore",
+    "java.import.gradle.enabled": false,
+    "java.import.maven.enabled": false
+}
