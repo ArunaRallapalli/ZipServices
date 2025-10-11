@@ -5,9 +5,8 @@ import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { View, ActivityIndicator } from "react-native";
 
 // Import your screens
-// Add this import at the top with your other imports
 import ListingsScreen from "../screens/ListingsScreen";
-import SearchResultsScreen from "../screens/SearchResultsScreen";
+import SearchResultsScreen from "../screens/SearchResultsScreen"
 import ZipserviceHomeScreenSelection from "../screens/auth/ZipserviceHomeScreenSelection";
 import SignUpFormCustomers from "../screens/auth/SignUpFormCustomers";
 import SignUpFormBusinessOwners from "../screens/auth/SignUpFormBusinessOwners";
@@ -30,6 +29,8 @@ import TabWrapperScreen from "../screens/TabWrapperScreen";
 import UnifiedUserSignupScreen from "../screens/auth/UnifiedUserSignupScreen";
 import UserLoginScreen from "../screens/auth/UnifiedUserLoginScreen";
 import UserHomeScreen from "../screens/UserHomeScreen";
+import SignInPlaceholderScreen from"../screens/auth/SignInPlaceholderScreen";
+import EditListing from "../screens/EditListing"
 
 // Loading Component
 const LoadingScreen: React.FC = () => (
@@ -38,26 +39,44 @@ const LoadingScreen: React.FC = () => (
   </View>
 );
 
-// Updated RootStackParamList - cleaned up and organized
+// Customer Info Type (shared across the app)
+export interface CustomerInfo {
+  user_id: number;
+  user_type?: 'customer' | 'business_owner';
+  full_name?: string;
+  phone_number?: string;
+  zip_code?: string;
+  city?: string;
+  state?: string;
+  email?: string;
+}
+
+// Tab Navigator Param List
+// This defines the tabs in your TabWrapperScreen (BottomTabs)
+export type TabParamList = {
+  Home: {
+    customerInfo?: CustomerInfo;
+    isGuest?: boolean;
+    preselectedCategory?: string;
+    fromSignup?: boolean; // Add this line
+  };
+  Post: undefined;
+  Listings: undefined;
+  Messages: undefined;
+  Profile: undefined;
+};
+
+// Main Stack Navigator Param List
+// This includes all screens that can be navigated to from anywhere in the app
 export type RootStackParamList = {
   // Main Tab Screen (Entry Point)
   TabWrapperScreen: {
-    screen?: string;
-    params?: any;
+    screen?: keyof TabParamList;
+    params?: TabParamList[keyof TabParamList];
   };
-  // 1️⃣ Add to RootStackParamList
-SearchResultsScreen: {
-  customerInfo?: {
-    full_name: string;
-    phone_number: string;
-    zip_code: string;
-    user_id: number;
-  };
-  isGuest?: boolean;
-  preselectedCategory?: string;
-};
+  
   ListingsScreen: undefined;
-
+  EditListing: { postId: number; };
   
   // Authentication Flow
   ZipserviceHomeScreenSelection: undefined;
@@ -67,13 +86,14 @@ SearchResultsScreen: {
   SignUpFormBusinessOwners: { user_id: number };
   SigninCustomer: { user_id: number };
   SigninBusinessOwners: undefined;
+  SignInPlaceholderScreen: undefined;
   
   // Chat Screens (Modal-style)
   CustomerChatScreen: {
     businessOwnerId: number;
     businessName: string;
     customerId: number;
-    customerInfo?: any;
+    customerInfo?: CustomerInfo;
   };
   ChatScreen: {
     otherUserId: number;
@@ -118,7 +138,6 @@ SearchResultsScreen: {
   PostServiceCategory: { user_id: number };
   BusinessOwnerHomeScreen: { user_id: number };
   
-  
   // Customer Screens
   CustomerHomeScreen: { user_id: number };
   CustomerConversationsScreen: {
@@ -138,7 +157,6 @@ SearchResultsScreen: {
       user_id: number;
     };
   };
-  
   
   // Utility Screens
   UserHomeScreen: undefined;
@@ -180,14 +198,13 @@ const NavigationStack: React.FC = () => {
           presentation: 'card',
           animation: 'slide_from_right'
         }}
-
-        
       >
         <RootStack.Screen 
           name="ZipserviceHomeScreenSelection" 
           component={ZipserviceHomeScreenSelection}
           options={{ title: "Welcome" }}
-        />
+
+          />
         <RootStack.Screen 
           name="UnifiedUserSignupScreen" 
           component={UnifiedUserSignupScreen}
@@ -218,6 +235,14 @@ const NavigationStack: React.FC = () => {
           options={{ 
             headerShown: true,
             title: "Business Registration"
+          }}
+        />
+        <RootStack.Screen 
+          name="SignInPlaceholderScreen" 
+          component={SignInPlaceholderScreen}
+          options={{ 
+            headerShown: true,
+            title: "Sign In"
           }}
         />
         <RootStack.Screen 
@@ -272,13 +297,6 @@ const NavigationStack: React.FC = () => {
           component={MessagesTab}
           options={{ title: 'Messages' }}
         />
- {/* ✅ Add SearchResultsScreen right here */}
-<RootStack.Screen 
-  name="SearchResultsScreen" 
-  component={SearchResultsScreen}
-  options={{ title: 'Search Results' }}
-/>
-
       </RootStack.Group>
 
       {/* PROFILE SCREENS */}
@@ -307,29 +325,27 @@ const NavigationStack: React.FC = () => {
       </RootStack.Group>
 
       {/* SERVICE/BUSINESS SCREENS */}
-      <RootStack.Group screenOptions={{ headerShown: true }}>
+      <RootStack.Group screenOptions={{ headerShown: false }}>
         <RootStack.Screen 
           name="PostServiceScreen" 
           component={PostServiceScreen}
-          options={{ title: 'Post Service' }}
         />
         <RootStack.Screen 
           name="PostServiceCategory" 
           component={PostServiceCategory}
-          options={{ title: 'Service Category' }}
         />
         <RootStack.Screen 
           name="BusinessOwnerHomeScreen" 
           component={BusinessOwnerHomeScreen}
-          options={{ title: 'Business Dashboard' }}
         />
-  {/* ADD THIS */}
-  <RootStack.Screen 
-    name="ListingsScreen" 
-    component={ListingsScreen}
-    options={{ title: 'All Listings' }}
-  />
-
+        <RootStack.Screen 
+          name="ListingsScreen" 
+          component={ListingsScreen}
+        />
+        <RootStack.Screen 
+          name="EditListing" 
+          component={EditListing}
+        />
       </RootStack.Group>
 
       {/* CUSTOMER SCREENS */}
@@ -361,8 +377,6 @@ const NavigationStack: React.FC = () => {
           name="RoleSwitcher" 
           component={RoleSwitcher}
         />
-
-        
       </RootStack.Group>
     </RootStack.Navigator>
   );

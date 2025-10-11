@@ -104,7 +104,7 @@ const fetchCategories = useCallback(async () => {
 
     try {
       const response = await fetch(
-        "http://10.0.2.2:5000/business_owners/crud/register",
+        `${API_URL}/business_owners/crud/register`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -1,101 +1,173 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
-import { View, Text, Button, StyleSheet, ActivityIndicator, Alert, TouchableOpacity } from "react-native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../navigation/MainStackNavigator";
-import Feather from "@expo/vector-icons/Feather";
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { View, Text, StyleSheet } from "react-native";
+import { RootStackParamList, TabParamList } from "../navigation/MainStackNavigator";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Ionicons, FontAwesome, MaterialCommunityIcons, AntDesign } from '@expo/vector-icons';
+import { Ionicons, AntDesign } from '@expo/vector-icons';
+import API_URL from "../config/apiConfig";
 
 // Import your screens
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
 import CustomerProfileScreen from './Profile/CustomerProfileScreen';
 import SearchResultsScreen from "./SearchResultsScreen";
-import BusinessOwnerHomeScreen from "./auth/BusinessOwnerHomeScreen";
 import PostServiceScreen from "./PostServiceScreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import CustomerConversationsScreen from "./CustomerConversationsScreen";
-import UserHomeScreen from './UserHomeScreen';
 import { useAuth } from "../contexts/AuthContext";
-import ZipserviceHomeScreenSelection from "../screens/auth/ZipserviceHomeScreenSelection";
-
-type TabParamList = {
-  Home: undefined;
-  Post: undefined;
-  Listings: undefined;
-  Messages: undefined;
-  Profile: undefined;
-};
+import { MessagesPlaceholder, ProfilePlaceholder, PostPlaceholder } from "./auth/SignInPlaceholderScreen";
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
+type TabWrapperRouteProp = RouteProp<RootStackParamList, 'TabWrapperScreen'>;
+
 const BottomTabs: React.FC = () => {
   const { userType, userInfo } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const route = useRoute<TabWrapperRouteProp>();
+  const navigation = useNavigation();
+// Handle initial screen navigation from params
+useEffect(() => {
+  if (route.params?.screen) {
+    // Use requestAnimationFrame to ensure navigation happens after render
+    requestAnimationFrame(() => {
+      const tabNav = navigation as any;
+      if (tabNav && typeof tabNav.navigate === 'function') {
+        try {
+          tabNav.navigate(route.params.screen, route.params.params);
+        } catch (error) {
+          console.log('Navigation error caught:', error);
+        }
+      }
+    });
+  }
+}, [route.params?.screen]); // Only depend on the screen param
+ 
   
-  // Correctly assign message screens
-// Correctly assign message screen based on userType
-const MessageScreenComponent =
-  userType === "customer"
-    ? CustomerConversationsScreen
-    : userType === "business_owner"
-    ? BusinessOwnerChatScreen
-    : ZipserviceHomeScreenSelection; // ✅ Fallback if not logged in
-
-// Correctly assign profile screen based on userType
-const ProfileScreenComponent =
-  userType === "customer"
-    ? CustomerProfileScreen
-    : userType === "business_owner"
-    ? BusinessOwnerProfileScreen
-    : ZipserviceHomeScreenSelection; // ✅ Fallback if not logged in
-
+  // Fetch unread message count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (!userInfo?.user_id) return;
+      
+      try {
+        let endpoint = '';
+        
+        if (userType === 'customer') {
+          endpoint = `${API_URL}/messages/customer/${userInfo.user_id}/conversations`;
+        } else if (userType === 'business_owner') {
+          endpoint = `${API_URL}/messages/business-owner/${userInfo.user_id}`;
+        }
+        
+        if (!endpoint) return;
+        
+        const response = await fetch(endpoint);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        let count = 0;
+        if (userType === 'customer' && Array.isArray(data)) {
+          count = data.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0);
+        } else if (userType === 'business_owner' && Array.isArray(data)) {
+          count = data.filter((msg: any) => 
+            msg.receiver_id === userInfo.user_id && msg.is_read === false
+          ).length;
+        }
+        
+        setUnreadCount(count);
+      } catch (error) {
+        console.error('Error fetching unread count:', error);
+      }
+    };
+    
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    
+    return () => clearInterval(interval);
+  }, [userInfo, userType]);
   
+  const MessageScreenComponent =
+    userType === "customer"
+      ? CustomerConversationsScreen
+      : userType === "business_owner"
+      ? BusinessOwnerChatScreen
+      : MessagesPlaceholder;
+
+  const ProfileScreenComponent =
+    userType === "customer"
+      ? CustomerProfileScreen
+      : userType === "business_owner"
+      ? BusinessOwnerProfileScreen
+      : ProfilePlaceholder;
+
+  const PostScreenComponent =
+    userType === "customer" || userType === "business_owner"
+      ? PostServiceScreen
+      : PostPlaceholder;
+
   return (
     <Tab.Navigator
       id={undefined}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          const iconSize = size || 24;
+          const iconSize = 28;
+          const iconColor = '#4A90E2';
           
           switch (route.name) {
             case 'Home':
-              return <AntDesign name="home" size={iconSize} color={color} />;
+              return <AntDesign name="home" size={iconSize} color={iconColor} />;
             case 'Post':
-              return <MaterialIcons name="post-add" size={iconSize} color={color} />;
+              return <MaterialIcons name="post-add" size={iconSize} color={iconColor} />;
             case 'Listings':
-              return <Ionicons name="list" size={iconSize} color={color} />;
+              return <Ionicons name="list" size={iconSize} color={iconColor} />;
             case 'Messages':
-              return <AntDesign name="message1" size={iconSize} color={color} />;
+              return (
+                <View>
+                  <AntDesign name="message1" size={iconSize} color={iconColor} />
+                  {unreadCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
             case 'Profile':
-              return <MaterialIcons name="person" size={iconSize} color={color} />;
+              return <MaterialIcons name="person" size={iconSize} color={iconColor} />;
             default:
-              return <Ionicons name="ellipse" size={iconSize} color={color} />;
+              return <Ionicons name="ellipse" size={iconSize} color={iconColor} />;
           }
         },
-        tabBarActiveTintColor: '#4A90E2',
-        tabBarInactiveTintColor: '#A7CCF6',
+        tabBarActiveTintColor: '#2563EB',
+        tabBarInactiveTintColor: '#2563EB',
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          height: 65,
+          height: 70,
           paddingBottom: 10,
-          paddingTop: 5,
-          elevation: 8,
+          paddingTop: 6,
+          elevation: 12,
           shadowColor: '#000',
           shadowOffset: {
             width: 0,
-            height: -2,
+            height: -3,
           },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          borderTopWidth: 1,
-          borderTopColor: '#E1E5E9',
+          shadowOpacity: 0.15,
+          shadowRadius: 6,
+          borderTopWidth: 0,
+          borderTopColor: 'transparent',
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          marginTop: 2,
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: 0,
+          marginBottom: 6,
+          letterSpacing: 0.3,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 0,
+          justifyContent: 'center',
         },
         headerShown: false,
       })}
@@ -105,26 +177,27 @@ const ProfileScreenComponent =
         component={SearchResultsScreen}
         options={{
           title: "Home"
-        }} 
+        }}
+        initialParams={{
+          customerInfo: undefined,
+          isGuest: false,
+          preselectedCategory: ""
+        }}
       />
       <Tab.Screen 
         name="Post"
-        component={PostServiceScreen}
+        component={PostScreenComponent}
         options={{
           title: "Post"
         }}
       />
       <Tab.Screen
-  name="Listings"
-  component={ListingsScreen}
-  options={{
-    tabBarLabel: "Listings",
-    tabBarIcon: ({ color, size }) => (
-      <Ionicons name="list" size={size} color={color} />
-    ),
-  }}
-/>
-
+        name="Listings"
+        component={ListingsScreen}
+        options={{
+          tabBarLabel: "Listings",
+        }}
+      />
       <Tab.Screen 
         name="Messages"
         component={MessageScreenComponent}
@@ -142,5 +215,27 @@ const ProfileScreenComponent =
    </Tab.Navigator>
   );
 };
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    right: -8,
+    top: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});
 
 export default BottomTabs;

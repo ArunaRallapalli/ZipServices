@@ -1,28 +1,23 @@
 import React from "react";
-import { View, Button, Alert, StyleSheet, TouchableOpacity, Text } from "react-native";
+import { View, Alert, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { CommonActions } from '@react-navigation/native';
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import API_URL from "../../config/apiConfig";
 
-type NavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "ZipserviceHomeScreenSelection"
->;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "ZipserviceHomeScreenSelection">;
 
 const ZipserviceHomeScreenSelection: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   
 const handleCancel = () => {
-  // Navigate to TabWrapperScreen and specify the Search tab
-  navigation.navigate("TabWrapperScreen", {
-    screen: "SearchResultsScreen",
-    params: {
-      isGuest: true
-    }
-  });
+  if (navigation.canGoBack()) {
+    navigation.goBack();
+  } else {
+    navigation.navigate('TabWrapperScreen');
+  }
 };
-
   const handleCustomer = async () => {
     try {
       console.log("Making request to:", `${API_URL}/users`);
@@ -89,17 +84,21 @@ const handleCancel = () => {
 
   return (
     <View style={styles.container}>
-      {/* Cancel Button - Top Right Corner */}
       <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-        <Text style={styles.cancelButtonText}>Cancel</Text>
+        <Text style={styles.cancelButtonText}>✕ Cancel</Text>
       </TouchableOpacity>
 
-      {/* Instruction Text */}
       <Text style={styles.headerText}>Please Sign Up / Log In</Text>
 
-      {/* Action Buttons */}
-      <Button title="I am a Customer" onPress={handleCustomer} color="#2196F3" />
-      <Button title="I am a Business Owner" onPress={handleBusinessOwner} color="#4CAF50" />
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.customerButton} onPress={handleCustomer}>
+          <Text style={styles.buttonText}>I am a Customer</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.businessButton} onPress={handleBusinessOwner}>
+          <Text style={styles.buttonText}>I am a Business Owner</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -111,24 +110,53 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
+    padding: 20,
+    backgroundColor: "#f9f9f9",
   },
   cancelButton: {
     position: "absolute",
-    top: 40,
+    top: 50,
     right: 20,
-    padding: 8,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    zIndex: 10,
   },
   cancelButtonText: {
-    color: "red",
+    color: "#FF4444",
     fontSize: 16,
     fontWeight: "bold",
   },
   headerText: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "600",
-    marginBottom: 10,
+    marginBottom: 40,
     textAlign: "center",
     color: "#333",
+  },
+  buttonContainer: {
+    width: "100%",
+    maxWidth: 300,
+    gap: 16,
+  },
+  customerButton: {
+    backgroundColor: "#2196F3",
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  businessButton: {
+    backgroundColor: "#4CAF50",
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
