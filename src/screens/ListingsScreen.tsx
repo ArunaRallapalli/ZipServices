@@ -206,34 +206,41 @@ const ListingsScreen: React.FC = () => {
       ]
     );
   };
-
   const inactivateListing = async (postId: number) => {
-    try {
-      const response = await fetch(`${API_URL}/api/service-posts/${postId}/inactivate`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+  try {
+    console.log('Attempting to inactivate post:', postId);
+    console.log('API URL:', `${API_URL}/api/service-posts/${postId}/inactivate`);
+    
+    const response = await fetch(`${API_URL}/api/service-posts/${postId}/inactivate`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+    console.log('Response status:', response.status);
 
-      const data = await response.json();
-      
-      if (data.success) {
-        Alert.alert("Success", "Listing has been inactivated successfully.");
-        // Refresh the listings
-        await fetchUserListings();
-      } else {
-        throw new Error(data.message || "Failed to inactivate listing");
-      }
-    } catch (error) {
-      console.error("Error inactivating listing:", error);
-      Alert.alert("Error", "Failed to inactivate listing. Please try again.");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Response error:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-  };
+
+    const data = await response.json();
+    console.log('Response data:', data);
+    
+    if (data.success) {
+      Alert.alert("Success", "Listing has been inactivated successfully.");
+      // Refresh the listings
+      await fetchUserListings();
+    } else {
+      throw new Error(data.error || "Failed to inactivate listing"); // ✅ Changed from data.message to data.error
+    }
+  } catch (error) {
+    console.error("Error inactivating listing:", error);
+    Alert.alert("Error", "Failed to inactivate listing. Please try again.");
+  }
+};
 
   const handleBrowseServices = () => {
     // Navigate to Home tab to browse services
@@ -370,10 +377,10 @@ const ListingsScreen: React.FC = () => {
           <Text style={styles.emptySubtext}>
             You need to be signed in to access your listings
           </Text>
-          <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => navigation.navigate("ZipserviceHomeScreenSelection")}
-            activeOpacity={0.7}
+        <TouchableOpacity
+  style={styles.signInButton}
+  onPress={() => navigation.navigate("BusinessOwnerHomeScreen")}  // ✅ Changed this
+  activeOpacity={0.7}
           >
             <Ionicons name="log-in-outline" size={20} color="#ffffff" style={styles.buttonIcon} />
             <Text style={styles.signInButtonText}>Sign In / Sign Up</Text>

@@ -16,12 +16,13 @@ const SignInPlaceholderScreen: React.FC<SignInPlaceholderScreenProps> = ({ scree
     const tabNavigator = navigation.getParent();
     const rootStack = tabNavigator?.getParent();
     
+    // Navigate to BusinessOwnerHomeScreen instead of ZipserviceHomeScreenSelection
     if (rootStack) {
-      (rootStack as any).navigate('ZipserviceHomeScreenSelection');
+      (rootStack as any).navigate('BusinessOwnerHomeScreen');
     } else if (tabNavigator) {
-      (tabNavigator as any).navigate('ZipserviceHomeScreenSelection');
+      (tabNavigator as any).navigate('BusinessOwnerHomeScreen');
     } else {
-      (navigation as any).navigate('ZipserviceHomeScreenSelection');
+      (navigation as any).navigate('BusinessOwnerHomeScreen');
     }
   };
 

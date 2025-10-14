@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
+import { useRoute, useNavigation, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { useAuth } from "../contexts/AuthContext";
@@ -20,13 +20,14 @@ type NavigationProp = NativeStackNavigationProp<
 >;
 type RouteProps = RouteProp<RootStackParamList, "BusinessOwnerChatScreen">;
 
-interface Customer {
+interface Contact {
   user_id: number;
   full_name: string;
   email: string;
   phone_number?: string;
   last_message?: string;
   last_message_time?: string;
+  has_unread?: boolean;
 }
 
 export default function BusinessOwnerChatScreen() {
@@ -34,9 +35,12 @@ export default function BusinessOwnerChatScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { userInfo, userType } = useAuth();
   
-  const businessOwnerUserId = route.params?.businessOwnerUserId || userInfo?.user_id;
+ const businessOwnerUserId = (() => {
+  const id = route.params?.businessOwnerUserId || userInfo?.user_id;
+  return typeof id === 'string' ? parseInt(id, 10) : id;
+})();
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
@@ -67,158 +71,175 @@ export default function BusinessOwnerChatScreen() {
     checkAuthReady();
   }, [userInfo, route.params]);
 
-  useEffect(() => {
-    const loadCustomers = async (): Promise<void> => {
-      if (authLoading) {
-        console.log('[BusinessOwnerChat] Waiting for auth context...');
-        return;
-      }
+  const loadContacts = async (): Promise<void> => {
+    if (authLoading) {
+      console.log('[BusinessOwnerChat] Waiting for auth context...');
+      return;
+    }
 
-      if (!businessOwnerUserId) {
-        console.warn('[BusinessOwnerChat] No businessOwnerUserId available');
-        setLoading(false);
-        return;
-      }
+    if (!businessOwnerUserId) {
+      console.warn('[BusinessOwnerChat] No businessOwnerUserId available');
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      try {
-        console.log(`[BusinessOwnerChat] Loading customers for business owner: ${businessOwnerUserId}`);
+    setLoading(true);
+    try {
+      console.log(`[BusinessOwnerChat] Loading contacts for business owner: ${businessOwnerUserId}`);
+      
+      const response = await fetch(`${API_URL}/messages/business-owner/${businessOwnerUserId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: any[] = await response.json();
+      console.log(`[BusinessOwnerChat] Raw data received:`, data);
+
+      // Create a map to track contacts (other business owners) and their most recent messages
+      const contactMap = new Map<number, Contact>();
+
+      data.forEach((item: any) => {
+        let otherUserId: number | null = null;
+        let otherUserName: string = "Unknown User";
+        let otherUserEmail: string = "";
         
-        const response = await fetch(`${API_URL}/messages/business-owner/${businessOwnerUserId}`);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        // Determine the OTHER user in this conversation
+        if (item.sender_id === businessOwnerUserId) {
+          // Current user sent this message, so receiver is the contact
+          otherUserId = typeof item.receiver_id === "string" 
+            ? parseInt(item.receiver_id, 10) 
+            : item.receiver_id;
+          otherUserName = item.receiver_name || item.receiver_email || "Unknown User";
+          otherUserEmail = item.receiver_email || "";
+        } else if (item.receiver_id === businessOwnerUserId) {
+          // Current user received this message, so sender is the contact
+          otherUserId = typeof item.sender_id === "string" 
+            ? parseInt(item.sender_id, 10) 
+            : item.sender_id;
+          otherUserName = item.sender_name || item.sender_email || "Unknown User";
+          otherUserEmail = item.sender_email || "";
         }
         
-        const data: any[] = await response.json();
-        console.log(`[BusinessOwnerChat] Raw data received:`, data);
+        if (!otherUserId) {
+          console.warn('[BusinessOwnerChat] Could not identify other user from item:', item);
+          return;
+        }
+        
+        const existingContact = contactMap.get(otherUserId);
+        const messageTime = item.created_at;
+        
+        // Check if current user is the receiver and message is unread
+        const isUnread = item.receiver_id === businessOwnerUserId && item.is_read === false;
+        
+        // Only update if this is a newer message or contact doesn't exist yet
+        if (!existingContact || 
+            (messageTime && existingContact.last_message_time && 
+             new Date(messageTime) > new Date(existingContact.last_message_time))) {
+          contactMap.set(otherUserId, {
+            user_id: otherUserId,
+            full_name: otherUserName,
+            email: otherUserEmail,
+            last_message: item.message_text || "",
+            last_message_time: messageTime,
+            has_unread: isUnread,
+          });
+        } else if (existingContact && isUnread) {
+          // If contact exists but we found an unread message, mark it
+          existingContact.has_unread = true;
+        }
+      });
 
-        // Create a map to track customers and their most recent messages
-        const customerMap = new Map<number, Customer>();
+      // Convert map to array and sort by most recent message
+      const uniqueContacts = Array.from(contactMap.values()).sort((a, b) => {
+        if (!a.last_message_time || !b.last_message_time) return 0;
+        return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
+      });
 
-        data.forEach((item: any) => {
-          let customerId: number | null = null;
-          let customerName: string = "Unknown Customer";
-          let customerEmail: string = "";
-          
-          // Determine if this message involves a customer and extract their info
-          if (item.sender_id === businessOwnerUserId) {
-            // Business owner sent this message, so receiver is the customer
-            customerId = typeof item.receiver_id === "string" 
-              ? parseInt(item.receiver_id, 10) 
-              : item.receiver_id;
-            customerName = item.receiver_name || item.receiver_email || "Unknown Customer";
-            customerEmail = item.receiver_email || "";
-          } else if (item.receiver_id === businessOwnerUserId) {
-            // Business owner received this message, so sender is the customer
-            customerId = typeof item.sender_id === "string" 
-              ? parseInt(item.sender_id, 10) 
-              : item.sender_id;
-            customerName = item.sender_name || item.sender_email || "Unknown Customer";
-            customerEmail = item.sender_email || "";
-          }
-          
-          if (!customerId) {
-            console.warn('[BusinessOwnerChat] Could not identify customer from item:', item);
-            return;
-          }
-          
-          const existingCustomer = customerMap.get(customerId);
-          const messageTime = item.created_at;
-          
-          // Only update if this is a newer message or customer doesn't exist yet
-          if (!existingCustomer || 
-              (messageTime && existingCustomer.last_message_time && 
-               new Date(messageTime) > new Date(existingCustomer.last_message_time))) {
-            customerMap.set(customerId, {
-              user_id: customerId,
-              full_name: customerName,
-              email: customerEmail,
-              last_message: item.message_text || "",
-              last_message_time: messageTime,
-            });
-          }
-        });
+      console.log(`[BusinessOwnerChat] Processed ${uniqueContacts.length} unique contacts`);
+      setContacts(uniqueContacts);
+    } catch (error) {
+      console.error("[BusinessOwnerChat] Error loading contacts:", error);
+      setContacts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        // Convert map to array and sort by most recent message
-        const uniqueCustomers = Array.from(customerMap.values()).sort((a, b) => {
-          if (!a.last_message_time || !b.last_message_time) return 0;
-          return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
-        });
-
-        console.log(`[BusinessOwnerChat] Processed ${uniqueCustomers.length} unique customers`);
-        setCustomers(uniqueCustomers);
-      } catch (error) {
-        console.error("[BusinessOwnerChat] Error loading customers:", error);
-        setCustomers([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCustomers();
+  // Initial load
+  useEffect(() => {
+    loadContacts();
   }, [businessOwnerUserId, authLoading]);
 
-  const navigateToChat = (customerId: number, customerName: string) => {
+  // Reload when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!authLoading && businessOwnerUserId) {
+        loadContacts();
+      }
+    }, [businessOwnerUserId, authLoading])
+  );
+
+  const navigateToChat = (otherUserId: number, otherUserName: string) => {
     if (!businessOwnerUserId) {
       console.error('[BusinessOwnerChat] Cannot navigate to chat: no businessOwnerUserId');
       return;
     }
     
-    console.log(`[BusinessOwnerChat] Navigating to chat with customer:`, {
+    console.log(`[BusinessOwnerChat] Navigating to chat with user:`, {
       businessOwnerUserId,
-      customerId,
-      customerName
+      otherUserId,
+      otherUserName
     });
     
     navigation.navigate("ChatScreen", {
       currentUserId: businessOwnerUserId,
-      otherUserId: customerId,
-      otherUserName: customerName || "Customer",
+      otherUserId: otherUserId,
+      otherUserName: otherUserName || "User",
     });
   };
 
   const navigateToBusinessHome = () => {
-    try {
-      navigation.navigate("TabWrapperScreen", {
-        screen: "SearchResultsScreen"
-      });
-    } catch (error) {
-      console.warn('Could not navigate through TabWrapperScreen, trying direct navigation:', error);
-      navigation.navigate("SearchResultsScreen");
-    }
+    navigation.navigate("Home" as any);
   };
 
   const navigateToBusinessHomeReset = () => {
     navigation.reset({
       index: 0,
-      routes: [
-        { 
-          name: "TabWrapperScreen",
-          params: {
-            screen: "SearchResultsScreen"
-          }
-        }
-      ],
+      routes: [{ name: "Home" as any }],
     });
   };
 
-  const renderCustomerItem = ({ item }: { item: Customer }) => (
+  const renderContactItem = ({ item }: { item: Contact }) => (
     <TouchableOpacity
-      style={styles.customerCard}
+      style={[
+        styles.contactCard,
+        item.has_unread && styles.contactCardUnread
+      ]}
       onPress={() => navigateToChat(item.user_id, item.full_name)}
     >
-      <View style={styles.customerHeader}>
-        <Text style={styles.customerName}>{item.full_name}</Text>
-        <Text style={styles.customerId}>ID: {item.user_id}</Text>
+      <View style={styles.contactHeader}>
+        <View style={styles.nameContainer}>
+          <Text style={styles.contactName}>{item.full_name}</Text>
+          {item.has_unread && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>New</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.contactId}>ID: {item.user_id}</Text>
       </View>
-      
-      <Text style={styles.customerEmail}>{item.email}</Text>
-      
+                
       {item.last_message && (
         <View style={styles.lastMessageContainer}>
           <Text style={styles.lastMessageLabel}>Last message:</Text>
-          <Text style={styles.lastMessage} numberOfLines={2}>
+          <Text 
+            style={[
+              styles.lastMessage,
+              item.has_unread && styles.lastMessageUnread
+            ]} 
+            numberOfLines={2}
+          >
             {item.last_message}
           </Text>
         </View>
@@ -238,7 +259,7 @@ export default function BusinessOwnerChatScreen() {
     </TouchableOpacity>
   );
 
-  const keyExtractor = (item: Customer, index: number): string =>
+  const keyExtractor = (item: Contact, index: number): string =>
     item && item.user_id ? item.user_id.toString() : `fallback-${index}-${Date.now()}`;
 
   if (authLoading) {
@@ -254,9 +275,9 @@ export default function BusinessOwnerChatScreen() {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.errorIcon}>❌</Text>
-        <Text style={styles.errorTitle}>Business Owner ID Not Found</Text>
+        <Text style={styles.errorTitle}>User ID Not Found</Text>
         <Text style={styles.errorSubtext}>
-          Unable to load your customer messages. Please try logging in again.
+          Unable to load your messages. Please try logging in again.
         </Text>
         
         <View style={styles.debugContainer}>
@@ -292,18 +313,18 @@ export default function BusinessOwnerChatScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#4f46e5" />
-        <Text style={styles.loadingText}>Loading customer messages...</Text>
+        <Text style={styles.loadingText}>Loading messages...</Text>
       </View>
     );
   }
 
-  if (customers.length === 0) {
+  if (contacts.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.emptyStateIcon}>📪</Text>
-        <Text style={styles.emptyStateTitle}>No Customer Messages</Text>
+        <Text style={styles.emptyStateTitle}>No Messages Yet</Text>
         <Text style={styles.emptyStateSubtext}>
-          You haven't received any messages from customers yet. When customers contact you, their messages will appear here.
+          You haven't had any conversations yet. When you message other users or they message you, the conversations will appear here.
         </Text>
         
         <View style={styles.buttonContainer}>
@@ -321,19 +342,19 @@ export default function BusinessOwnerChatScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Customer Messages ({customers.length})</Text>
+      <Text style={styles.title}>Messages ({contacts.length})</Text>
       
       <FlatList
-        data={customers}
+        data={contacts}
         keyExtractor={keyExtractor}
-        renderItem={renderCustomerItem}
-        style={styles.customersList}
+        renderItem={renderContactItem}
+        style={styles.contactsList}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
       />
       
       <View style={styles.navigationContainer}>
-        <TouchableOpacity style={styles.resetNavigationButton} onPress={navigateToBusinessHomeReset}>
+        <TouchableOpacity style={styles.resetNavigationButton} onPress={navigateToBusinessHome}>
           <Text style={styles.resetNavigationButtonText}>🏠 Home</Text>
         </TouchableOpacity>
       </View>
@@ -361,13 +382,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  customersList: {
+  contactsList: {
     flex: 1,
   },
   listContainer: {
     paddingBottom: 10,
   },
-  customerCard: {
+  contactCard: {
     backgroundColor: "#ffffff",
     padding: 16,
     borderRadius: 12,
@@ -383,27 +404,43 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 3,
   },
-  customerHeader: {
+  contactCardUnread: {
+    borderLeftColor: "#10b981",
+    borderLeftWidth: 6,
+    backgroundColor: "#f0fdf4",
+  },
+  contactHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  customerName: {
+  nameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+  },
+  contactName: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#1f2937",
-    flex: 1,
   },
-  customerId: {
+  unreadBadge: {
+    backgroundColor: "#10b981",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  unreadBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  contactId: {
     fontSize: 12,
     color: "#9ca3af",
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  customerEmail: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 8,
   },
   lastMessageContainer: {
     marginBottom: 8,
@@ -419,6 +456,11 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontStyle: "italic",
     lineHeight: 20,
+  },
+  lastMessageUnread: {
+    color: "#059669",
+    fontWeight: "bold",
+    fontStyle: "normal",
   },
   timestamp: {
     fontSize: 12,

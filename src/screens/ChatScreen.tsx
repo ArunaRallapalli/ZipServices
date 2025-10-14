@@ -216,15 +216,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Bottom Back Button */}
-     <TouchableOpacity
-  style={[styles.backButton, { backgroundColor: 'green' }]}
-  onPress={navigateToBusinessOwnerChatScreen}
->
-  <Text style={styles.backButtonText}>
-    ← Back to BusinessOwnerChatScreen
-  </Text>
-</TouchableOpacity>
+        
 
       </KeyboardAvoidingView>
     </SafeAreaView>

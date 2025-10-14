@@ -91,11 +91,11 @@ const SearchResultsScreen: React.FC = () => {
   
   const auth = useAuth();
 
-  // IMPORTANT: Helper function to check if post belongs to current user
   const isOwnPost = (postUserId: number): boolean => {
     return auth.userInfo?.user_id === postUserId;
   };
 
+  const [businessName, setBusinessName] = useState<string>("");
   const [zipCode, setZipCode] = useState(customerInfo?.zip_code || "");
   const [city, setCity] = useState(customerInfo?.city || "");
   const [state, setState] = useState(customerInfo?.state || "");
@@ -117,6 +117,10 @@ const SearchResultsScreen: React.FC = () => {
   const zipDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
 
+  const knownZipCodes: { [key: string]: { city: string; state: string } } = {
+    '85288': { city: 'Tempe', state: 'AZ' },
+  };
+
   const handleChatPress = async (item: ServicePost) => {
     if (!auth.isAuthenticated || !auth.userInfo?.user_id) {
       Alert.alert(
@@ -130,7 +134,6 @@ const SearchResultsScreen: React.FC = () => {
       return;
     }
 
-    // CRITICAL FIX: Prevent messaging yourself
     if (isOwnPost(item.user_id)) {
       Alert.alert(
         "Cannot Contact Yourself",
@@ -162,11 +165,58 @@ const SearchResultsScreen: React.FC = () => {
     }
   };
 
+  // Fixed onRefresh - silent refresh without validation alerts
   const onRefresh = useCallback(async () => {
+    if (!serviceNeeded || !zipCode || zipCode.length !== 5 || !state) {
+      setRefreshing(false);
+      return;
+    }
+    
     setRefreshing(true);
-    await searchServicePosts();
-    setRefreshing(false);
-  }, []);
+    
+    try {
+      const zipParams = new URLSearchParams();
+      zipParams.append("service_category", serviceNeeded);
+      zipParams.append("zip_code", zipCode);
+
+      const zipResponse = await fetch(`${API_URL}/api/service-posts/search?${zipParams.toString()}`);
+      
+      let zipMatches: ServicePost[] = [];
+      if (zipResponse.ok) {
+        const zipData = await zipResponse.json();
+        if (zipData.success && Array.isArray(zipData.exactMatches)) {
+          zipMatches = zipData.exactMatches;
+        }
+      }
+
+      const stateParams = new URLSearchParams();
+      stateParams.append("service_category", serviceNeeded);
+      stateParams.append("state", state);
+
+      const stateResponse = await fetch(`${API_URL}/api/service-posts/search?${stateParams.toString()}`);
+      
+      let stateMatches: ServicePost[] = [];
+      if (stateResponse.ok) {
+        const stateData = await stateResponse.json();
+        if (stateData.success && Array.isArray(stateData.exactMatches)) {
+          stateMatches = stateData.exactMatches.filter(
+            (statePost: ServicePost) => !zipMatches.some(zipPost => zipPost.post_id === statePost.post_id)
+          );
+        }
+      }
+
+      setSearchResults({
+        zipCodeMatches: zipMatches,
+        stateMatches: stateMatches,
+        hasZipCodeMatches: zipMatches.length > 0,
+        hasStateMatches: stateMatches.length > 0
+      });
+    } catch (err: any) {
+      console.error("Refresh error:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [serviceNeeded, zipCode, state]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -218,9 +268,43 @@ const SearchResultsScreen: React.FC = () => {
     }
   }, [serviceNeeded]);
 
-  const knownZipCodes: { [key: string]: { city: string; state: string } } = {
-    '85288': { city: 'Tempe', state: 'AZ' },
-  };
+  useEffect(() => {
+    const fetchBusinessName = async () => {
+      if (auth.isAuthenticated && auth.userInfo?.user_id) {
+        try {
+          const url = `${API_URL}/messages/business-owner/info/${auth.userInfo.user_id}`;
+          const response = await fetch(url);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.business_name) {
+              setBusinessName(data.business_name);
+            }
+          }
+        } catch (error) {
+          console.error("Business name fetch error:", error);
+        }
+      }
+    };
+
+    fetchBusinessName();
+  }, [auth.isAuthenticated, auth.userInfo?.user_id]);
+
+  // Listen for tab press - corrected version with proper typing
+  useEffect(() => {
+    const parent = navigation.getParent();
+    if (!parent) return;
+
+    const unsubscribe = parent.addListener('tabPress' as any, (e: any) => {
+      if (showResults) {
+        e.preventDefault();
+        setShowResults(false);
+        setHasSearched(false);
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, showResults]);
 
   useEffect(() => {
     if (!zipCode || zipCode.length !== 5) {
@@ -666,12 +750,11 @@ const SearchResultsScreen: React.FC = () => {
           <Text style={styles.subtitle}>
             Connect with service providers in your state
           </Text>
-          
           {auth.isAuthenticated && auth.userInfo && (
             <View style={styles.welcomeContainer}>
               <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
               <Text style={styles.welcomeText}>
-                Welcome{auth.userInfo.full_name ? `, ${auth.userInfo.full_name}` : ''}!
+                Welcome{businessName ? `, ${businessName}` : auth.userInfo.full_name ? `, ${auth.userInfo.full_name}` : ''}!
               </Text>
             </View>
           )}
@@ -761,7 +844,7 @@ const SearchResultsScreen: React.FC = () => {
                 />
               </View>
             </>
-          )}
+            )}
         </View>
 
         <View style={styles.contentSection}>

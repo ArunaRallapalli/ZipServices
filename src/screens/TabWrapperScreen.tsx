@@ -10,11 +10,9 @@ import API_URL from "../config/apiConfig";
 // Import your screens
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
-import CustomerProfileScreen from './Profile/CustomerProfileScreen';
 import SearchResultsScreen from "./SearchResultsScreen";
 import PostServiceScreen from "./PostServiceScreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
-import CustomerConversationsScreen from "./CustomerConversationsScreen";
 import { useAuth } from "../contexts/AuthContext";
 import { MessagesPlaceholder, ProfilePlaceholder, PostPlaceholder } from "./auth/SignInPlaceholderScreen";
 
@@ -27,84 +25,71 @@ const BottomTabs: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const route = useRoute<TabWrapperRouteProp>();
   const navigation = useNavigation();
-// Handle initial screen navigation from params
-useEffect(() => {
-  if (route.params?.screen) {
-    // Use requestAnimationFrame to ensure navigation happens after render
-    requestAnimationFrame(() => {
-      const tabNav = navigation as any;
-      if (tabNav && typeof tabNav.navigate === 'function') {
-        try {
-          tabNav.navigate(route.params.screen, route.params.params);
-        } catch (error) {
-          console.log('Navigation error caught:', error);
+
+  // Handle initial screen navigation from params
+  useEffect(() => {
+    if (route.params?.screen) {
+      requestAnimationFrame(() => {
+        const tabNav = navigation as any;
+        if (tabNav && typeof tabNav.navigate === 'function') {
+          try {
+            tabNav.navigate(route.params.screen, route.params.params);
+          } catch (error) {
+            console.log('Navigation error caught:', error);
+          }
         }
-      }
-    });
-  }
-}, [route.params?.screen]); // Only depend on the screen param
+      });
+    }
+  }, [route.params?.screen]);
  
-  
   // Fetch unread message count
   useEffect(() => {
     const fetchUnreadCount = async () => {
       if (!userInfo?.user_id) return;
       
       try {
-        let endpoint = '';
-        
-        if (userType === 'customer') {
-          endpoint = `${API_URL}/messages/customer/${userInfo.user_id}/conversations`;
-        } else if (userType === 'business_owner') {
-          endpoint = `${API_URL}/messages/business-owner/${userInfo.user_id}`;
-        }
-        
-        if (!endpoint) return;
+        const endpoint = `${API_URL}/messages/business-owner/${userInfo.user_id}`;
         
         const response = await fetch(endpoint);
         if (!response.ok) return;
         
         const data = await response.json();
         
-        let count = 0;
-        if (userType === 'customer' && Array.isArray(data)) {
-          count = data.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0);
-        } else if (userType === 'business_owner' && Array.isArray(data)) {
-          count = data.filter((msg: any) => 
-            msg.receiver_id === userInfo.user_id && msg.is_read === false
-          ).length;
-        }
+        // Count unread messages where current user is the receiver
+        const count = Array.isArray(data) 
+          ? data.filter((msg: any) => 
+              msg.receiver_id === userInfo.user_id && msg.is_read === false
+            ).length
+          : 0;
         
+        console.log(`[BottomTabs] Unread message count: ${count}`);
         setUnreadCount(count);
       } catch (error) {
-        console.error('Error fetching unread count:', error);
+        console.error('[BottomTabs] Error fetching unread count:', error);
       }
     };
     
+    // Initial fetch
     fetchUnreadCount();
+    
+    // Poll every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     
     return () => clearInterval(interval);
   }, [userInfo, userType]);
   
-  const MessageScreenComponent =
-    userType === "customer"
-      ? CustomerConversationsScreen
-      : userType === "business_owner"
-      ? BusinessOwnerChatScreen
-      : MessagesPlaceholder;
+  // Everyone uses business owner components now
+  const MessageScreenComponent = userType === "business_owner"
+    ? BusinessOwnerChatScreen
+    : MessagesPlaceholder;
 
-  const ProfileScreenComponent =
-    userType === "customer"
-      ? CustomerProfileScreen
-      : userType === "business_owner"
-      ? BusinessOwnerProfileScreen
-      : ProfilePlaceholder;
+  const ProfileScreenComponent = userType === "business_owner"
+    ? BusinessOwnerProfileScreen
+    : ProfilePlaceholder;
 
-  const PostScreenComponent =
-    userType === "customer" || userType === "business_owner"
-      ? PostServiceScreen
-      : PostPlaceholder;
+  const PostScreenComponent = userType === "business_owner"
+    ? PostServiceScreen
+    : PostPlaceholder;
 
   return (
     <Tab.Navigator
@@ -171,6 +156,24 @@ useEffect(() => {
         },
         headerShown: false,
       })}
+      screenListeners={{
+        tabPress: () => {
+          // Refresh unread count when Messages tab is pressed
+          if (userInfo?.user_id) {
+            fetch(`${API_URL}/messages/business-owner/${userInfo.user_id}`)
+              .then(res => res.json())
+              .then((data: any[]) => {
+                const count = Array.isArray(data) 
+                  ? data.filter((msg: any) => 
+                      msg.receiver_id === userInfo.user_id && msg.is_read === false
+                    ).length
+                  : 0;
+                setUnreadCount(count);
+              })
+              .catch(err => console.error('[BottomTabs] Error refreshing unread count:', err));
+          }
+        },
+      }}
     >
       <Tab.Screen 
         name="Home" 

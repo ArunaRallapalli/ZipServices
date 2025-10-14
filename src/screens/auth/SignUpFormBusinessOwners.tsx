@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import API_URL from "../../config/apiConfig";
 import {
   View,
@@ -9,12 +9,9 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import { useAuth } from "../../contexts/AuthContext";
-
 
 type SignUpBusinessNavProp = StackNavigationProp<
   RootStackParamList,
@@ -25,9 +22,7 @@ const SignUpFormBusinessOwners = () => {
   const navigation = useNavigation<SignUpBusinessNavProp>();
 
   const [formData, setFormData] = useState({
-    businessName: "",
-    serviceCategory: "",
-    description: "",
+    name: "",
     phoneNumber: "",
     email: "",
     password: "",
@@ -38,24 +33,7 @@ const SignUpFormBusinessOwners = () => {
     serviceRadiusMiles: "",
   });
 
-  const [categories, setCategories] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
-
-const fetchCategories = useCallback(async () => {
-  try {
-    // Use dynamic API_URL instead of hardcoded IP
-    const res = await fetch(`${API_URL}/customers/service_category`);
-    const data = await res.json();
-    setCategories(data);
-  } catch (err) {
-    console.error(err);
-    Alert.alert("Error", "Failed to load service categories");
-  }
-}, []);
-
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
 
   const handleChange = (field: string, value: string) =>
     setFormData({ ...formData, [field]: value });
@@ -69,8 +47,6 @@ const fetchCategories = useCallback(async () => {
 
   const handleRegister = async () => {
     const requiredFields = [
-      "businessName",
-      "serviceCategory",
       "email",
       "password",
       "street",
@@ -109,9 +85,7 @@ const fetchCategories = useCallback(async () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            business_name: formData.businessName,
-            service_category: formData.serviceCategory,
-            description: formData.description,
+            business_name: formData.name,
             phone_number: formData.phoneNumber,
             email: formData.email,
             password: formData.password,
@@ -128,14 +102,14 @@ const fetchCategories = useCallback(async () => {
 
       const data = await response.json();
       if (response.ok) {
-        Alert.alert("Success", "Business owner registered successfully!");
-        await fetchCategories();
+        Alert.alert("Success", "User registered successfully!");
+        navigation.navigate('BusinessOwnerHomeScreen');
       } else {
         Alert.alert("Error", data.message || "Registration failed");
       }
     } catch (err) {
       console.error("Frontend registration error:", err);
-      Alert.alert("Error", "Failed to register business owner");
+      Alert.alert("Error", "Failed to register User");
     }
   };
 
@@ -146,32 +120,13 @@ const fetchCategories = useCallback(async () => {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Business Owner Signup</Text>
+        <Text style={styles.title}>User Signup</Text>
 
         <TextInput
-          placeholder="Business Name *"
+          placeholder="Name"
           style={styles.input}
-          value={formData.businessName}
-          onChangeText={(text) => handleChange("businessName", text)}
-        />
-
-        <View style={styles.pickerWrapper}>
-          <Picker
-            selectedValue={formData.serviceCategory}
-            onValueChange={(value) => handleChange("serviceCategory", value)}
-          >
-            <Picker.Item label="Select Service Category *" value="" />
-            {categories.map((cat, idx) => (
-              <Picker.Item key={idx} label={cat} value={cat} />
-            ))}
-          </Picker>
-        </View>
-
-        <TextInput
-          placeholder="Description"
-          style={styles.input}
-          value={formData.description}
-          onChangeText={(text) => handleChange("description", text)}
+          value={formData.name}
+          onChangeText={(text) => handleChange("name", text)}
         />
 
         <TextInput
@@ -244,16 +199,14 @@ const fetchCategories = useCallback(async () => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Fixed bottom back button */}
       <TouchableOpacity
-  style={styles.fixedBackButton}
-  onPress={() => navigation.navigate('BusinessOwnerHomeScreen')}
->
-  <Text style={styles.fixedBackButtonText}>
-    Back to BusinessOwnerHomeScreen
-  </Text>
-</TouchableOpacity>
-
+        style={styles.fixedBackButton}
+        onPress={() => navigation.navigate('BusinessOwnerHomeScreen')}
+      >
+        <Text style={styles.fixedBackButtonText}>
+          Back to BusinessOwnerHomeScreen
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -276,20 +229,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ccc",
   },
-  pickerWrapper: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    marginBottom: 15,
-  },
   button: {
     backgroundColor: "green",
     padding: 15,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 10,
-    marginBottom: 40, // keep space above bottom button
+    marginBottom: 40,
   },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
   fixedBackButton: {

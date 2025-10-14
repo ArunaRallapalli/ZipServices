@@ -3,13 +3,10 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import BackButton from "../../components/BackButton"; // ✅ BackButton import
+import BackButton from "../../components/BackButton";
 
-// ✅ Updated param type matches RootStackParamList
-type NavProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "BusinessOwnerHomeScreen"
->;
+// ✅ Fix: Specify the route name from RootStackParamList
+type NavProp = NativeStackNavigationProp<RootStackParamList, "BusinessOwnerHomeScreen">;
 
 const BusinessOwnerHomeScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
@@ -19,7 +16,15 @@ const BusinessOwnerHomeScreen: React.FC = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate("SearchResultsScreen");
+      // Navigate to TabWrapperScreen (tabs) with Home screen selected
+      navigation.navigate("TabWrapperScreen", {
+        screen: "Home",
+        params: {
+          customerInfo: undefined,
+          isGuest: false,
+          preselectedCategory: ""
+        }
+      });
     }
   };
 
@@ -30,7 +35,7 @@ const BusinessOwnerHomeScreen: React.FC = () => {
         <Text style={styles.cancelButtonText}>Cancel</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>Welcome Business Owner</Text>
+      <Text style={styles.title}>Welcome to ZipService</Text>
 
       {/* New Business Owner */}
       <TouchableOpacity
@@ -39,7 +44,7 @@ const BusinessOwnerHomeScreen: React.FC = () => {
           navigation.navigate("SignUpFormBusinessOwners", { user_id: 0 })
         }
       >
-        <Text style={styles.buttonText}>New Business Owner → Sign Up</Text>
+        <Text style={styles.buttonText}>New User → Sign Up</Text>
       </TouchableOpacity>
 
       {/* Existing Business Owner */}
@@ -47,20 +52,38 @@ const BusinessOwnerHomeScreen: React.FC = () => {
         style={styles.button}
         onPress={() => navigation.navigate("SigninBusinessOwners")}
       >
-        <Text style={styles.buttonText}>Existing Business Owner → Login</Text>
+        <Text style={styles.buttonText}>Existing User → Login</Text>
       </TouchableOpacity>
-
-      {/* 🔙 Added BackButton at bottom */}
-      <BackButton style={{ marginTop: 30, backgroundColor: "green" }} />
+           
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 40 },
-  button: { backgroundColor: "green", padding: 16, marginVertical: 10, borderRadius: 8 },
-  buttonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  container: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    padding: 20 
+  },
+  title: { 
+    fontSize: 24, 
+    fontWeight: "bold", 
+    marginBottom: 40 
+  },
+  button: { 
+    backgroundColor: "green", 
+    padding: 16, 
+    marginVertical: 10, 
+    borderRadius: 8, 
+    width: '80%', 
+    alignItems: 'center' 
+  },
+  buttonText: { 
+    color: "#fff", 
+    fontWeight: "bold", 
+    fontSize: 16 
+  },
   cancelButton: {
     position: "absolute",
     top: 40,

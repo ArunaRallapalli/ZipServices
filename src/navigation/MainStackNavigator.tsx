@@ -134,9 +134,10 @@ export type RootStackParamList = {
   };
   
   // Service/Business Screens
-  PostServiceScreen: undefined;
-  PostServiceCategory: { user_id: number };
-  BusinessOwnerHomeScreen: { user_id: number };
+ // Service/Business Screens
+PostServiceScreen: undefined;  // ✅ Keep as is - no params needed
+PostServiceCategory: undefined;  // ✅ CHANGE: Remove user_id requirement
+BusinessOwnerHomeScreen: undefined;  // ✅ Correct - no params needed
   
   // Customer Screens
   CustomerHomeScreen: { user_id: number };
@@ -233,7 +234,7 @@ const NavigationStack: React.FC = () => {
           name="SignUpFormBusinessOwners" 
           component={SignUpFormBusinessOwners}
           options={{ 
-            headerShown: true,
+            headerShown: false,
             title: "Business Registration"
           }}
         />

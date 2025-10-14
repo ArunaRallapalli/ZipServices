@@ -24,10 +24,8 @@ router.post("/register", async (req: Request, res: Response) => {
       service_radius_miles,
     } = req.body;
 
-    // Validate required fields
+    // Validate required fields (removed business_name and service_category)
     const missingFields = [];
-    if (!business_name) missingFields.push("business_name");
-    if (!service_category) missingFields.push("service_category");
     if (!email) missingFields.push("email");
     if (!password) missingFields.push("password");
     if (!street) missingFields.push("street");
@@ -63,7 +61,7 @@ router.post("/register", async (req: Request, res: Response) => {
     );
     const user_id = userResult.rows[0].user_id;
 
-    // Insert into business_owners table
+    // Insert into business_owners table (business_name and service_category now optional/nullable)
     const businessResult = await client.query(
       `INSERT INTO business_owners
         (user_id, business_name, service_category, description, phone_number, street, city, state, zip_code, service_radius_miles)
@@ -71,8 +69,8 @@ router.post("/register", async (req: Request, res: Response) => {
        RETURNING business_id, business_name, zip_code, street, city, state, service_category`,
       [
         user_id,
-        business_name,
-        service_category,
+        business_name || null,
+        service_category || null,
         description || null,
         phone_number || null,
         street,

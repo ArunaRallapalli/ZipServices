@@ -129,11 +129,6 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
   }
 });
 
-// ============================================
-// ADD THIS TO YOUR servicePosts.ts FILE
-// Place it after the search endpoint (around line 120)
-// ============================================
-
 // Get all service posts (for All Listings screen)
 router.get('/api/service-posts/all', async (req: Request, res: Response): Promise<void> => {
   const pool: Pool = (req as any).pool;
@@ -209,6 +204,66 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
     res.status(500).json({
       success: false,
       error: 'Failed to fetch service posts',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get service posts by user ID
+router.get('/api/service-posts/user/:userId', async (req: Request, res: Response): Promise<void> => {
+  const pool: Pool = (req as any).pool;
+  
+  try {
+    const { userId } = req.params;
+
+    console.log('📋 Fetching service posts for user:', userId);
+
+    const query = `
+      SELECT 
+        sp.id,
+        sp.user_id,
+        sp.poster_type,
+        sp.post_type,
+        sp.title,
+        sp.description,
+        sp.service_category,
+        sp.price_range,
+        sp.phone_number,
+        sp.contact_email,
+        sp.zip_code,
+        sp.city,
+        sp.state,
+        sp.status,
+        sp.created_at,
+        sp.updated_at,
+        CASE 
+          WHEN sp.status = 'active' THEN true 
+          ELSE false 
+        END as is_active,
+        COALESCE(bo.business_name, u.email) as poster_name,
+        bo.business_name
+      FROM service_posts sp
+      LEFT JOIN users u ON sp.user_id = u.user_id
+      LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
+      WHERE sp.user_id = $1
+      ORDER BY sp.created_at DESC
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    console.log(`✅ Found ${result.rows.length} posts for user ${userId}`);
+
+    res.json({
+      success: true,
+      posts: result.rows,
+      total: result.rows.length
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error fetching user service posts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user service posts',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -340,6 +395,50 @@ router.post('/api/service-posts', async (req: Request, res: Response): Promise<v
   }
 });
 
+// Inactivate a service post
+router.patch('/api/service-posts/:postId/inactivate', async (req: Request, res: Response): Promise<void> => {
+  const pool: Pool = (req as any).pool;
+  
+  try {
+    const { postId } = req.params;
+
+    console.log('🔄 Inactivating post:', postId);
+
+    const query = `
+      UPDATE service_posts 
+      SET status = 'closed', updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [postId]);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'Service post not found'
+      });
+      return;
+    }
+
+    console.log('✅ Post inactivated successfully');
+
+    res.json({
+      success: true,
+      post: result.rows[0],
+      message: 'Service post inactivated successfully'
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error inactivating service post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to inactivate service post',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Get user profile
 router.get('/api/users/:userId/profile', async (req: Request, res: Response): Promise<void> => {
   const pool: Pool = (req as any).pool;
@@ -414,6 +513,217 @@ router.get('/api/users/:userId/profile', async (req: Request, res: Response): Pr
     res.status(500).json({
       success: false,
       error: 'Failed to fetch user profile',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get single service post by ID
+router.get('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
+  const pool: Pool = (req as any).pool;
+  
+  try {
+    const { postId } = req.params;
+
+    console.log('📋 Fetching service post:', postId);
+
+    const query = `
+      SELECT 
+        sp.id as post_id,
+        sp.id,
+        sp.user_id,
+        sp.poster_type,
+        sp.post_type,
+        sp.title,
+        sp.description,
+        sp.service_category,
+        sp.price_range,
+        sp.phone_number,
+        sp.contact_email,
+        sp.zip_code,
+        sp.city,
+        sp.state,
+        sp.status,
+        sp.created_at,
+        sp.updated_at,
+        COALESCE(bo.business_name, c.full_name, u.email) as poster_name,
+        bo.business_name
+      FROM service_posts sp
+      LEFT JOIN users u ON sp.user_id = u.user_id
+      LEFT JOIN customers c ON sp.user_id = c.user_id
+      LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
+      WHERE sp.id = $1
+    `;
+
+    const result = await pool.query(query, [postId]);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'Service post not found'
+      });
+      return;
+    }
+
+    console.log('✅ Found service post:', result.rows[0]);
+
+    res.json({
+      success: true,
+      post: result.rows[0]
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error fetching service post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch service post',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Update service post
+router.put('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
+  const pool: Pool = (req as any).pool;
+  
+  try {
+    const { postId } = req.params;
+    const {
+      title,
+      description,
+      service_category,
+      price_range,
+      phone_number,
+      contact_email,
+      zip_code,
+      post_type
+    } = req.body;
+
+    console.log('🔄 Updating service post:', postId);
+    console.log('Update data:', req.body);
+
+    if (!title || !service_category || !contact_email) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: title, service_category, contact_email'
+      });
+      return;
+    }
+
+    let city: string | null = null;
+    let state: string | null = null;
+
+    if (zip_code) {
+      try {
+        const zipResponse = await fetch(`https://api.zippopotam.us/us/${zip_code}`);
+        if (zipResponse.ok) {
+          const zipData = await zipResponse.json();
+          city = zipData.places[0]["place name"];
+          state = zipData.places[0]["state abbreviation"];
+          console.log(`📍 Location from ZIP ${zip_code}: ${city}, ${state}`);
+        }
+      } catch (zipError) {
+        console.warn('Could not fetch location data for zip code:', zip_code);
+      }
+    }
+
+    const updateQuery = `
+      UPDATE service_posts 
+      SET 
+        title = $1,
+        description = $2,
+        service_category = $3,
+        price_range = $4,
+        phone_number = $5,
+        contact_email = $6,
+        zip_code = $7,
+        city = $8,
+        state = $9,
+        post_type = $10,
+        updated_at = NOW()
+      WHERE id = $11
+      RETURNING *
+    `;
+
+    const values = [
+      title,
+      description,
+      service_category,
+      price_range,
+      phone_number,
+      contact_email,
+      zip_code,
+      city,
+      state,
+      post_type,
+      postId
+    ];
+
+    const result = await pool.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'Service post not found'
+      });
+      return;
+    }
+
+    console.log('✅ Service post updated successfully');
+
+    res.json({
+      success: true,
+      post: result.rows[0],
+      message: 'Service post updated successfully'
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error updating service post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update service post',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Delete service post
+router.delete('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
+  const pool: Pool = (req as any).pool;
+  
+  try {
+    const { postId } = req.params;
+
+    console.log('🗑️ Deleting service post:', postId);
+
+    const query = `
+      DELETE FROM service_posts 
+      WHERE id = $1
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [postId]);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'Service post not found'
+      });
+      return;
+    }
+
+    console.log('✅ Service post deleted successfully');
+
+    res.json({
+      success: true,
+      message: 'Service post deleted successfully'
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error deleting service post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete service post',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

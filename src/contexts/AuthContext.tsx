@@ -275,7 +275,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               text: 'Sign In',
               onPress: () => {
                 if (navigation) {
-                  navigation.navigate('ZipserviceHomeScreenSelection');
+                  navigation.navigate('BusinessOwnerHomeScreen');
                 }
                 resolve(false);
               }
