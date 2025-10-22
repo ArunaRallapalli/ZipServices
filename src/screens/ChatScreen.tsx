@@ -76,6 +76,12 @@ export default function ChatScreen() {
       );
       setHasUnreadMessages(unreadMessages.length > 0);
       setMessages(validMessages);
+      
+      // Mark messages as read
+      if (unreadMessages.length > 0) {
+        await markMessagesAsRead(unreadMessages.map(m => m.id));
+      }
+      
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err) {
       console.error("Error fetching messages:", err);
@@ -110,6 +116,23 @@ export default function ChatScreen() {
       Alert.alert("Error", "Failed to send message");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // NEW FUNCTION - Mark messages as read
+  const markMessagesAsRead = async (messageIds: number[]) => {
+    try {
+      console.log('[ChatScreen] Marking messages as read:', messageIds);
+      await fetch(`${API_URL}/messages/mark-read`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_ids: messageIds,
+          user_id: currentUserId
+        }),
+      });
+    } catch (err) {
+      console.error("Error marking messages as read:", err);
     }
   };
 
@@ -244,7 +267,7 @@ const styles = StyleSheet.create({
     minWidth: 60,
   },
   headerBackText: {
-    fontSize: 14,
+    fontSize: 21,
     fontWeight: "600",
     color: "#4f46e5",
     textAlign: "center",

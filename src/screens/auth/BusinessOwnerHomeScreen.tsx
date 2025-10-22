@@ -3,29 +3,18 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import BackButton from "../../components/BackButton";
 
-// ✅ Fix: Specify the route name from RootStackParamList
 type NavProp = NativeStackNavigationProp<RootStackParamList, "BusinessOwnerHomeScreen">;
 
 const BusinessOwnerHomeScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
 
   const handleCancel = () => {
-    // Use goBack() to return to previous screen with tab bar intact
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      // Navigate to TabWrapperScreen (tabs) with Home screen selected
-      navigation.navigate("TabWrapperScreen", {
-        screen: "Home",
-        params: {
-          customerInfo: undefined,
-          isGuest: false,
-          preselectedCategory: ""
-        }
-      });
-    }
+    // Simply navigate to TabWrapperScreen without nested params
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'TabWrapperScreen' }],
+    });
   };
 
   return (

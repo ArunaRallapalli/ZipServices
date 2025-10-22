@@ -120,45 +120,54 @@ const SearchResultsScreen: React.FC = () => {
   const knownZipCodes: { [key: string]: { city: string; state: string } } = {
     '85288': { city: 'Tempe', state: 'AZ' },
   };
+///////////////////////////////////////////////////////////////////////////
+ const handleChatPress = async (item: ServicePost) => {
+  if (!auth.isAuthenticated || !auth.userInfo?.user_id) {
+    Alert.alert(
+      "Sign In Required",
+      "You need to be signed in to chat with service providers. Would you like to sign in now?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: handleSignIn, style: "default" }
+      ]
+    );
+    return;
+  }
 
-  const handleChatPress = async (item: ServicePost) => {
-    if (!auth.isAuthenticated || !auth.userInfo?.user_id) {
-      Alert.alert(
-        "Sign In Required",
-        "You need to be signed in to chat with service providers. Would you like to sign in now?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign In", onPress: handleSignIn, style: "default" }
-        ]
-      );
-      return;
-    }
+  if (isOwnPost(item.user_id)) {
+    Alert.alert(
+      "Cannot Contact Yourself",
+      "This is your own post. You cannot send messages to yourself.",
+      [{ text: "OK", style: "default" }]
+    );
+    return;
+  }
 
-    if (isOwnPost(item.user_id)) {
-      Alert.alert(
-        "Cannot Contact Yourself",
-        "This is your own post. You cannot send messages to yourself.",
-        [{ text: "OK", style: "default" }]
-      );
-      return;
-    }
+  try {
+    // Ensure IDs are numbers, not strings
+    const currentUserId = typeof auth.userInfo.user_id === 'string' 
+      ? parseInt(auth.userInfo.user_id, 10) 
+      : auth.userInfo.user_id;
+    
+    const otherUserId = typeof item.user_id === 'string'
+      ? parseInt(item.user_id, 10)
+      : item.user_id;
 
-    try {
-      navigation.navigate("CustomerChatScreen", {
-        businessOwnerId: item.user_id,
-        businessName: item.business_name || item.poster_name || item.title,
-        customerId: auth.userInfo.user_id,
-        customerInfo: auth.userInfo,
-      });
-    } catch (error) {
-      console.error("Chat navigation error:", error);
-      Alert.alert("Navigation Error", "Unable to open chat. Please try again.");
-    }
-  };
+    navigation.navigate("ChatScreen", {
+      currentUserId: currentUserId,
+      otherUserId: otherUserId,
+      otherUserName: item.business_name || item.poster_name || item.title,
+    });
+  } catch (error) {
+    console.error("Chat navigation error:", error);
+    Alert.alert("Navigation Error", "Unable to open chat. Please try again.");
+  }
+};
+  /////////////////////////////////////////////////////////////////////////////////
 
   const handleSignIn = () => {
     try {
-      navigation.navigate("ZipserviceHomeScreenSelection");
+      navigation.navigate("BusinessOwnerHomeScreen");
     } catch (error) {
       console.error("Navigation error:", error);
       Alert.alert("Navigation Error", "Unable to navigate to sign-in screen");

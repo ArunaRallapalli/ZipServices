@@ -329,4 +329,46 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * PUT mark messages as read
+ * NEW ENDPOINT - Marks specific messages as read for a user
+ */
+router.put("/mark-read", async (req: Request, res: Response) => {
+  const { message_ids, user_id } = req.body;
+  
+  if (!message_ids || !Array.isArray(message_ids) || !user_id) {
+    return res.status(400).json({ error: "Missing required fields: message_ids (array) and user_id" });
+  }
+
+  const userId = parseInt(user_id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user_id" });
+  }
+
+  console.log(`[mark-read] Marking ${message_ids.length} messages as read for user ${userId}`);
+
+  try {
+    const result = await pool.query(
+      `UPDATE messages
+       SET is_read = true
+       WHERE id = ANY($1::int[])
+         AND receiver_id = $2
+         AND is_read = false
+       RETURNING id`,
+      [message_ids, userId]
+    );
+
+    console.log(`[mark-read] Successfully marked ${result.rows.length} messages as read`);
+    
+    res.json({ 
+      success: true, 
+      marked_count: result.rows.length,
+      message_ids: result.rows.map(row => parseInt(row.id, 10))
+    });
+  } catch (err) {
+    console.error("[mark-read] Error marking messages as read:", err);
+    res.status(500).json({ error: "Failed to mark messages as read" });
+  }
+});
+
 export default router;

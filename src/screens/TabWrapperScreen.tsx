@@ -45,37 +45,61 @@ const BottomTabs: React.FC = () => {
   // Fetch unread message count
   useEffect(() => {
     const fetchUnreadCount = async () => {
-      if (!userInfo?.user_id) return;
+      if (!userInfo?.user_id) {
+        console.log('[BottomTabs] No user_id, skipping unread count fetch');
+        console.log('[BottomTabs] userInfo:', userInfo);
+        return;
+      }
       
       try {
         const endpoint = `${API_URL}/messages/business-owner/${userInfo.user_id}`;
+        console.log('[BottomTabs] Fetching unread count from:', endpoint);
+        console.log('[BottomTabs] Current user_id:', userInfo.user_id);
         
         const response = await fetch(endpoint);
-        if (!response.ok) return;
+        if (!response.ok) {
+          console.log('[BottomTabs] Response not OK:', response.status);
+          return;
+        }
         
         const data = await response.json();
+        console.log('[BottomTabs] Raw messages data:', data);
+        console.log('[BottomTabs] Total messages received:', data.length);
         
         // Count unread messages where current user is the receiver
-        const count = Array.isArray(data) 
-          ? data.filter((msg: any) => 
-              msg.receiver_id === userInfo.user_id && msg.is_read === false
-            ).length
-          : 0;
+        const unreadMessages = Array.isArray(data) 
+          ? data.filter((msg: any) => {
+              const isReceiver = Number(msg.receiver_id) === Number(userInfo.user_id);
+              const isUnread = msg.is_read === false;
+              console.log(`[BottomTabs] Message ${msg.id}: receiver_id=${msg.receiver_id}, current_user=${userInfo.user_id}, is_read=${msg.is_read}, isReceiver=${isReceiver}, isUnread=${isUnread}`);
+              return isReceiver && isUnread;
+            })
+          : [];
         
-        console.log(`[BottomTabs] Unread message count: ${count}`);
+        const count = unreadMessages.length;
+        console.log(`[BottomTabs] ✅ Unread message count: ${count}`);
+        console.log(`[BottomTabs] Unread messages:`, unreadMessages.map(m => ({id: m.id, text: m.message_text?.substring(0, 20)})));
         setUnreadCount(count);
+        console.log(`[BottomTabs] State updated with count: ${count}`);
       } catch (error) {
         console.error('[BottomTabs] Error fetching unread count:', error);
       }
     };
     
     // Initial fetch
+    console.log('[BottomTabs] Initial fetch triggered');
     fetchUnreadCount();
     
     // Poll every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
+    const interval = setInterval(() => {
+      console.log('[BottomTabs] Polling unread count...');
+      fetchUnreadCount();
+    }, 30000);
     
-    return () => clearInterval(interval);
+    return () => {
+      console.log('[BottomTabs] Cleanup - clearing interval');
+      clearInterval(interval);
+    };
   }, [userInfo, userType]);
   
   // Everyone uses business owner components now
@@ -97,19 +121,19 @@ const BottomTabs: React.FC = () => {
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           const iconSize = 28;
-          const iconColor = '#4A90E2';
           
           switch (route.name) {
             case 'Home':
-              return <AntDesign name="home" size={iconSize} color={iconColor} />;
+              return <AntDesign name="home" size={iconSize} color={color} />;
             case 'Post':
-              return <MaterialIcons name="post-add" size={iconSize} color={iconColor} />;
+              return <MaterialIcons name="post-add" size={iconSize} color={color} />;
             case 'Listings':
-              return <Ionicons name="list" size={iconSize} color={iconColor} />;
+              return <Ionicons name="list" size={iconSize} color={color} />;
             case 'Messages':
+              console.log('[BottomTabs] Rendering Messages icon, unreadCount:', unreadCount);
               return (
                 <View>
-                  <AntDesign name="message1" size={iconSize} color={iconColor} />
+                  <AntDesign name="message1" size={iconSize} color={color} />
                   {unreadCount > 0 && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>
@@ -120,13 +144,13 @@ const BottomTabs: React.FC = () => {
                 </View>
               );
             case 'Profile':
-              return <MaterialIcons name="person" size={iconSize} color={iconColor} />;
+              return <MaterialIcons name="person" size={iconSize} color={color} />;
             default:
-              return <Ionicons name="ellipse" size={iconSize} color={iconColor} />;
+              return <Ionicons name="ellipse" size={iconSize} color={color} />;
           }
         },
         tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#2563EB',
+        tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
           backgroundColor: '#ffffff',
           height: 70,

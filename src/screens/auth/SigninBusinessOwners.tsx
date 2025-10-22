@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  SafeAreaView,
 } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
@@ -193,7 +194,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         setShowSuccess(false);
         Alert.alert(
           'Welcome Back! 🎉',
-          `Hi ${businessName}!\n\nYour business owner session has been saved securely. You can now:\n• Post and manage your services\n• Chat with customers\n• Access your business dashboard\n• Track your bookings`,
+          `Hi \n\nYour session has been saved securely. You can now:\n• Search, Post,Request and manage your services\n• Chat with customers\n• Access your dashboard\n• Track your bookings`,
           [
             {
               text: 'Get Started',
@@ -219,61 +220,65 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
   return (
     <>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
+      <SafeAreaView style={styles.safeArea}>
+        {/* Cancel button in top right */}
+        <View style={styles.topBar}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+       onPress={() => navigation.goBack()}
+            disabled={loading}
+            style={styles.cancelButton}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.container}>
-            <Text style={styles.title}>Business Owner Sign In</Text>
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.container}>
+              <Text style={styles.title}>Sign In</Text>
 
-            <Text style={styles.label}>Email:</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              placeholder="Enter your business email"
-              editable={!loading}
-            />
-
-            <Text style={styles.label}>Password:</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete="password"
-              placeholder="Enter your password"
-              editable={!loading}
-            />
-
-            <View style={styles.buttonContainer}>
-              <Button
-                title={loading ? "Signing in..." : "Sign In"}
-                onPress={handleLogin}
-                disabled={loading}
-                color="#4CAF50"
+              <Text style={styles.label}>Email:</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                placeholder="Enter your email"
+                editable={!loading}
               />
-            </View>
 
-            <TouchableOpacity
-              style={[styles.backButton, loading && styles.disabledButton]}
-              onPress={() => navigation.navigate("ZipserviceHomeScreenSelection")}
-              disabled={loading}
-            >
-              <Text style={[styles.backButtonText, loading && styles.disabledText]}>
-                Back to Home
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+              <Text style={styles.label}>Password:</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoComplete="password"
+                placeholder="Enter your password"
+                editable={!loading}
+              />
+
+              <View style={styles.buttonContainer}>
+                <Button
+                  title={loading ? "Signing in..." : "Sign In"}
+                  onPress={handleLogin}
+                  disabled={loading}
+                  color="#4CAF50"
+                />
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Success Overlay */}
       <SuccessOverlay 
@@ -285,6 +290,26 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  cancelButton: {
+    padding: 8,
+  },
+  cancelText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: "center",
@@ -318,24 +343,6 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 10,
-    marginBottom: 20,
-  },
-  backButton: {
-    backgroundColor: "#4CAF50",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  backButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  disabledButton: {
-    backgroundColor: "#ccc",
-  },
-  disabledText: {
-    color: "#888",
   },
   // Success overlay styles
   overlay: {

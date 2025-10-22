@@ -258,7 +258,7 @@ const NavigationStack: React.FC = () => {
           name="SigninBusinessOwners" 
           component={SigninBusinessOwners}
           options={{ 
-            headerShown: true,
+            headerShown: false,
             title: "Business Sign In"
           }}
         />

@@ -8,18 +8,12 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
+  SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../../navigation/MainStackNavigator";
-
-type SignUpBusinessNavProp = StackNavigationProp<
-  RootStackParamList,
-  "SignUpFormBusinessOwners"
->;
 
 const SignUpFormBusinessOwners = () => {
-  const navigation = useNavigation<SignUpBusinessNavProp>();
+  const navigation = useNavigation<any>();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -114,7 +108,18 @@ const SignUpFormBusinessOwners = () => {
   };
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
+      {/* Cancel button in top right */}
+      <View style={styles.topBar}>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('BusinessOwnerHomeScreen')}
+          style={styles.cancelButton}
+        >
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.container}
@@ -195,25 +200,38 @@ const SignUpFormBusinessOwners = () => {
         />
 
         <TouchableOpacity style={styles.button} onPress={handleRegister}>
-          <Text style={styles.buttonText}>Register Business Owner</Text>
+          <Text style={styles.buttonText}>Register User</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      <TouchableOpacity
-        style={styles.fixedBackButton}
-        onPress={() => navigation.navigate('BusinessOwnerHomeScreen')}
-      >
-        <Text style={styles.fixedBackButtonText}>
-          Back to BusinessOwnerHomeScreen
-        </Text>
-      </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f9f9f9" },
-  container: { padding: 20 },
+  screen: { 
+    flex: 1, 
+    backgroundColor: "#f9f9f9" 
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  cancelButton: {
+    padding: 8,
+  },
+  cancelText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  container: { 
+    padding: 20 
+  },
   title: {
     fontSize: 24,
     fontWeight: "600",
@@ -237,13 +255,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 40,
   },
-  buttonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
-  fixedBackButton: {
-    backgroundColor: "green",
-    padding: 18,
-    alignItems: "center",
+  buttonText: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "600" 
   },
-  fixedBackButtonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
 });
 
 export default SignUpFormBusinessOwners;
