@@ -10,7 +10,7 @@ import API_URL from "../config/apiConfig";
 // Import your screens
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
-import SearchResultsScreen from "./SearchResultsScreen";
+import SearchResultsScreen from "./Old_SearchResultsScreen";
 import PostServiceScreen from "./PostServiceScreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import { useAuth } from "../contexts/AuthContext";
@@ -149,8 +149,8 @@ const BottomTabs: React.FC = () => {
               return <Ionicons name="ellipse" size={iconSize} color={color} />;
           }
         },
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: '#1E40AF',  // Bold dark blue for active tab
+        tabBarInactiveTintColor: '#94A3B8',  // Light gray for inactive tabs
         tabBarStyle: {
           backgroundColor: '#ffffff',
           height: 70,
@@ -168,9 +168,9 @@ const BottomTabs: React.FC = () => {
           borderTopColor: 'transparent',
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '700',
-          marginTop: 0,
+          fontSize: 12,  // Slightly larger font
+          fontWeight: '800',  // Extra bold (was '700')
+          marginTop: 2,
           marginBottom: 6,
           letterSpacing: 0.3,
         },

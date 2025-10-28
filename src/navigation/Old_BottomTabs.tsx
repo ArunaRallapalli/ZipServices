@@ -7,7 +7,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 // Screens
 import CustomerProfileScreen from "../screens/Profile/BusinessOwnerProfileScreen";
-import SearchResultsScreen from "../screens/SearchResultsScreen";
+import SearchResultsScreen from "../screens/Old_SearchResultsScreen";
 import PostServiceScreen from "../screens/PostServiceScreen";
 import BusinessOwnerChatScreen from "../screens/BusinessOwnerChatScreen";
 import UserHomeScreen from "../screens/UserHomeScreen";

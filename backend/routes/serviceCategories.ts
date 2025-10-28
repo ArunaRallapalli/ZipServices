@@ -15,7 +15,7 @@ router.get("/", async (req: Request, res: Response) => {
       `SELECT category_id, category_name, description 
        FROM service_categories 
        WHERE is_active = true 
-       ORDER BY display_order, category_name`
+       ORDER BY display_order ASC, category_name ASC`
     );
     
     console.log(`✅ Service Categories: Found ${result.rows.length} categories`);

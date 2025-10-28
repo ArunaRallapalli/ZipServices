@@ -4,30 +4,21 @@ import { UserProvider } from "../contexts/UserContext";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { View, ActivityIndicator } from "react-native";
 
+import { useKeepAwake } from 'expo-keep-awake';
+
 // Import your screens
 import ListingsScreen from "../screens/ListingsScreen";
-import SearchResultsScreen from "../screens/SearchResultsScreen"
-import ZipserviceHomeScreenSelection from "../screens/auth/ZipserviceHomeScreenSelection";
-import SignUpFormCustomers from "../screens/auth/SignUpFormCustomers";
+import SearchResultsScreen from "../screens/Old_SearchResultsScreen"
 import SignUpFormBusinessOwners from "../screens/auth/SignUpFormBusinessOwners";
-import SigninCustomer from "../screens/auth/SigninCustomer";
 import SigninBusinessOwners from "../screens/auth/SigninBusinessOwners";
 import ChatScreen from "../screens/ChatScreen";
-import CustomerDasboardScreen from "../screens/CustomerDasboardScreen";
 import BusinessOwnerHomeScreen from "../screens/auth/BusinessOwnerHomeScreen";
-import CustomerHomeScreen from "../screens/CustomerHomeScreen";
-import CustomerChatScreen from "../screens/CustomerChatScreen";
 import BusinessOwnerChatScreen from "../screens/BusinessOwnerChatScreen";
-import CustomerConversationsScreen from "../screens/CustomerConversationsScreen";
-import CustomerProfileScreen from "../screens/Profile/CustomerProfileScreen";
 import BusinessOwnerProfileScreen from "../screens/Profile/BusinessOwnerProfileScreen";
 import PostServiceCategory from "../screens/PostServiceCategory";
 import MessagesTab from "../screens/ChatMessagesTab";
-import RoleSwitcher from "../components/RoleSwitcher";
 import PostServiceScreen from "../screens/PostServiceScreen";
 import TabWrapperScreen from "../screens/TabWrapperScreen";
-import UnifiedUserSignupScreen from "../screens/auth/UnifiedUserSignupScreen";
-import UserLoginScreen from "../screens/auth/UnifiedUserLoginScreen";
 import UserHomeScreen from "../screens/UserHomeScreen";
 import SignInPlaceholderScreen from"../screens/auth/SignInPlaceholderScreen";
 import EditListing from "../screens/EditListing"
@@ -58,7 +49,7 @@ export type TabParamList = {
     customerInfo?: CustomerInfo;
     isGuest?: boolean;
     preselectedCategory?: string;
-    fromSignup?: boolean; // Add this line
+    fromSignup?: boolean;
   };
   Post: undefined;
   Listings: undefined;
@@ -79,22 +70,11 @@ export type RootStackParamList = {
   EditListing: { postId: number; };
   
   // Authentication Flow
-  ZipserviceHomeScreenSelection: undefined;
-  UnifiedUserSignupScreen: undefined;
-  UnifiedUserLoginScreen: undefined;
-  SignUpFormCustomers: { user_id: number } | undefined;
   SignUpFormBusinessOwners: { user_id: number };
-  SigninCustomer: { user_id: number };
   SigninBusinessOwners: undefined;
   SignInPlaceholderScreen: undefined;
   
   // Chat Screens (Modal-style)
-  CustomerChatScreen: {
-    businessOwnerId: number;
-    businessName: string;
-    customerId: number;
-    customerInfo?: CustomerInfo;
-  };
   ChatScreen: {
     otherUserId: number;
     otherUserName: string;
@@ -114,7 +94,6 @@ export type RootStackParamList = {
   };
   
   // Profile Screens
-  CustomerProfileScreen: { customer_id: number };
   BusinessOwnerProfileScreen: {
     user_id: number;
     email: string;
@@ -134,40 +113,21 @@ export type RootStackParamList = {
   };
   
   // Service/Business Screens
- // Service/Business Screens
-PostServiceScreen: undefined;  // ✅ Keep as is - no params needed
-PostServiceCategory: undefined;  // ✅ CHANGE: Remove user_id requirement
-BusinessOwnerHomeScreen: undefined;  // ✅ Correct - no params needed
-  
-  // Customer Screens
-  CustomerHomeScreen: { user_id: number };
-  CustomerConversationsScreen: {
-    customerId: number;
-    customerInfo?: {
-      full_name: string;
-      phone_number: string;
-      zip_code: string;
-      user_id: number;
-    };
-  };
-  CustomerDashboard: {
-    customerInfo: {
-      full_name: string;
-      phone_number: string;
-      zip_code: string;
-      user_id: number;
-    };
-  };
+  PostServiceScreen: undefined;
+  PostServiceCategory: undefined;
+  BusinessOwnerHomeScreen: undefined;
   
   // Utility Screens
   UserHomeScreen: undefined;
-  RoleSwitcher: undefined;
 };
 
 // Navigation Component
 const NavigationStack: React.FC = () => {
   const RootStack = createNativeStackNavigator<RootStackParamList>();
   const { loading } = useAuth();
+  
+  // ✅ ADDED: Keep app awake during development to prevent Expo Go timeout
+  useKeepAwake();
 
   // Show loading screen while checking authentication
   if (loading) {
@@ -201,36 +161,6 @@ const NavigationStack: React.FC = () => {
         }}
       >
         <RootStack.Screen 
-          name="ZipserviceHomeScreenSelection" 
-          component={ZipserviceHomeScreenSelection}
-          options={{ title: "Welcome" }}
-
-          />
-        <RootStack.Screen 
-          name="UnifiedUserSignupScreen" 
-          component={UnifiedUserSignupScreen}
-          options={{ 
-            headerShown: true,
-            title: "Sign Up"
-          }}
-        />
-        <RootStack.Screen 
-          name="UnifiedUserLoginScreen" 
-          component={UserLoginScreen}
-          options={{ 
-            headerShown: true,
-            title: "Sign In"
-          }}
-        />
-        <RootStack.Screen 
-          name="SignUpFormCustomers" 
-          component={SignUpFormCustomers}
-          options={{ 
-            headerShown: true,
-            title: "Customer Registration"
-          }}
-        />
-        <RootStack.Screen 
           name="SignUpFormBusinessOwners" 
           component={SignUpFormBusinessOwners}
           options={{ 
@@ -244,14 +174,6 @@ const NavigationStack: React.FC = () => {
           options={{ 
             headerShown: true,
             title: "Sign In"
-          }}
-        />
-        <RootStack.Screen 
-          name="SigninCustomer" 
-          component={SigninCustomer}
-          options={{ 
-            headerShown: true,
-            title: "Customer Sign In"
           }}
         />
         <RootStack.Screen 
@@ -272,14 +194,6 @@ const NavigationStack: React.FC = () => {
           animation: 'slide_from_bottom'
         }}
       >
-        <RootStack.Screen 
-          name="CustomerChatScreen" 
-          component={CustomerChatScreen}
-          options={({ route }) => ({
-            title: route.params?.businessName || 'Chat',
-            headerTitleStyle: { fontSize: 16 }
-          })}
-        />
         <RootStack.Screen 
           name="ChatScreen" 
           component={ChatScreen}
@@ -307,14 +221,6 @@ const NavigationStack: React.FC = () => {
           presentation: 'card'
         }}
       >
-        <RootStack.Screen 
-          name="CustomerProfileScreen" 
-          component={CustomerProfileScreen}
-          options={{ 
-            title: 'My Profile',
-            headerBackTitle: 'Back'
-          }}
-        />
         <RootStack.Screen 
           name="BusinessOwnerProfileScreen" 
           component={BusinessOwnerProfileScreen}
@@ -349,34 +255,11 @@ const NavigationStack: React.FC = () => {
         />
       </RootStack.Group>
 
-      {/* CUSTOMER SCREENS */}
-      <RootStack.Group screenOptions={{ headerShown: true }}>
-        <RootStack.Screen 
-          name="CustomerHomeScreen" 
-          component={CustomerHomeScreen}
-          options={{ title: 'Customer Home' }}
-        />
-        <RootStack.Screen
-          name="CustomerConversationsScreen"
-          component={CustomerConversationsScreen}
-          options={{ title: "My Conversations" }}
-        />
-        <RootStack.Screen
-          name="CustomerDashboard"
-          component={CustomerDasboardScreen}
-          options={{ title: "Dashboard" }}
-        />
-      </RootStack.Group>
-
       {/* UTILITY SCREENS */}
       <RootStack.Group screenOptions={{ headerShown: false }}>
         <RootStack.Screen 
           name="UserHomeScreen" 
           component={UserHomeScreen}
-        />
-        <RootStack.Screen 
-          name="RoleSwitcher" 
-          component={RoleSwitcher}
         />
       </RootStack.Group>
     </RootStack.Navigator>

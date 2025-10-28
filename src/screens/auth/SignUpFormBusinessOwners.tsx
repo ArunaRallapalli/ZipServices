@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
@@ -20,6 +21,7 @@ const SignUpFormBusinessOwners = () => {
     phoneNumber: "",
     email: "",
     password: "",
+    confirmPassword: "",
     street: "",
     city: "",
     state: "",
@@ -27,6 +29,7 @@ const SignUpFormBusinessOwners = () => {
     serviceRadiusMiles: "",
   });
 
+  const [isLoadingZipCode, setIsLoadingZipCode] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const handleChange = (field: string, value: string) =>
@@ -38,6 +41,73 @@ const SignUpFormBusinessOwners = () => {
     /^[0-9]{10,15}$/.test(phone.replace(/\D/g, ""));
   const isStrongPassword = (password: string) =>
     /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/.test(password);
+  
+  // Validate zip code format (5 digits)
+  const isValidZipCode = (zipCode: string) => /^\d{5}$/.test(zipCode);
+
+  // Fetch city and state from zip code using free API
+  const fetchLocationFromZipCode = async (zipCode: string) => {
+    if (!isValidZipCode(zipCode)) {
+      return;
+    }
+
+    setIsLoadingZipCode(true);
+    try {
+      const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const place = data.places[0];
+        
+        setFormData((prev) => ({
+          ...prev,
+          city: place["place name"],
+          state: place["state abbreviation"],
+        }));
+      } else {
+        Alert.alert(
+          "Invalid Zip Code",
+          "Unable to find location for this zip code. Please verify it's correct."
+        );
+        setFormData((prev) => ({
+          ...prev,
+          city: "",
+          state: "",
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching zip code data:", error);
+      Alert.alert(
+        "Error",
+        "Could not verify zip code. Please check your internet connection."
+      );
+    } finally {
+      setIsLoadingZipCode(false);
+    }
+  };
+
+  // Handle zip code change
+  const handleZipCodeChange = (text: string) => {
+    // Only allow digits
+    const digitsOnly = text.replace(/\D/g, "");
+    
+    // Limit to 5 digits
+    const limitedText = digitsOnly.slice(0, 5);
+    
+    handleChange("zipCode", limitedText);
+
+    // Auto-fetch when 5 digits are entered
+    if (limitedText.length === 5) {
+      fetchLocationFromZipCode(limitedText);
+    } else {
+      // Clear city and state if zip code is incomplete
+      setFormData((prev) => ({
+        ...prev,
+        city: "",
+        state: "",
+      }));
+    }
+  };
 
   const handleRegister = async () => {
     const requiredFields = [
@@ -69,6 +139,14 @@ const SignUpFormBusinessOwners = () => {
         "Validation Error",
         "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character"
       );
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert("Validation Error", "Passwords do not match");
+      return;
+    }
+    if (!isValidZipCode(formData.zipCode)) {
+      Alert.alert("Validation Error", "Zip code must be exactly 5 digits");
       return;
     }
 
@@ -160,32 +238,53 @@ const SignUpFormBusinessOwners = () => {
         />
 
         <TextInput
+          placeholder="Confirm Password *"
+          style={styles.input}
+          value={formData.confirmPassword}
+          onChangeText={(text) => handleChange("confirmPassword", text)}
+          secureTextEntry
+        />
+
+        <TextInput
           placeholder="Street *"
           style={styles.input}
           value={formData.street}
           onChangeText={(text) => handleChange("street", text)}
         />
 
+        {/* Zip Code Field - Now first in order */}
+        <View>
+          <TextInput
+            placeholder="Zip Code * (5 digits)"
+            style={styles.input}
+            value={formData.zipCode}
+            onChangeText={handleZipCodeChange}
+            keyboardType="numeric"
+            maxLength={5}
+          />
+          {isLoadingZipCode && (
+            <ActivityIndicator
+              size="small"
+              color="green"
+              style={styles.loadingIndicator}
+            />
+          )}
+        </View>
+
+        {/* City - Auto-populated from zip code */}
         <TextInput
-          placeholder="City *"
-          style={styles.input}
+          placeholder="City * (auto-filled)"
+          style={[styles.input, styles.autoFilledInput]}
           value={formData.city}
-          onChangeText={(text) => handleChange("city", text)}
+          editable={false}
         />
 
+        {/* State - Auto-populated from zip code */}
         <TextInput
-          placeholder="State *"
-          style={styles.input}
+          placeholder="State * (auto-filled)"
+          style={[styles.input, styles.autoFilledInput]}
           value={formData.state}
-          onChangeText={(text) => handleChange("state", text)}
-        />
-
-        <TextInput
-          placeholder="Zip Code *"
-          style={styles.input}
-          value={formData.zipCode}
-          onChangeText={(text) => handleChange("zipCode", text)}
-          keyboardType="numeric"
+          editable={false}
         />
 
         <TextInput
@@ -246,6 +345,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: "#ccc",
+  },
+  autoFilledInput: {
+    backgroundColor: "#f5f5f5",
+    color: "#666",
+  },
+  loadingIndicator: {
+    position: "absolute",
+    right: 15,
+    top: 12,
   },
   button: {
     backgroundColor: "green",
