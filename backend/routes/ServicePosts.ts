@@ -263,7 +263,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
 });
 
 // ============================================================================
-// ENDPOINT: Get service posts by user ID
+// ENDPOINT: Get service posts by user ID - used in Listing screens
 // Method: GET
 // Path: /api/service-posts/user/:userId
 // Purpose: Retrieve all service posts created by a specific user

@@ -1,3 +1,4 @@
+// Import necessary React and React Native components
 import React, { useState } from "react";
 import {
   View,
@@ -14,20 +15,23 @@ import {
 } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import API_URL from "../../config/apiConfig";
-import { useAuth } from "../../contexts/AuthContext";
+import API_URL from "../../config/apiConfig"; // Backend API URL configuration
+import { useAuth } from "../../contexts/AuthContext"; // Auth context for global authentication state
 
+// Navigation prop type definition for type safety
 type NavProp = NativeStackNavigationProp<RootStackParamList, "SigninBusinessOwners">;
 
+// Interface for decoded JWT token payload
 interface JWTPayload {
   user_id: number;
   business_name?: string;
   email: string;
-  iat?: number;
-  exp?: number;
-  [key: string]: any;
+  iat?: number; // Issued at timestamp
+  exp?: number; // Expiration timestamp
+  [key: string]: any; // Allow additional properties
 }
 
+// Interface for login API response - handles multiple possible response formats
 interface LoginResponse {
   token?: string;
   access_token?: string;
@@ -49,14 +53,18 @@ interface LoginResponse {
   };
 }
 
-// Manual JWT decode function
+// Manual JWT decode function - decodes base64 encoded JWT without external library
 const decodeJwtManually = (token: string): JWTPayload => {
   try {
+    // Split JWT into its three parts (header.payload.signature)
     const parts = token.split(".");
     if (parts.length !== 3) throw new Error("Invalid JWT format");
 
+    // Extract and decode the payload (middle part)
     const payload = parts[1];
+    // Add padding if necessary for base64 decoding
     const paddedPayload = payload + "=".repeat((4 - payload.length % 4) % 4);
+    // Decode from base64 and parse JSON
     const decodedPayload = atob(paddedPayload);
     return JSON.parse(decodedPayload);
   } catch (error) {
@@ -64,7 +72,7 @@ const decodeJwtManually = (token: string): JWTPayload => {
   }
 };
 
-// Success overlay component
+// Success overlay component - displays a success message after login
 const SuccessOverlay: React.FC<{ visible: boolean; message: string }> = ({ visible, message }) => {
   if (!visible) return null;
   
@@ -80,23 +88,29 @@ const SuccessOverlay: React.FC<{ visible: boolean; message: string }> = ({ visib
 };
 
 export default function SignInBusinessOwnersScreen({ navigation }: { navigation: NavProp }) {
+  // Get signIn function from auth context to handle global authentication
   const { signIn } = useAuth();
+  
+  // Local state for form inputs and UI state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [loading, setLoading] = useState(false); // Loading state during login
+  const [showSuccess, setShowSuccess] = useState(false); // Success overlay visibility
 
+  // Main login handler - called when user taps Sign In button
   const handleLogin = async () => {
+    // Validate that both fields are filled
     if (!email.trim() || !password.trim()) {
       Alert.alert("Validation", "Please enter both email and password");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoading(true); // Show loading state
       
       console.log("Making business owner login request to:", `${API_URL}/business_owners/login`);
 
+      // Make POST request to backend login endpoint
       const response = await fetch(`${API_URL}/business_owners/login`, {
         method: "POST",
         headers: { 
@@ -109,9 +123,11 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         }),
       });
 
+      // Get raw response text first to handle parsing errors
       const rawText = await response.text();
       console.log("Response status:", response.status);
 
+      // Parse JSON response safely
       let data: LoginResponse;
       try {
         data = JSON.parse(rawText);
@@ -120,13 +136,15 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         throw new Error("Server returned invalid response");
       }
 
+      // Check if response was successful
       if (!response.ok) {
         throw new Error(data.message || `Server error: ${response.status}`);
       }
 
-      // Try to extract token from different possible locations
+      // Try to extract token from different possible locations in response
       const token = data.token || data.access_token || data.data?.token;
       
+      // Ensure we got a token
       if (!token) {
         console.error("No token found in response:", data);
         throw new Error("No authentication token received from server");
@@ -134,19 +152,21 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
       console.log("Token received, decoding...");
 
-      // Try to extract user info from JWT and response
+      // Initialize variables for user information
       let userInfo;
       let userId = 0;
       let businessName = "Business Owner";
 
       try {
-        // Try to decode JWT for user info
+        // Try to decode JWT to extract user information
         const decoded = decodeJwtManually(token);
         console.log("Decoded JWT:", decoded);
         
+        // Extract user ID and business name from JWT
         userId = decoded.user_id || 0;
         businessName = decoded.business_name || decoded.email || "Business Owner";
         
+        // Build user info object from JWT data
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
@@ -157,11 +177,12 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
       } catch (jwtError) {
         console.warn("JWT decode failed, using response data:", jwtError);
         
-        // Fallback to response data
+        // Fallback: Use user data from API response if JWT decode fails
         const userFromResponse = data.user || data.data?.user;
         userId = userFromResponse?.user_id || userFromResponse?.id || 0;
         businessName = userFromResponse?.business_name || userFromResponse?.email || "Business Owner";
         
+        // Build user info object from response data
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
@@ -177,7 +198,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
       console.log("Business owner login successful, saving token and user info...");
 
-      // Use the auth context to sign in (this will handle token storage)
+      // Use the auth context to sign in - this will handle token storage in AsyncStorage
       await signIn(
         token,
         'business_owner',
@@ -186,10 +207,10 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         userInfo
       );
 
-      // Show success overlay
+      // Show success overlay to user
       setShowSuccess(true);
       
-      // Show detailed success message
+      // After 1.5 seconds, hide overlay and show detailed welcome message
       setTimeout(() => {
         setShowSuccess(false);
         Alert.alert(
@@ -199,7 +220,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
             {
               text: 'Get Started',
               onPress: () => {
-                // Navigate to TabWrapperScreen
+                // Navigate to main app screen after successful login
                 navigation.reset({
                   index: 0,
                   routes: [{ name: 'TabWrapperScreen' }],
@@ -211,9 +232,11 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
       }, 1500); // Show success overlay for 1.5 seconds
 
     } catch (err: any) {
+      // Handle any errors during login process
       console.error("Business owner login error:", err.message);
       Alert.alert("Login Failed", err.message || "Something went wrong");
     } finally {
+      // Always reset loading state regardless of success or failure
       setLoading(false);
     }
   };
@@ -221,29 +244,31 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
   return (
     <>
       <SafeAreaView style={styles.safeArea}>
-        {/* Cancel button in top right */}
+        {/* Top bar with cancel button */}
         <View style={styles.topBar}>
           <View style={{ flex: 1 }} />
           <TouchableOpacity
-       onPress={() => navigation.goBack()}
-            disabled={loading}
+            onPress={() => navigation.goBack()} // Navigate back to previous screen
+            disabled={loading} // Disable during login
             style={styles.cancelButton}
           >
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Keyboard avoiding view for better UX when keyboard is open */}
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="handled" // Allow taps on buttons when keyboard is open
           >
             <View style={styles.container}>
               <Text style={styles.title}>Sign In</Text>
 
+              {/* Email input field */}
               <Text style={styles.label}>Email:</Text>
               <TextInput
                 style={styles.input}
@@ -253,25 +278,27 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
                 autoCapitalize="none"
                 autoComplete="email"
                 placeholder="Enter your email"
-                editable={!loading}
+                editable={!loading} // Disable input during login
               />
 
+              {/* Password input field */}
               <Text style={styles.label}>Password:</Text>
               <TextInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry // Hide password characters
                 autoComplete="password"
                 placeholder="Enter your password"
-                editable={!loading}
+                editable={!loading} // Disable input during login
               />
 
+              {/* Sign in button */}
               <View style={styles.buttonContainer}>
                 <Button
                   title={loading ? "Signing in..." : "Sign In"}
                   onPress={handleLogin}
-                  disabled={loading}
+                  disabled={loading} // Disable button during login to prevent multiple submissions
                   color="#4CAF50"
                 />
               </View>
@@ -280,7 +307,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Success Overlay */}
+      {/* Success Overlay - shown after successful login */}
       <SuccessOverlay 
         visible={showSuccess} 
         message="Business session saved securely!" 

@@ -1,3 +1,26 @@
+/**
+ * EditServicePostScreen Component
+ * 
+ * This screen allows users to edit their existing service listings/posts.
+ * It loads the current post data, displays it in editable form fields, validates inputs,
+ * and saves changes back to the backend.
+ * 
+ * Features:
+ * - Fetches existing post data by postId from route parameters
+ * - Editable fields: post type, title, description, category, price, contact info, zip code
+ * - Real-time form validation with error messages
+ * - Phone number auto-formatting (###-###-####)
+ * - Character counter for description field (500 char limit)
+ * - Post type toggle: "Offering Service" vs "Requesting Service"
+ * - Dropdown picker for service categories
+ * - Required field indicators (*)
+ * - Loading state while fetching post data
+ * - Saving state with disabled form during save operation
+ * - Success/error alerts for save operations
+ * - Cancel button to go back without saving
+ * - Keyboard-aware scrolling for better UX
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -18,14 +41,17 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import API_URL from "../config/apiConfig";
 import { Picker } from "@react-native-picker/picker";
+
+// Navigation type definitions for type safety
 type EditServicePostNavProp = NativeStackNavigationProp<RootStackParamList, "EditListing">;
 type EditServicePostRouteProp = RouteProp<RootStackParamList, "EditListing">;
 
+// ServicePost interface: represents the structure of a service post
 interface ServicePost {
   id: number;
   user_id: number;
   poster_type: string;
-  post_type: string;
+  post_type: string;                    // "offer" or "request"
   title: string;
   description?: string;
   service_category: string;
@@ -37,6 +63,7 @@ interface ServicePost {
   state?: string;
 }
 
+// Available service categories for the dropdown picker
 const serviceCategories = [
   "Cleaning",
   "Plumbing",
@@ -57,12 +84,17 @@ const serviceCategories = [
 const EditServicePostScreen: React.FC = () => {
   const navigation = useNavigation<EditServicePostNavProp>();
   const route = useRoute<EditServicePostRouteProp>();
+  
+  // Extract postId from route parameters - used to fetch and update the specific post
   const { postId } = route.params;
 
+  // State: Loading indicator while fetching post data from backend
   const [loading, setLoading] = useState(true);
+  
+  // State: Saving indicator while updating post data
   const [saving, setSaving] = useState(false);
   
-  // Form fields
+  // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -72,16 +104,25 @@ const EditServicePostScreen: React.FC = () => {
   const [contactEmail, setContactEmail] = useState("");
   const [zipCode, setZipCode] = useState("");
 
-  // Validation states
+  // State: Validation errors object - stores error messages for each field
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
+  /**
+   * Effect: Fetch post data when component mounts or postId changes
+   */
   useEffect(() => {
     fetchPostData();
   }, [postId]);
 
+  /**
+   * Fetch the existing post data from the backend by postId
+   * Populates all form fields with the current post data
+   */
   const fetchPostData = async () => {
     try {
       setLoading(true);
+      
+      // API call to get post data by ID
       const response = await fetch(`${API_URL}/api/service-posts/${postId}`);
       
       if (!response.ok) {
@@ -90,6 +131,7 @@ const EditServicePostScreen: React.FC = () => {
 
       const data = await response.json();
       
+      // Populate form fields if data is successfully retrieved
       if (data.success && data.post) {
         const post: ServicePost = data.post;
         setPostType(post.post_type as "offer" | "request");
@@ -104,33 +146,43 @@ const EditServicePostScreen: React.FC = () => {
     } catch (error) {
       console.error("Error fetching post data:", error);
       Alert.alert("Error", "Failed to load post data. Please try again.");
-      navigation.goBack();
+      navigation.goBack(); // Go back if fetch fails
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Validate all form fields
+   * Returns true if all validations pass, false otherwise
+   * Updates errors state with validation messages
+   */
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {};
 
+    // Title is required
     if (!title.trim()) {
       newErrors.title = "Title is required";
     }
 
+    // Service category is required
     if (!serviceCategory) {
       newErrors.serviceCategory = "Service category is required";
     }
 
+    // Contact email is required and must be valid format
     if (!contactEmail.trim()) {
       newErrors.contactEmail = "Contact email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
       newErrors.contactEmail = "Invalid email format";
     }
 
+    // ZIP code must be exactly 5 digits if provided
     if (zipCode && !/^\d{5}$/.test(zipCode)) {
       newErrors.zipCode = "ZIP code must be 5 digits";
     }
 
+    // Phone number must be exactly 10 digits if provided
     if (phoneNumber && !/^\d{10}$/.test(phoneNumber.replace(/\D/g, ""))) {
       newErrors.phoneNumber = "Phone number must be 10 digits";
     }
@@ -139,7 +191,12 @@ const EditServicePostScreen: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  /**
+   * Handle save button press
+   * Validates form, then sends PUT request to update the post
+   */
   const handleSave = async () => {
+    // Validate form before saving
     if (!validateForm()) {
       Alert.alert("Validation Error", "Please fix the errors before saving.");
       return;
@@ -148,17 +205,19 @@ const EditServicePostScreen: React.FC = () => {
     try {
       setSaving(true);
 
+      // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
         title: title.trim(),
         description: description.trim() || null,
         service_category: serviceCategory,
         price_range: priceRange.trim() || null,
-        phone_number: phoneNumber.replace(/\D/g, "") || null,
+        phone_number: phoneNumber.replace(/\D/g, "") || null, // Remove formatting
         contact_email: contactEmail.trim(),
         zip_code: zipCode.trim() || null,
         post_type: postType,
       };
 
+      // API call to update the post
       const response = await fetch(`${API_URL}/api/service-posts/${postId}`, {
         method: "PUT",
         headers: {
@@ -173,6 +232,7 @@ const EditServicePostScreen: React.FC = () => {
 
       const data = await response.json();
 
+      // Show success message and navigate back if update successful
       if (data.success) {
         Alert.alert("Success", "Your listing has been updated successfully!", [
           {
@@ -191,8 +251,15 @@ const EditServicePostScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Format phone number as user types
+   * Formats to ###-###-#### pattern
+   */
   const formatPhoneNumber = (text: string) => {
+    // Remove all non-digit characters
     const cleaned = text.replace(/\D/g, "");
+    
+    // Apply formatting based on length
     if (cleaned.length <= 3) {
       return cleaned;
     } else if (cleaned.length <= 6) {
@@ -202,6 +269,7 @@ const EditServicePostScreen: React.FC = () => {
     }
   };
 
+  // Loading state: Show spinner while fetching post data
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -213,30 +281,35 @@ const EditServicePostScreen: React.FC = () => {
     );
   }
 
+  // Main render: Edit form
   return (
     <SafeAreaView style={styles.container}>
+      {/* KeyboardAvoidingView: Adjusts layout when keyboard appears */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        {/* Header */}
+        {/* Header with back button and title */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Listing</Text>
+          {/* Placeholder to center the title */}
           <View style={styles.placeholder} />
         </View>
 
+        {/* ScrollView: Contains all form fields */}
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Post Type Selection */}
+          {/* Post Type Selection: Toggle between "offer" and "request" */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Post Type</Text>
             <View style={styles.postTypeContainer}>
+              {/* Offering Service button */}
               <TouchableOpacity
                 style={[
                   styles.postTypeButton,
@@ -258,6 +331,7 @@ const EditServicePostScreen: React.FC = () => {
                   Offering Service
                 </Text>
               </TouchableOpacity>
+              {/* Requesting Service button */}
               <TouchableOpacity
                 style={[
                   styles.postTypeButton,
@@ -282,7 +356,7 @@ const EditServicePostScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Title */}
+          {/* Title field - Required */}
           <View style={styles.section}>
             <Text style={styles.label}>
               Title <Text style={styles.required}>*</Text>
@@ -294,10 +368,11 @@ const EditServicePostScreen: React.FC = () => {
               onChangeText={setTitle}
               maxLength={100}
             />
+            {/* Show error message if validation fails */}
             {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
           </View>
 
-          {/* Service Category */}
+          {/* Service Category dropdown - Required */}
           <View style={styles.section}>
             <Text style={styles.label}>
               Service Category <Text style={styles.required}>*</Text>
@@ -309,17 +384,19 @@ const EditServicePostScreen: React.FC = () => {
                 style={styles.picker}
               >
                 <Picker.Item label="Select a category..." value="" />
+                {/* Map through all available categories */}
                 {serviceCategories.map((category) => (
                   <Picker.Item key={category} label={category} value={category} />
                 ))}
               </Picker>
             </View>
+            {/* Show error message if validation fails */}
             {errors.serviceCategory && (
               <Text style={styles.errorText}>{errors.serviceCategory}</Text>
             )}
           </View>
 
-          {/* Description */}
+          {/* Description field - Optional, multiline with character counter */}
           <View style={styles.section}>
             <Text style={styles.label}>Description</Text>
             <TextInput
@@ -331,10 +408,11 @@ const EditServicePostScreen: React.FC = () => {
               numberOfLines={4}
               maxLength={500}
             />
+            {/* Character counter showing current/max length */}
             <Text style={styles.charCount}>{description.length}/500</Text>
           </View>
 
-          {/* Price Range */}
+          {/* Price Range / Budget field - Optional, label changes based on post type */}
           <View style={styles.section}>
             <Text style={styles.label}>
               {postType === "offer" ? "Price Range" : "Budget"}
@@ -348,7 +426,7 @@ const EditServicePostScreen: React.FC = () => {
             />
           </View>
 
-          {/* Contact Email */}
+          {/* Contact Email field - Required */}
           <View style={styles.section}>
             <Text style={styles.label}>
               Contact Email <Text style={styles.required}>*</Text>
@@ -362,12 +440,13 @@ const EditServicePostScreen: React.FC = () => {
               autoCapitalize="none"
               maxLength={100}
             />
+            {/* Show error message if validation fails */}
             {errors.contactEmail && (
               <Text style={styles.errorText}>{errors.contactEmail}</Text>
             )}
           </View>
 
-          {/* Phone Number */}
+          {/* Phone Number field - Optional, auto-formats as user types */}
           <View style={styles.section}>
             <Text style={styles.label}>Phone Number</Text>
             <TextInput
@@ -378,12 +457,13 @@ const EditServicePostScreen: React.FC = () => {
               keyboardType="phone-pad"
               maxLength={12}
             />
+            {/* Show error message if validation fails */}
             {errors.phoneNumber && (
               <Text style={styles.errorText}>{errors.phoneNumber}</Text>
             )}
           </View>
 
-          {/* ZIP Code */}
+          {/* ZIP Code field - Optional */}
           <View style={styles.section}>
             <Text style={styles.label}>ZIP Code</Text>
             <TextInput
@@ -394,15 +474,17 @@ const EditServicePostScreen: React.FC = () => {
               keyboardType="number-pad"
               maxLength={5}
             />
+            {/* Show error message if validation fails */}
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
           </View>
 
-          {/* Save Button */}
+          {/* Save Button - Disabled during save operation */}
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleSave}
             disabled={saving}
           >
+            {/* Show spinner while saving, otherwise show icon and text */}
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
@@ -413,7 +495,7 @@ const EditServicePostScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
-          {/* Cancel Button */}
+          {/* Cancel Button - Navigate back without saving */}
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => navigation.goBack()}
@@ -427,6 +509,7 @@ const EditServicePostScreen: React.FC = () => {
   );
 };
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -464,7 +547,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   placeholder: {
-    width: 34,
+    width: 34, // Matches back button width to center title
   },
   scrollView: {
     flex: 1,
@@ -489,7 +572,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   required: {
-    color: "#FF6B6B",
+    color: "#FF6B6B", // Red asterisk for required fields
   },
   input: {
     backgroundColor: "#fff",
@@ -501,11 +584,11 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   inputError: {
-    borderColor: "#FF6B6B",
+    borderColor: "#FF6B6B", // Red border for fields with validation errors
   },
   textArea: {
     height: 100,
-    textAlignVertical: "top",
+    textAlignVertical: "top", // Start text at top for multiline input
   },
   charCount: {
     fontSize: 12,
@@ -546,7 +629,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   postTypeButtonActive: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: "#4A90E2", // Blue background when selected
     borderColor: "#4A90E2",
   },
   postTypeText: {
@@ -555,10 +638,10 @@ const styles = StyleSheet.create({
     color: "#4A90E2",
   },
   postTypeTextActive: {
-    color: "#fff",
+    color: "#fff", // White text when selected
   },
   saveButton: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#4CAF50", // Green save button
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -568,7 +651,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   saveButtonDisabled: {
-    backgroundColor: "#999",
+    backgroundColor: "#999", // Gray when disabled/saving
   },
   saveButtonText: {
     color: "#fff",

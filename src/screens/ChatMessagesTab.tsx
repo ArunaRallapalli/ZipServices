@@ -1,3 +1,19 @@
+/**
+ * MessagesTab Component
+ * 
+ * This is the conversation list/inbox screen that displays all chat conversations for a user.
+ * It serves as the main entry point to the messaging system.
+ * 
+ * Features:
+ * - Displays all conversations with preview of last message
+ * - Shows unread message count badge on each conversation
+ * - Supports both customer and business owner user types
+ * - Different API endpoints for different user types
+ * - Tapping a conversation navigates to the full chat screen
+ * - Loading states and empty states
+ * - Auto-fetches conversations on mount
+ */
+
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -6,28 +22,29 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Platform,
-} from "react-native";
+  } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
+import API_URL from "../config/apiConfig";
 
-const BASE_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
+// Navigation type definition for type safety
 type NavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   "ChatMessagesTab"
 >;
 
+// Conversation interface: represents a single conversation in the list
 interface Conversation {
-  other_user_id: number;
-  other_user_name: string;
-  last_message: string;
-  last_message_time: string;
-  unread_count?: number;
+  other_user_id: number;           // ID of the other person in the conversation
+  other_user_name: string;          // Display name of the other person
+  last_message: string;             // Preview of the most recent message
+  last_message_time: string;        // Timestamp of the last message
+  unread_count?: number;            // Number of unread messages (optional)
 }
 
+// Props interface: defines what data can be passed to this component
 interface MessagesTabProps {
   userInfo?: {
     user_id: number;
@@ -38,8 +55,8 @@ interface MessagesTabProps {
     service_category?: string;
     user_type?: "customer" | "business_owner";
   };
-  currentUserId?: number;
-  userType?: "customer" | "business_owner";
+  currentUserId?: number;                        // Alternative way to pass user ID
+  userType?: "customer" | "business_owner";      // Alternative way to pass user type
 }
 
 export default function MessagesTab({
@@ -49,58 +66,95 @@ export default function MessagesTab({
 }: MessagesTabProps) {
   const navigation = useNavigation<NavigationProp>();
 
+  // Extract user ID: prefer prop over userInfo
   const currentUserId = propUserId ?? userInfo?.user_id;
+  
+  // Extract user type: prefer prop over userInfo, default to "customer"
   const userType = propUserType ?? userInfo?.user_type ?? "customer";
 
+  // State: Loading indicator while fetching conversations
   const [loading, setLoading] = useState(true);
+  
+  // State: Array of all conversations for this user
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
+  /**
+   * Effect: Fetch conversations when component mounts or when user info changes
+   * Runs whenever currentUserId or userType changes
+   */
   useEffect(() => {
+    // Early exit if no user ID is available
     if (!currentUserId) {
       console.error("No currentUserId available");
       setLoading(false);
       return;
     }
 
+    /**
+     * Fetch conversations from the backend
+     * Uses different endpoints for customers vs business owners
+     */
     const fetchData = async () => {
       try {
         setLoading(true);
-        const url =
-          userType === "customer"
-            ? `${BASE_URL}/messages/customer/${currentUserId}/conversations`
-            : `${BASE_URL}/messages/business-owner/${currentUserId}`;
+        
+        // Construct API URL based on user type
+        // Customers: /messages/customer/{id}/conversations
+        // Business owners: /messages/business-owner/{id}
+     const url =
+  userType === "customer"
+    ? `${API_URL}/messages/customer/${currentUserId}/conversations`
+    : `${API_URL}/messages/business-owner/${currentUserId}`;
+        
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = await res.json();
 
+        /**
+         * Normalize the API response into a consistent format
+         * Different endpoints return slightly different field names
+         */
         const normalized: Conversation[] = (raw || []).map((item: any) => ({
+          // Extract other user's ID (field name varies by endpoint)
           other_user_id:
             userType === "customer"
               ? item.other_user_id
               : item.user_id ?? item.sender_id,
+          
+          // Extract other user's display name (field name varies by endpoint)
           other_user_name:
             userType === "customer"
               ? item.business_name || item.receiver_business_name || "Business"
               : item.full_name || item.sender_name || item.sender_email || "Customer",
+          
+          // Extract last message text
           last_message: item.last_message || item.message_text || "",
+          
+          // Extract last message timestamp
           last_message_time: item.last_message_time || item.created_at || "",
+          
+          // Extract unread count (defaults to 0 if not present)
           unread_count: item.unread_count || 0,
         }));
 
         setConversations(normalized);
       } catch (e) {
         console.error("Fetch conversations failed:", e);
-        setConversations([]);
+        setConversations([]); // Set empty array on error
       } finally {
-        setLoading(false);
+        setLoading(false); // Always stop loading indicator
       }
     };
 
     fetchData();
   }, [currentUserId, userType]);
 
+  /**
+   * Navigate to the chat screen when a conversation is tapped
+   * Passes necessary parameters to ChatScreen
+   */
   const goToChat = (otherId: number, otherName: string) => {
-    if (!currentUserId) return;
+    if (!currentUserId) return; // Safety check
 
     navigation.navigate("ChatScreen", {
       currentUserId,
@@ -109,6 +163,7 @@ export default function MessagesTab({
     });
   };
 
+  // Early return: Show error message if no user ID is available
   if (!currentUserId) {
     return (
       <View style={styles.center}>
@@ -117,6 +172,7 @@ export default function MessagesTab({
     );
   }
 
+  // Loading state: Show spinner while fetching data
   if (loading) {
     return (
       <View style={styles.center}>
@@ -126,33 +182,44 @@ export default function MessagesTab({
     );
   }
 
+  // Main render: Show conversation list or empty state
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Conversations</Text>
       {conversations.length === 0 ? (
+        // Empty state: No conversations found
         <View style={styles.center}>
           <Text style={styles.empty}>No conversations yet</Text>
         </View>
       ) : (
+        // Conversation list: FlatList of all conversations
         <FlatList
           data={conversations}
+          // Generate unique key using user ID and index
           keyExtractor={(item, idx) => `${item.other_user_id}_${idx}`}
           renderItem={({ item }) => (
+            // Each conversation card is tappable
             <TouchableOpacity
               style={styles.card}
               onPress={() => goToChat(item.other_user_id, item.other_user_name)}
             >
+              {/* Header row: Name and unread badge */}
               <View style={styles.headerRow}>
                 <Text style={styles.name}>{item.other_user_name}</Text>
+                {/* Show unread count badge only if there are unread messages */}
                 {item.unread_count ? (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{item.unread_count}</Text>
                   </View>
                 ) : null}
               </View>
+              
+              {/* Last message preview (truncated to 1 line) */}
               <Text style={styles.lastMsg} numberOfLines={1}>
                 {item.last_message || "No messages"}
               </Text>
+              
+              {/* Timestamp of last message */}
               <Text style={styles.time}>
                 {item.last_message_time
                   ? new Date(item.last_message_time).toLocaleDateString()
@@ -166,6 +233,7 @@ export default function MessagesTab({
   );
 }
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -176,14 +244,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: "#4f46e5",
+    borderLeftColor: "#4f46e5", // Purple accent on left edge
   },
   headerRow: { flexDirection: "row", justifyContent: "space-between" },
   name: { fontSize: 18, fontWeight: "600", color: "#111827" },
   lastMsg: { fontSize: 14, color: "#6b7280", marginTop: 4 },
   time: { fontSize: 12, color: "#9ca3af", marginTop: 2 },
   badge: {
-    backgroundColor: "#ef4444",
+    backgroundColor: "#ef4444", // Red background for unread count
     borderRadius: 12,
     paddingHorizontal: 8,
     justifyContent: "center",

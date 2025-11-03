@@ -1,3 +1,10 @@
+/**
+ * BusinessOwnerChatScreen - Displays list of message conversations
+ * 
+ * Backend API: GET /messages/business-owner/:userId
+ * Shows all contacts with message previews and unread indicators
+ */
+
 import React, { useEffect, useState } from "react"; 
 import {
   View,
@@ -20,6 +27,7 @@ type NavigationProp = NativeStackNavigationProp<
 >;
 type RouteProps = RouteProp<RootStackParamList, "BusinessOwnerChatScreen">;
 
+// Contact interface for conversation list items
 interface Contact {
   user_id: number;
   full_name: string;
@@ -35,15 +43,17 @@ export default function BusinessOwnerChatScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { userInfo, userType } = useAuth();
   
- const businessOwnerUserId = (() => {
-  const id = route.params?.businessOwnerUserId || userInfo?.user_id;
-  return typeof id === 'string' ? parseInt(id, 10) : id;
-})();
+  // Extract business owner user ID from route params or auth context
+  const businessOwnerUserId = (() => {
+    const id = route.params?.businessOwnerUserId || userInfo?.user_id;
+    return typeof id === 'string' ? parseInt(id, 10) : id;
+  })();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
+  // Debug logging on mount
   useEffect(() => {
     console.log('BusinessOwnerChatScreen mounted with:', {
       routeParams: route.params,
@@ -54,6 +64,7 @@ export default function BusinessOwnerChatScreen() {
     });
   }, [userInfo, route.params, businessOwnerUserId]);
 
+  // Wait for auth context to be ready
   useEffect(() => {
     const checkAuthReady = () => {
       if (userInfo?.user_id || route.params?.businessOwnerUserId) {
@@ -71,6 +82,7 @@ export default function BusinessOwnerChatScreen() {
     checkAuthReady();
   }, [userInfo, route.params]);
 
+  // Fetch all messages and build contact list
   const loadContacts = async (): Promise<void> => {
     if (authLoading) {
       console.log('[BusinessOwnerChat] Waiting for auth context...');
@@ -87,6 +99,7 @@ export default function BusinessOwnerChatScreen() {
     try {
       console.log(`[BusinessOwnerChat] Loading contacts for business owner: ${businessOwnerUserId}`);
       
+      // Call backend API to get all messages for this user
       const response = await fetch(`${API_URL}/messages/business-owner/${businessOwnerUserId}`);
       
       if (!response.ok) {
@@ -96,9 +109,10 @@ export default function BusinessOwnerChatScreen() {
       const data: any[] = await response.json();
       console.log(`[BusinessOwnerChat] Raw data received:`, data);
 
-      // Create a map to track contacts (other business owners) and their most recent messages
+      // Create a map to track unique contacts and their most recent messages
       const contactMap = new Map<number, Contact>();
 
+      // Process each message to extract contact information
       data.forEach((item: any) => {
         let otherUserId: number | null = null;
         let otherUserName: string = "Unknown User";
@@ -180,6 +194,7 @@ export default function BusinessOwnerChatScreen() {
     }, [businessOwnerUserId, authLoading])
   );
 
+  // Navigate to individual chat screen
   const navigateToChat = (otherUserId: number, otherUserName: string) => {
     if (!businessOwnerUserId) {
       console.error('[BusinessOwnerChat] Cannot navigate to chat: no businessOwnerUserId');
@@ -210,6 +225,7 @@ export default function BusinessOwnerChatScreen() {
     });
   };
 
+  // Render each contact item in the list
   const renderContactItem = ({ item }: { item: Contact }) => (
     <TouchableOpacity
       style={[
@@ -262,6 +278,7 @@ export default function BusinessOwnerChatScreen() {
   const keyExtractor = (item: Contact, index: number): string =>
     item && item.user_id ? item.user_id.toString() : `fallback-${index}-${Date.now()}`;
 
+  // Loading state: waiting for auth
   if (authLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -271,6 +288,7 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
+  // Error state: no user ID found
   if (!businessOwnerUserId) {
     return (
       <View style={styles.centerContainer}>
@@ -309,6 +327,7 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
+  // Loading state: fetching messages
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -318,6 +337,7 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
+  // Empty state: no conversations yet
   if (contacts.length === 0) {
     return (
       <View style={styles.centerContainer}>
@@ -340,6 +360,7 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
+  // Main view: display list of conversations
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Messages ({contacts.length})</Text>

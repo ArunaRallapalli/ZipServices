@@ -6,23 +6,21 @@ import { Pool } from "pg";
 // Routers
 // Correct path from backend/server.ts
 import usersRouter from "./routes/users";
-import customersRouter from "./routes/customerSignup";
-import existingCustomerLoginRouter from "./routes/Existing_customers_search";
 import businessOwnerAuthRouter from "./routes/business_owner_auth";
 import businessOwnersRouter from "./routes/Business_Owners_registration";
 import messagesRouter from "./routes/messages";
 import businessOwnerSearchRouter from "./routes/business_owners_search";
-import businessOwnerCustomersRouter from "./routes/Old_business_owner_customers";
 import ownerChatsRouter from "./routes/owner_chats";
-import customerProfileRouter from "./routes/customers";
-import customersRoutes from "./routes/customers";
-import BecomeCustomerRouter from "./routes/BecomeCustomer";
-import unifiedSignupRouter from "./routes/UnifiedSignupAPIEndpoint";
-import UnifiedLoginRouter from "./routes/UnifiedLoginAPIEndPoint";
 import businessOwnerProfileRouter from "./business-owners";
 import serviceCategoriesRouter from "./routes/serviceCategories"; // ✅ ADD THIS
 import servicePostsRouter from './routes/ServicePosts';
-
+//import customersRouter from "./routes/customerSignup";
+//import existingCustomerLoginRouter from "./routes/Existing_customers_search";
+//import customersRoutes from "./routes/Past_customers";
+//import BecomeCustomerRouter from "./routes/Old_BecomeCustomer";
+//import unifiedSignupRouter from "./routes/UnifiedSignupAPIEndpoint";
+//import UnifiedLoginRouter from "./routes/Pld_UnifiedLoginAPIEndPoint";
+//import customerProfileRouter from "./routes/Past_customers";
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -63,9 +61,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-// Mount the unifiedSignupRouter
-app.use("/auth", unifiedSignupRouter);
-app.use("/auth", UnifiedLoginRouter);
+
 
 // ✅ NEW ROUTES WITH /api PREFIX (for PostServiceScreen)
 app.use("/api/service-categories", serviceCategoriesRouter); // ✅ ADD THIS
@@ -74,18 +70,18 @@ app.use('/', servicePostsRouter);
 
 // ✅ EXISTING ROUTES (keep these for backward compatibility)
 app.use("/users", usersRouter);
-app.use("/customers", customersRouter);
-app.use("/customers", existingCustomerLoginRouter); // Existing customer login
+//app.use("/customers", customersRouter);
+//app.use("/customers", existingCustomerLoginRouter); // Existing customer login
 
 // Business owner routes
 app.use("/business_owners", businessOwnerAuthRouter);
 app.use("/business_owners/crud", businessOwnersRouter);
 app.use("/business_owners/search", businessOwnerSearchRouter);
-app.use("/business_owners/customers", businessOwnerCustomersRouter);
+//app.use("/business_owners/customers", businessOwnerCustomersRouter);
 app.use("/business-owners", businessOwnerProfileRouter);
-app.use("/customers", customerProfileRouter);
-app.use("/customers", customersRoutes);
-app.use("/users", BecomeCustomerRouter);
+//app.use("/customers", customerProfileRouter);
+//app.use("/customers", customersRoutes);
+//app.use("/users", BecomeCustomerRouter);
 app.use('/service-posts', servicePostsRouter); // Keep non-api version too
 
 // Messages routes

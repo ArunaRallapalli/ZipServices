@@ -1,3 +1,19 @@
+/**
+ * ChatScreen Component
+ * 
+ * This is the main chat/messaging screen that displays a conversation between two users.
+ * It shows the message history, allows sending new messages, and marks messages as read.
+ * 
+ * Features:
+ * - Real-time message fetching (polls every 5 seconds)
+ * - Send text messages up to 500 characters
+ * - Auto-scroll to latest message
+ * - Mark incoming messages as read automatically
+ * - Custom header with back navigation
+ * - Different colored message bubbles for sender vs receiver
+ * - Loading states and error handling
+ */
+
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -16,9 +32,11 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import API_URL from "../config/apiConfig";
 
+// Navigation type definitions for type safety
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, "ChatScreen">;
 type RouteProps = RouteProp<RootStackParamList, "ChatScreen">;
 
+// Message interface defines the structure of each chat message
 interface Message {
   id: number;
   sender_id: number;
@@ -31,15 +49,26 @@ interface Message {
 export default function ChatScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
+  
+  // Extract route parameters: current user ID, other user ID, and other user's name
   const { currentUserId, otherUserId, otherUserName } = route.params || {};
 
+  // State: Array of all messages in the conversation
   const [messages, setMessages] = useState<Message[]>([]);
+  
+  // State: Current text being typed in the input field
   const [inputText, setInputText] = useState("");
+  
+  // State: Loading indicator for send button
   const [loading, setLoading] = useState(false);
+  
+  // State: Flag to indicate if there are unread messages (affects header styling)
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  
+  // Ref to FlatList for programmatic scrolling to bottom
   const scrollRef = useRef<FlatList>(null);
 
-  // Add validation for required parameters
+  // Validation: Check if required parameters are present, show alert and go back if missing
   useEffect(() => {
     if (!currentUserId || !otherUserId) {
       console.error('Missing required parameters:', { currentUserId, otherUserId, otherUserName });
@@ -52,7 +81,7 @@ export default function ChatScreen() {
     }
   }, [currentUserId, otherUserId, navigation]);
 
-  // Early return if parameters are missing
+  // Early return: Show loading screen if parameters are missing
   if (!currentUserId || !otherUserId) {
     return (
       <SafeAreaView style={styles.container}>
@@ -63,25 +92,39 @@ export default function ChatScreen() {
     );
   }
 
+  /**
+   * Fetch all messages between current user and other user
+   * Also identifies unread messages and marks them as read automatically
+   */
   const fetchMessages = async () => {
     try {
+      // API call to get messages between the two users
       const res = await fetch(`${API_URL}/messages/${currentUserId}/${otherUserId}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
+      
+      // Filter out invalid messages (must have id, sender_id, receiver_id, and message_text)
       const validMessages = Array.isArray(data)
         ? data.filter((m) => m?.id && m?.sender_id && m?.receiver_id && m?.message_text)
         : [];
+      
+      // Find unread messages from the other user
       const unreadMessages = validMessages.filter(
         (m) => m.sender_id === otherUserId && m.is_read === false
       );
+      
+      // Update state: set flag if there are unread messages
       setHasUnreadMessages(unreadMessages.length > 0);
+      
+      // Update state: set the messages array
       setMessages(validMessages);
       
-      // Mark messages as read
+      // Mark messages as read if there are any unread messages
       if (unreadMessages.length > 0) {
         await markMessagesAsRead(unreadMessages.map(m => m.id));
       }
       
+      // Auto-scroll to bottom after a short delay to show latest message
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err) {
       console.error("Error fetching messages:", err);
@@ -89,10 +132,16 @@ export default function ChatScreen() {
     }
   };
 
+  /**
+   * Send a new message to the other user
+   */
   const sendMessage = async () => {
+    // Don't send if input is empty or only whitespace
     if (!inputText.trim()) return;
+    
     setLoading(true);
     try {
+      // API call to create a new message
       const res = await fetch(`${API_URL}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,11 +153,16 @@ export default function ChatScreen() {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const newMessage = await res.json();
+      
+      // If server returns a valid message, add it to state optimistically
       if (newMessage?.id && newMessage?.message_text) {
         setMessages((prev) => [...prev, newMessage]);
-        setInputText("");
+        setInputText(""); // Clear input field
+        
+        // Auto-scroll to show the new message
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
       } else {
+        // Fallback: re-fetch all messages if response is unexpected
         fetchMessages();
       }
     } catch (err) {
@@ -119,7 +173,10 @@ export default function ChatScreen() {
     }
   };
 
-  // NEW FUNCTION - Mark messages as read
+  /**
+   * Mark specific messages as read by their IDs
+   * Called automatically when unread messages are detected in fetchMessages
+   */
   const markMessagesAsRead = async (messageIds: number[]) => {
     try {
       console.log('[ChatScreen] Marking messages as read:', messageIds);
@@ -136,38 +193,65 @@ export default function ChatScreen() {
     }
   };
 
-  // Fixed back navigation - simply go back to previous screen
+  /**
+   * Handle back button press - navigate to previous screen
+   */
   const handleBackPress = () => {
     navigation.goBack();
   };
 
+  /**
+   * Alternative navigation function (currently unused but defined)
+   */
   const navigateToBusinessOwnerChatScreen = () => {
     navigation.goBack();
   };
 
+  /**
+   * Main effect: Set up screen title and start message polling
+   * - Sets custom header title to other user's name
+   * - Fetches messages immediately on mount
+   * - Sets up interval to poll for new messages every 5 seconds
+   * - Cleans up interval on unmount
+   */
   useEffect(() => {
     navigation.setOptions({
       title: otherUserName || "Chat",
-      headerShown: false,
+      headerShown: false, // Using custom header instead
     });
-    fetchMessages();
+    
+    fetchMessages(); // Initial fetch
+    
+    // Poll for new messages every 5 seconds
     const interval = setInterval(fetchMessages, 5000);
+    
+    // Cleanup: clear interval when component unmounts
     return () => clearInterval(interval);
   }, [currentUserId, otherUserId, otherUserName, navigation]);
 
+  /**
+   * Generate unique key for each message in FlatList
+   * Uses message ID if available, falls back to index
+   */
   const keyExtractor = (item: Message, index: number) =>
     item?.id ? String(item.id) : `fallback-${index}`;
 
+  /**
+   * Render a single message bubble
+   * Styling differs based on whether message is from current user or other user
+   */
   const renderItem = ({ item }: { item: Message }) => (
     <View
       style={[
         styles.messageBubble,
+        // Current user's messages on right (blue), other user's on left (green)
         item.sender_id === currentUserId ? styles.sender : styles.receiver,
       ]}
     >
       <Text
         style={[
           styles.messageText,
+          // White text for current user's messages
           item.sender_id === currentUserId && { color: "#fff" },
         ]}
       >
@@ -176,6 +260,7 @@ export default function ChatScreen() {
       <Text
         style={[
           styles.timestamp,
+          // Lighter colored timestamp for current user's messages
           item.sender_id === currentUserId && { color: "#e0e7ff" },
         ]}
       >
@@ -191,7 +276,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Back Button */}
+      {/* Custom Header: Back button, user name, and spacer for centering */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerBackButton}
@@ -200,6 +285,8 @@ export default function ChatScreen() {
         >
           <Text style={styles.headerBackText}>← Back</Text>
         </TouchableOpacity>
+        
+        {/* User name - bold and colored if there are unread messages */}
         <Text
           style={[
             styles.headerTitle,
@@ -208,9 +295,12 @@ export default function ChatScreen() {
         >
           {otherUserName}
         </Text>
+        
+        {/* Spacer to center the title */}
         <View style={styles.headerSpacer} />
       </View>
 
+      {/* Message List: Scrollable list of all messages */}
       <FlatList
         ref={scrollRef}
         data={messages}
@@ -220,8 +310,10 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
       />
 
+      {/* Input Area: Text input and send button, keyboard-aware */}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.inputContainer}>
+          {/* Text input field with 500 character limit */}
           <TextInput
             style={styles.input}
             value={inputText}
@@ -230,6 +322,8 @@ export default function ChatScreen() {
             multiline
             maxLength={500}
           />
+          
+          {/* Send button - disabled when loading or input is empty */}
           <TouchableOpacity
             style={[styles.sendButton, loading && styles.sendButtonDisabled]}
             onPress={sendMessage}
@@ -246,6 +340,7 @@ export default function ChatScreen() {
   );
 }
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
@@ -284,7 +379,7 @@ const styles = StyleSheet.create({
     color: "#4f46e5",
   },
   headerSpacer: {
-    width: 76,
+    width: 76, // Matches back button width to center title
   },
   messageContainer: {
     padding: 16,
@@ -301,13 +396,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 1,
   },
-  // Customer (currentUser) messages
+  // Customer (currentUser) messages - blue bubbles on right side
   sender: {
     backgroundColor: "#3B82F6", // blue
     alignSelf: "flex-end",
     marginLeft: "20%",
   },
-  // Business owner (other user) messages
+  // Business owner (other user) messages - green bubbles on left side
   receiver: {
     backgroundColor: "#10B981", // green
     alignSelf: "flex-start",

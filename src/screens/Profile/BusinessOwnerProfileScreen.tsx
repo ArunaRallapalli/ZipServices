@@ -1,12 +1,34 @@
+/**
+ * BusinessOwnerProfileScreen Component
+ * 
+ * This screen displays and allows editing of a business owner's profile information.
+ * It shows account details, business information, and location/service area settings.
+ * 
+ * Features:
+ * - Fetches business owner profile data by user ID
+ * - Displays all profile fields in editable form
+ * - Three sections: Account Information, Business Information, Location & Service Area
+ * - Editable fields: email, password, business name, category, description, phone, address, service radius
+ * - Save button to update profile changes to backend
+ * - Back button to navigate to previous screen
+ * - Logout button with confirmation dialog
+ * - Loading state while fetching profile data
+ * - Error handling with user-friendly messages
+ * - Keyboard-aware scrolling for better UX on mobile
+ * - Gets user ID from either route parameters or auth context
+ */
+
 import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, Button, ActivityIndicator, Alert, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import API_URL from "../../config/apiConfig";
-import { useAuth } from "../../contexts/AuthContext"; // Add this import
+import { useAuth } from "../../contexts/AuthContext"; // Get authentication context
 
+// Route type definition for type safety
 type BusinessOwnerProfileRouteProp = RouteProp<RootStackParamList, "BusinessOwnerProfileScreen">;
 
+// BusinessOwnerProfile interface: represents the complete business owner profile structure
 interface BusinessOwnerProfile {
   user_id: number;
   email: string;
@@ -29,21 +51,36 @@ interface BusinessOwnerProfile {
 const BusinessOwnerProfileScreen: React.FC = () => {
   const route = useRoute<BusinessOwnerProfileRouteProp>();
   const navigation = useNavigation();
-  const { userInfo, signOut } = useAuth(); // Get user info and signOut from auth context
+  
+  // Get user info and signOut function from authentication context
+  const { userInfo, signOut } = useAuth();
 
-  // Get user_id from route params OR from auth context
+  // Get user_id from route params OR from auth context (fallback)
   const user_id = route.params?.user_id || userInfo?.user_id || null;
 
+  // State: Business owner profile data
   const [profile, setProfile] = useState<BusinessOwnerProfile | null>(null);
+  
+  // State: Loading indicator while fetching profile
   const [loading, setLoading] = useState(true);
+  
+  // State: Error message if profile fetch fails
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Effect: Fetch business owner profile when component mounts or user_id changes
+   */
   useEffect(() => {
+    /**
+     * Fetch the business owner's profile from the backend
+     * Uses user_id to get the associated business owner profile
+     */
     const fetchProfile = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        // API call to get business owner profile by user ID
         const response = await fetch(`${API_URL}/business-owners/by-user/${user_id}`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -55,7 +92,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         }
 
         const data = await response.json();
-        setProfile(data);
+        setProfile(data); // Set profile data in state
       } catch (err: any) {
         console.error(err);
         setError("Failed to load profile. Please check your network and try again.");
@@ -65,6 +102,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
       }
     };
 
+    // Only fetch if user_id is available
     if (user_id) fetchProfile();
     else {
       setLoading(false);
@@ -72,11 +110,15 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     }
   }, [user_id]);
 
+  /**
+   * Handle save button press
+   * Sends updated profile data to backend
+   */
   const handleSave = async () => {
     if (!profile) return;
 
     try {
-      // Only send fields that are editable
+      // Prepare update data - only include editable fields
       const updatedData = {
         business_name: profile.business_name,
         service_category: profile.service_category,
@@ -91,6 +133,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         password: profile.password,
       };
 
+      // API call to update business owner profile
       const response = await fetch(`${API_URL}/business-owners/by-user/${user_id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -109,6 +152,10 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Handle logout button press
+   * Shows confirmation dialog before logging out
+   */
   const handleLogout = () => {
     Alert.alert(
       "Logout",
@@ -123,7 +170,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              await signOut();
+              await signOut(); // Call signOut from auth context
               console.log("✅ User logged out successfully");
             } catch (error) {
               console.error("❌ Logout error:", error);
@@ -136,6 +183,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     );
   };
 
+  // Loading state: Show spinner while fetching profile data
   if (loading) return (
     <View style={styles.center}>
       <ActivityIndicator size="large" color="#4f46e5" />
@@ -143,6 +191,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     </View>
   );
 
+  // Error state: Show error message if profile fetch failed or profile not found
   if (error || !profile) return (
     <View style={styles.center}>
       <Text style={{ fontSize: 18, color: 'red', textAlign: 'center' }}>{error || "Profile not found"}</Text>
@@ -150,20 +199,22 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     </View>
   );
 
+  // Main render: Profile form with all editable fields
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        {/* Header */}
+        {/* Header: Business name */}
         <Text style={[styles.header, { fontSize: 24, marginTop: 20 }]}>
           Business Profile: {profile.business_name}
         </Text>
 
-        {/* Account Information */}
+        {/* Section 1: Account Information */}
         <Text style={styles.sectionHeader}>Account Information</Text>
 
+        {/* Email field */}
         <Text style={styles.label}>Email:</Text>
         <TextInput
           style={styles.input}
@@ -172,6 +223,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, email: text })}
         />
 
+        {/* Password field - shown as dots for security */}
         <Text style={styles.label}>Password:</Text>
         <TextInput
           style={styles.input}
@@ -180,9 +232,10 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, password: text })}
         />
 
-        {/* Business Information */}
+        {/* Section 2: Business Information */}
         <Text style={styles.sectionHeader}>Business Information</Text>
 
+        {/* Business Name field */}
         <Text style={styles.label}>Business Name:</Text>
         <TextInput
           style={styles.input}
@@ -190,6 +243,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, business_name: text })}
         />
 
+        {/* Service Category field */}
         <Text style={styles.label}>Service Category:</Text>
         <TextInput
           style={styles.input}
@@ -197,6 +251,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, service_category: text })}
         />
 
+        {/* Description field - multiline for longer text */}
         <Text style={styles.label}>Description:</Text>
         <TextInput
           style={[styles.input, { height: 80 }]}
@@ -206,6 +261,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, description: text })}
         />
 
+        {/* Phone Number field */}
         <Text style={styles.label}>Phone Number:</Text>
         <TextInput
           style={styles.input}
@@ -214,9 +270,10 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, phone_number: text })}
         />
 
-        {/* Location Information */}
+        {/* Section 3: Location & Service Area */}
         <Text style={styles.sectionHeader}>Location & Service Area</Text>
 
+        {/* Street Address field */}
         <Text style={styles.label}>Street Address:</Text>
         <TextInput
           style={styles.input}
@@ -224,6 +281,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, street: text })}
         />
 
+        {/* City field */}
         <Text style={styles.label}>City:</Text>
         <TextInput
           style={styles.input}
@@ -231,6 +289,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, city: text })}
         />
 
+        {/* State field */}
         <Text style={styles.label}>State:</Text>
         <TextInput
           style={styles.input}
@@ -238,6 +297,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, state: text })}
         />
 
+        {/* ZIP Code field */}
         <Text style={styles.label}>ZIP Code:</Text>
         <TextInput
           style={styles.input}
@@ -245,6 +305,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, zip_code: text })}
         />
 
+        {/* Service Radius field - how far the business will travel */}
         <Text style={styles.label}>Service Radius (miles):</Text>
         <TextInput
           style={styles.input}
@@ -253,9 +314,10 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           onChangeText={(text) => setProfile({ ...profile, service_radius_miles: Number(text) || 0 })}
         />
 
+        {/* Save button - sends updated profile to backend */}
         <Button title="Save Profile" onPress={handleSave} />
 
-        {/* Back button */}
+        {/* Back button - navigate to previous screen */}
         <View style={{ marginTop: 20 }}>
           <Button
             title="⬅ Back"
@@ -263,7 +325,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           />
         </View>
 
-        {/* Logout button */}
+        {/* Logout button - shows confirmation dialog then signs out */}
         <View style={{ marginTop: 20 }}>
           <Button
             title="🚪 Logout"
@@ -276,6 +338,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
   );
 };
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   header: { fontWeight: "bold", marginBottom: 20, textAlign: "center" },

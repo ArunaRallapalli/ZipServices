@@ -1,3 +1,22 @@
+/**
+ * ListingsScreen Component
+ * 
+ * This screen displays all service listings (posts) created by the currently logged-in user.
+ * It serves as a management dashboard where users can view, search, edit, and inactivate their listings.
+ * 
+ * Features:
+ * - Displays all user's service posts (both "offer" and "request" types)
+ * - Search functionality to filter listings by title, category, description, or location
+ * - Edit listings (navigates to edit screen)
+ * - Inactivate listings (hides them from other users)
+ * - Pull-to-refresh to reload listings
+ * - Shows listing status (active/inactive) with visual indicators
+ * - Displays comprehensive listing details: title, description, category, price, location, contact info
+ * - Authentication check - shows sign-in prompt if not authenticated
+ * - Loading states and empty states
+ * - Different badge colors for "offering" vs "requesting" posts
+ */
+
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -19,14 +38,15 @@ import { useAuth } from "../contexts/AuthContext";
 import API_URL from "../config/apiConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Navigation type definition for type safety
 type AllListingsNavProp = NativeStackNavigationProp<RootStackParamList, "ListingsScreen">;
 
-
+// ServicePost interface: represents a single service listing/post
 interface ServicePost {
   id: number;
   user_id: number;
   poster_type: string;
-  post_type: string;
+  post_type: string;                    // "offer" or "request"
   title: string;
   description?: string;
   service_category: string;
@@ -39,9 +59,10 @@ interface ServicePost {
   poster_name?: string;
   business_name?: string;
   created_at?: string;
-  is_active?: boolean;
+  is_active?: boolean;                  // Whether listing is active/visible
 }
 
+// CustomerInfo interface: represents the current user's information
 interface CustomerInfo {
   user_id: number;
   user_type?: 'customer' | 'business_owner';
@@ -57,20 +78,38 @@ const ListingsScreen: React.FC = () => {
   const navigation = useNavigation<AllListingsNavProp>();
   const { isAuthenticated } = useAuth();
   
+  // State: All listings fetched from the backend
   const [listings, setListings] = useState<ServicePost[]>([]);
+  
+  // State: Filtered listings based on search query
   const [filteredListings, setFilteredListings] = useState<ServicePost[]>([]);
+  
+  // State: Loading indicator for initial data fetch
   const [loading, setLoading] = useState(true);
+  
+  // State: Refreshing indicator for pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
+  
+  // State: Current search query text
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // State: Current user's information loaded from AsyncStorage
   const [userInfo, setUserInfo] = useState<CustomerInfo | null>(null);
 
-  // Check authentication and load user info
+  /**
+   * Effect: Load user information from AsyncStorage when component mounts
+   */
   useEffect(() => {
     loadUserInfo();
   }, []);
 
+  /**
+   * Load user information from AsyncStorage
+   * Retrieves userId, userType, email, and full userInfo object
+   */
   const loadUserInfo = async () => {
     try {
+      // Fetch multiple items from AsyncStorage in parallel
       const [userId, userType, userEmail, storedUserInfo] = await Promise.all([
         AsyncStorage.getItem("userId"),
         AsyncStorage.getItem("userType"),
@@ -81,6 +120,7 @@ const ListingsScreen: React.FC = () => {
       if (userId && userType) {
         let info: CustomerInfo | null = null;
         
+        // Try to parse stored user info JSON
         if (storedUserInfo) {
           try {
             info = JSON.parse(storedUserInfo);
@@ -89,6 +129,7 @@ const ListingsScreen: React.FC = () => {
           }
         }
         
+        // If parsing failed, create basic info object
         if (!info) {
           info = {
             user_id: parseInt(userId),
@@ -104,7 +145,10 @@ const ListingsScreen: React.FC = () => {
     }
   };
 
-  // Load user's listings on mount and when screen focuses
+  /**
+   * useFocusEffect: Fetch listings when screen comes into focus
+   * This ensures listings are refreshed when navigating back to this screen
+   */
   useFocusEffect(
     useCallback(() => {
       if (userInfo?.user_id) {
@@ -113,7 +157,12 @@ const ListingsScreen: React.FC = () => {
     }, [userInfo?.user_id])
   );
 
+  /**
+   * Fetch all listings created by the current user from the backend
+   * Called on mount, when screen focuses, and on manual refresh
+   */
   const fetchUserListings = async () => {
+    // Don't fetch if no user ID available
     if (!userInfo?.user_id) {
       setLoading(false);
       return;
@@ -123,6 +172,7 @@ const ListingsScreen: React.FC = () => {
       setLoading(true);
       console.log("Fetching user listings from:", `${API_URL}/api/service-posts/user/${userInfo.user_id}`);
 
+      // API call to get user's listings
       const response = await fetch(`${API_URL}/api/service-posts/user/${userInfo.user_id}`);
       
       if (!response.ok) {
@@ -132,6 +182,7 @@ const ListingsScreen: React.FC = () => {
       const data = await response.json();
       console.log("Received user listings:", data);
 
+      // Update state if response is valid
       if (data.success && Array.isArray(data.posts)) {
         setListings(data.posts);
         setFilteredListings(data.posts);
@@ -149,17 +200,24 @@ const ListingsScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Handle pull-to-refresh action
+   * Fetches latest listings from the backend
+   */
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchUserListings();
     setRefreshing(false);
   };
 
-  // Filter listings based on search query
+  /**
+   * Effect: Filter listings based on search query
+   * Searches through title, category, description, city, and state
+   */
   useEffect(() => {
     let filtered = listings;
 
-    // Filter by search query
+    // Filter by search query if present
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(item =>
@@ -174,8 +232,12 @@ const ListingsScreen: React.FC = () => {
     setFilteredListings(filtered);
   }, [searchQuery, listings]);
 
+  /**
+   * Handle edit button press
+   * Shows confirmation dialog and navigates to edit screen
+   */
   const handleEditPress = (item: ServicePost) => {
-    // Navigate to edit screen - adjust the navigation route as needed
+    // Show confirmation dialog before navigating
     Alert.alert(
       "Edit Listing",
       "Navigate to edit screen for: " + item.title,
@@ -192,6 +254,10 @@ const ListingsScreen: React.FC = () => {
     );
   };
 
+  /**
+   * Handle inactivate button press
+   * Shows confirmation dialog before inactivating the listing
+   */
   const handleInactivatePress = async (item: ServicePost) => {
     Alert.alert(
       "Inactivate Listing",
@@ -206,11 +272,18 @@ const ListingsScreen: React.FC = () => {
       ]
     );
   };
+  
+  /**
+   * Inactivate a listing by ID
+   * Makes API call to mark the listing as inactive
+   * Refreshes the listing after successful inactivation
+   */
   const inactivateListing = async (postId: number) => {
   try {
     console.log('Attempting to inactivate post:', postId);
     console.log('API URL:', `${API_URL}/api/service-posts/${postId}/inactivate`);
     
+    // API call to inactivate the listing
     const response = await fetch(`${API_URL}/api/service-posts/${postId}/inactivate`, {
       method: 'PATCH',
       headers: {
@@ -229,12 +302,13 @@ const ListingsScreen: React.FC = () => {
     const data = await response.json();
     console.log('Response data:', data);
     
+    // Show success message and refresh listings
     if (data.success) {
       Alert.alert("Success", "Listing has been inactivated successfully.");
-      // Refresh the listings
+      // Refresh the listings to show updated status
       await fetchUserListings();
     } else {
-      throw new Error(data.error || "Failed to inactivate listing"); // ✅ Changed from data.message to data.error
+      throw new Error(data.error || "Failed to inactivate listing");
     }
   } catch (error) {
     console.error("Error inactivating listing:", error);
@@ -242,6 +316,10 @@ const ListingsScreen: React.FC = () => {
   }
 };
 
+  /**
+   * Navigate to Home tab to browse services
+   * Used when user wants to browse available services
+   */
   const handleBrowseServices = () => {
     // Navigate to Home tab to browse services
     (navigation as any).navigate('Home', {
@@ -251,6 +329,9 @@ const ListingsScreen: React.FC = () => {
     });
   };
 
+  /**
+   * Format date string to readable format (e.g., "Jan 15, 2024")
+   */
   const formatDate = (dateString?: string) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -261,13 +342,18 @@ const ListingsScreen: React.FC = () => {
     });
   };
 
+  /**
+   * Render a single service listing card
+   * Shows all listing details, status, and action buttons
+   */
   const renderServiceCard = ({ item }: { item: ServicePost }) => (
     <View style={[styles.card, item.is_active === false && styles.inactiveCard]}>
-      {/* Header with title and badge */}
+      {/* Header with title and badge (OFFERING or REQUESTING) */}
       <View style={styles.cardHeader}>
         <Text style={styles.serviceTitle} numberOfLines={2}>
           {item.title}
         </Text>
+        {/* Badge indicating post type: offer (green) or request (blue) */}
         <View style={[
           styles.badge,
           item.post_type === 'offer' ? styles.offerBadge : styles.requestBadge
@@ -286,20 +372,20 @@ const ListingsScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Category */}
+      {/* Category with icon */}
       <View style={styles.infoRow}>
         <Ionicons name="pricetag-outline" size={18} color="#666" />
         <Text style={styles.categoryText}>{item.service_category}</Text>
       </View>
 
-      {/* Description */}
+      {/* Description (truncated to 3 lines) */}
       {item.description && (
         <Text style={styles.descriptionText} numberOfLines={3}>
           {item.description}
         </Text>
       )}
 
-      {/* Price */}
+      {/* Price/Budget with icon */}
       {item.price_range && (
         <View style={styles.infoRow}>
           <Ionicons name="cash-outline" size={18} color="#2E7D32" />
@@ -310,7 +396,7 @@ const ListingsScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Location */}
+      {/* Location (city, state, zip code) with icon */}
       <View style={styles.locationRow}>
         <Ionicons name="location-outline" size={18} color="#FF6B6B" />
         <Text style={styles.locationText}>
@@ -323,7 +409,7 @@ const ListingsScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Contact info */}
+      {/* Contact information (email and phone) */}
       <View style={styles.contactSection}>
         {item.contact_email && (
           <View style={styles.contactRow}>
@@ -341,7 +427,7 @@ const ListingsScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Footer with date and action buttons */}
+      {/* Footer with posted date and action buttons (Edit, Inactivate) */}
       <View style={styles.cardFooter}>
         {item.created_at && (
           <Text style={styles.dateText}>
@@ -349,6 +435,7 @@ const ListingsScreen: React.FC = () => {
           </Text>
         )}
         <View style={styles.actionButtons}>
+          {/* Edit button */}
           <TouchableOpacity
             style={styles.editButton}
             onPress={() => handleEditPress(item)}
@@ -356,6 +443,7 @@ const ListingsScreen: React.FC = () => {
             <Ionicons name="create-outline" size={18} color="#fff" />
             <Text style={styles.editButtonText}>Edit</Text>
           </TouchableOpacity>
+          {/* Inactivate button */}
           <TouchableOpacity
             style={styles.inactivateButton}
             onPress={() => handleInactivatePress(item)}
@@ -368,6 +456,7 @@ const ListingsScreen: React.FC = () => {
     </View>
   );
 
+  // Early return: Show sign-in required screen if user is not authenticated
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
@@ -377,14 +466,16 @@ const ListingsScreen: React.FC = () => {
           <Text style={styles.emptySubtext}>
             You need to be signed in to access your listings
           </Text>
+        {/* Sign In button - navigates to BusinessOwnerHomeScreen */}
         <TouchableOpacity
   style={styles.signInButton}
-  onPress={() => navigation.navigate("BusinessOwnerHomeScreen")}  // ✅ Changed this
+  onPress={() => navigation.navigate("BusinessOwnerHomeScreen")}
   activeOpacity={0.7}
           >
             <Ionicons name="log-in-outline" size={20} color="#ffffff" style={styles.buttonIcon} />
             <Text style={styles.signInButtonText}>Sign In / Sign Up</Text>
           </TouchableOpacity>
+          {/* Browse Services button - navigates to Home tab */}
           <TouchableOpacity
             style={styles.browseButton}
             onPress={handleBrowseServices}
@@ -401,6 +492,7 @@ const ListingsScreen: React.FC = () => {
     );
   }
 
+  // Loading state: Show spinner while fetching initial data (not during refresh)
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
@@ -412,9 +504,10 @@ const ListingsScreen: React.FC = () => {
     );
   }
 
+  // Main render: Show header, search bar, and listings
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header with title and listing count */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Listings</Text>
         <Text style={styles.headerSubtitle}>
@@ -422,7 +515,7 @@ const ListingsScreen: React.FC = () => {
         </Text>
       </View>
 
-      {/* Search Bar */}
+      {/* Search Bar with icon and clear button */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
         <TextInput
@@ -432,6 +525,7 @@ const ListingsScreen: React.FC = () => {
           onChangeText={setSearchQuery}
           placeholderTextColor="#999"
         />
+        {/* Show clear button only when there's text in search */}
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery("")}>
             <Ionicons name="close-circle" size={20} color="#999" />
@@ -439,8 +533,9 @@ const ListingsScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Listings */}
+      {/* Listings or Empty State */}
       {filteredListings.length === 0 ? (
+        // Empty state: No listings found (either no listings exist or search returned no results)
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>
@@ -453,6 +548,7 @@ const ListingsScreen: React.FC = () => {
           </Text>
         </View>
       ) : (
+        // FlatList: Display all filtered listings with pull-to-refresh
         <FlatList
           data={filteredListings}
           keyExtractor={(item) => `listing-${item.id}`}
@@ -473,6 +569,7 @@ const ListingsScreen: React.FC = () => {
   );
 };
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 10 },
@@ -485,12 +582,12 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 16, color: "#333" },
   listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
   card: { backgroundColor: "#fff", borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: "#e0e0e0", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 3 },
-  inactiveCard: { opacity: 0.6, borderColor: "#ccc" },
+  inactiveCard: { opacity: 0.6, borderColor: "#ccc" }, // Dimmed style for inactive listings
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
   serviceTitle: { flex: 1, fontSize: 18, fontWeight: "bold", color: "#333", marginRight: 10 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  offerBadge: { backgroundColor: "#4CAF50" },
-  requestBadge: { backgroundColor: "#2196F3" },
+  offerBadge: { backgroundColor: "#4CAF50" }, // Green for "OFFERING"
+  requestBadge: { backgroundColor: "#2196F3" }, // Blue for "REQUESTING"
   badgeText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
   inactiveNotice: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#f5f5f5", padding: 8, borderRadius: 6, marginBottom: 10 },
   inactiveText: { fontSize: 13, color: "#999", fontStyle: "italic" },

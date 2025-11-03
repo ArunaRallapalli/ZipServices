@@ -1,3 +1,24 @@
+/**
+ * PostServiceScreen Component
+ * 
+ * This screen allows authenticated users to create new service posts - either offering their services
+ * or requesting services from others. It includes comprehensive form validation, auto-populated user data,
+ * and dynamic service category loading.
+ * 
+ * Features:
+ * - Authentication check with redirect to login if not authenticated
+ * - Toggle between "Offer Service" and "Request Service" post types
+ * - Loads service categories dynamically from backend (with fallback to hardcoded list)
+ * - Auto-populates user contact information from their profile
+ * - Form validation for required fields (title, description, category, email, zip code)
+ * - Optional fields: price/budget, phone number
+ * - Character limits on inputs to prevent excessive data
+ * - Loading states during data fetch and form submission
+ * - Success/error alerts with navigation options
+ * - Keyboard-aware scrolling for better UX
+ * - Different placeholder text based on post type (offer vs request)
+ */
+
 // Updated PostServiceScreen - Fixed authentication routing
 import API_URL from "../config/apiConfig";
 import { useAuth } from "../contexts/AuthContext";
@@ -20,11 +41,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const PostServiceScreen: React.FC = () => {
+  // Access authentication context for user state and auth methods
   const { isAuthenticated, userId, userType, checkAuthWithPrompt } = useAuth();
   const navigation = useNavigation();
   
-  // Form state
-  const [postType, setPostType] = useState<'offer' | 'request'>('offer');
+  // Form state: All editable fields in the service post form
+  const [postType, setPostType] = useState<'offer' | 'request'>('offer'); // Type of post: offering or requesting
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [serviceCategory, setServiceCategory] = useState('');
@@ -33,13 +55,16 @@ const PostServiceScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
 
-  // UI state
-  const [loading, setLoading] = useState(false);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [serviceCategories, setServiceCategories] = useState<string[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+  // UI state: Loading indicators for different operations
+  const [loading, setLoading] = useState(false);                           // Form submission loading
+  const [loadingUser, setLoadingUser] = useState(true);                    // User profile loading
+  const [serviceCategories, setServiceCategories] = useState<string[]>([]); // Available service categories
+  const [loadingCategories, setLoadingCategories] = useState(true);        // Categories loading
 
-  // Check authentication every time screen comes into focus
+  /**
+   * useFocusEffect: Check authentication every time screen comes into focus
+   * This ensures user is still authenticated even if they navigate away and come back
+   */
   useFocusEffect(
     React.useCallback(() => {
       console.log('🔍 Screen focused - checking auth');
@@ -50,17 +75,24 @@ const PostServiceScreen: React.FC = () => {
     }, [isAuthenticated, userId])
   );
 
-  // Load categories once on mount
+  /**
+   * useEffect: Load service categories once when component mounts
+   * Categories are needed for the dropdown picker
+   */
   useEffect(() => {
     loadServiceCategories();
   }, []);
 
+  /**
+   * Check if user is authenticated and redirect to login if not
+   * If authenticated, load user profile data to pre-populate form
+   */
   const checkAuthAndRedirect = async () => {
     console.log('🔐 Auth check - isAuthenticated:', isAuthenticated, 'userId:', userId, 'userType:', userType);
     
     setLoadingUser(true);
 
-    // If not authenticated, redirect immediately
+    // If not authenticated, show alert and redirect to login screen
     if (!isAuthenticated || !userId) {
       console.log('❌ Not authenticated - redirecting to login');
       setLoadingUser(false);
@@ -81,17 +113,22 @@ const PostServiceScreen: React.FC = () => {
       return;
     }
 
-    // If authenticated, load user profile
+    // If authenticated, load user profile to pre-populate contact fields
     console.log('✅ Authenticated - loading profile');
     await loadUserProfile();
     setLoadingUser(false);
   };
 
+  /**
+   * Load service categories from backend API
+   * Falls back to hardcoded list if API call fails
+   */
   const loadServiceCategories = async () => {
     try {
       setLoadingCategories(true);
       console.log('📦 Loading service categories from:', `${API_URL}/api/service-categories`);
       
+      // API call to get service categories
       const response = await fetch(`${API_URL}/api/service-categories`);
       
       if (!response.ok) {
@@ -102,6 +139,7 @@ const PostServiceScreen: React.FC = () => {
       const data = await response.json();
       console.log('📦 Categories response:', data);
 
+      // Set categories if response is valid
       if (data.success && Array.isArray(data.categories)) {
         setServiceCategories(data.categories);
         console.log('✅ Loaded categories:', data.categories);
@@ -110,7 +148,7 @@ const PostServiceScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Error loading service categories:', error);
-      // Fallback to hardcoded categories if API fails
+      // Fallback: Use hardcoded categories if API fails
       console.log('⚠️ Using fallback categories');
       setServiceCategories([
         'Cleaning', 'Plumbing', 'Electrical', 'Landscaping',
@@ -122,15 +160,21 @@ const PostServiceScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Load user profile data from backend
+   * Pre-populates contact fields (email, phone, zip code) if available
+   */
   const loadUserProfile = async () => {
     try {
       const profileUrl = `${API_URL}/api/users/${userId}/profile`;
       console.log('👤 Loading profile from:', profileUrl);
 
+      // API call to get user profile
       const response = await fetch(profileUrl);
       
       console.log('📡 Profile response status:', response.status);
       
+      // Handle error responses
       if (!response.ok) {
         console.error('❌ Profile API returned error status:', response.status);
         const errorText = await response.text();
@@ -146,12 +190,14 @@ const PostServiceScreen: React.FC = () => {
       
       const responseText = await response.text();
 
+      // Check if response is HTML instead of JSON (server error)
       if (responseText.trim().startsWith('<')) {
         console.error('❌ Received HTML instead of JSON');
         Alert.alert('Error', 'Server error: received unexpected response format.');
         return;
       }
 
+      // Parse JSON response
       let data;
       try {
         data = JSON.parse(responseText);
@@ -161,9 +207,11 @@ const PostServiceScreen: React.FC = () => {
         return;
       }
 
+      // Pre-populate form fields with profile data
       if (data.success && data.profile) {
         const profile = data.profile;
 
+        // Extract contact info from customer or business profile
         if (profile.customerProfile) {
           setZipCode(profile.customerProfile.zip_code || '');
           setPhoneNumber(profile.customerProfile.phone_number || '');
@@ -172,6 +220,7 @@ const PostServiceScreen: React.FC = () => {
           setPhoneNumber(profile.businessProfile.phone_number || '');
         }
 
+        // Extract email from user data
         if (profile.user && profile.user.email) {
           setContactEmail(profile.user.email);
         }
@@ -186,6 +235,10 @@ const PostServiceScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Validate all required form fields before submission
+   * Returns true if all validations pass, false otherwise
+   */
   const validateForm = () => {
     if (!title.trim()) {
       Alert.alert('Validation Error', 'Please enter a title');
@@ -210,8 +263,12 @@ const PostServiceScreen: React.FC = () => {
     return true;
   };
 
+  /**
+   * Handle form submission
+   * Validates form, then sends POST request to create the service post
+   */
   const handleSubmit = async () => {
-    // Double-check authentication before submitting
+    // Double-check authentication before submitting (session could have expired)
     if (!isAuthenticated || !userId) {
       Alert.alert(
         'Sign In Required',
@@ -228,13 +285,16 @@ const PostServiceScreen: React.FC = () => {
       return;
     }
 
+    // Validate form before submission
     if (!validateForm()) return;
 
     try {
       setLoading(true);
       
+      // Determine poster type from userType or default to 'guest'
       let posterType = userType || 'guest';
 
+      // Prepare service post data object
       const servicePostData = {
         user_id: userId,
         poster_type: posterType,
@@ -242,15 +302,16 @@ const PostServiceScreen: React.FC = () => {
         title: title.trim(),
         description: description.trim(),
         service_category: serviceCategory,
-        price_range: priceRange.trim() || null,
+        price_range: priceRange.trim() || null,      // Optional field
         zip_code: zipCode.trim(),
-        phone_number: phoneNumber.trim() || null,
+        phone_number: phoneNumber.trim() || null,     // Optional field
         contact_email: contactEmail.trim(),
       };
 
       console.log('📤 Submitting service post to:', `${API_URL}/api/service-posts`);
       console.log('📤 Service post data:', servicePostData);
 
+      // API call to create service post
       const response = await fetch(`${API_URL}/api/service-posts`, {
         method: 'POST',
         headers: {
@@ -263,6 +324,7 @@ const PostServiceScreen: React.FC = () => {
       console.log('📥 Service post response status:', response.status);
       console.log('📥 Service post response:', data);
 
+      // Handle successful submission
       if (response.ok) {
         Alert.alert(
           'Success!',
@@ -278,7 +340,7 @@ const PostServiceScreen: React.FC = () => {
             },
           ]
         );
-        clearForm();
+        clearForm(); // Clear form after successful submission
       } else {
         console.error('❌ Failed to create post:', data);
         Alert.alert('Error', data.error || 'Failed to create service post');
@@ -291,6 +353,10 @@ const PostServiceScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Clear all form fields (except contact info which comes from profile)
+   * Called after successful submission or when user wants to post another
+   */
   const clearForm = () => {
     setTitle('');
     setDescription('');
@@ -299,7 +365,7 @@ const PostServiceScreen: React.FC = () => {
     setPostType('offer');
   };
 
-  // Show loading while checking auth or categories
+  // Loading state: Show spinner while checking authentication or loading categories
   if (loadingUser || loadingCategories) {
     return (
       <View style={styles.loadingContainer}>
@@ -309,7 +375,7 @@ const PostServiceScreen: React.FC = () => {
     );
   }
 
-  // Don't render form if not authenticated
+  // Don't render form if user is not authenticated (should have been redirected already)
   if (!isAuthenticated || !userId) {
     return (
       <View style={styles.loadingContainer}>
@@ -319,13 +385,14 @@ const PostServiceScreen: React.FC = () => {
     );
   }
 
+  // Main render: Post service form
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
+        {/* Header with title and dynamic subtitle based on post type */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Post a Service</Text>
           <Text style={styles.headerSubtitle}>
@@ -335,7 +402,7 @@ const PostServiceScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Info Banner */}
+        {/* Info Banner: Shows context-appropriate icon and text based on post type */}
         <View style={styles.roleDescription}>
           <Ionicons 
             name={postType === 'offer' ? 'briefcase-outline' : 'search-outline'} 
@@ -349,12 +416,13 @@ const PostServiceScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Form */}
+        {/* Form: All input fields */}
         <View style={styles.form}>
-          {/* Post Type Selection */}
+          {/* Post Type Selection: Toggle between "Offer" and "Request" */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>I want to: *</Text>
             <View style={styles.postTypeContainer}>
+              {/* Offer Service button */}
               <TouchableOpacity
                 style={[
                   styles.postTypeButton,
@@ -375,6 +443,7 @@ const PostServiceScreen: React.FC = () => {
                 </Text>
               </TouchableOpacity>
 
+              {/* Request Service button */}
               <TouchableOpacity
                 style={[
                   styles.postTypeButton,
@@ -397,7 +466,7 @@ const PostServiceScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Title */}
+          {/* Title field - Required, placeholder changes based on post type */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Title *</Text>
             <TextInput
@@ -413,7 +482,7 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* Description */}
+          {/* Description field - Required, multiline, placeholder changes based on post type */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Description *</Text>
             <TextInput
@@ -431,7 +500,7 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* Service Category */}
+          {/* Service Category dropdown - Required, populated from API or fallback */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Category *</Text>
             <View style={styles.pickerContainer}>
@@ -441,6 +510,7 @@ const PostServiceScreen: React.FC = () => {
                 style={styles.picker}
               >
                 <Picker.Item label="Select a category..." value="" />
+                {/* Map through loaded categories */}
                 {serviceCategories.map((category) => (
                   <Picker.Item key={category} label={category} value={category} />
                 ))}
@@ -448,7 +518,7 @@ const PostServiceScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Price Range */}
+          {/* Price/Budget field - Optional, label and placeholder change based on post type */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
               {postType === 'offer' ? 'Price/Rate' : 'Budget'} (Optional)
@@ -469,10 +539,10 @@ const PostServiceScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Contact Information */}
+          {/* Contact Information section header */}
           <Text style={styles.sectionHeader}>Contact Information</Text>
           
-          {/* Email */}
+          {/* Email field - Required, pre-populated from user profile */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Contact Email *</Text>
             <TextInput
@@ -485,7 +555,7 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* Zip Code */}
+          {/* Zip Code field - Required, pre-populated from user profile */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Zip Code *</Text>
             <TextInput
@@ -498,7 +568,7 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* Phone Number */}
+          {/* Phone Number field - Optional, pre-populated from user profile */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Phone Number (Optional)</Text>
             <TextInput
@@ -511,12 +581,13 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* Submit Button */}
+          {/* Submit Button - Disabled during submission, shows spinner when loading */}
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.disabledButton]}
             onPress={handleSubmit}
             disabled={loading}
           >
+            {/* Show spinner while submitting, otherwise show icon and text */}
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
@@ -534,6 +605,7 @@ const PostServiceScreen: React.FC = () => {
   );
 };
 
+// Styles: All styling for the component
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
@@ -556,11 +628,11 @@ const styles = StyleSheet.create({
   helpText: { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
   postTypeContainer: { flexDirection: 'row', gap: 12 },
   postTypeButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: '#fff', borderWidth: 2, borderColor: '#4A90E2', borderRadius: 8, gap: 8 },
-  postTypeButtonActive: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' },
+  postTypeButtonActive: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' }, // Blue background when selected
   postTypeButtonText: { fontSize: 14, fontWeight: '600', color: '#4A90E2' },
-  postTypeButtonTextActive: { color: '#fff' },
+  postTypeButtonTextActive: { color: '#fff' }, // White text when selected
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4A90E2', paddingVertical: 16, borderRadius: 8, marginTop: 20 },
-  disabledButton: { backgroundColor: '#cccccc' },
+  disabledButton: { backgroundColor: '#cccccc' }, // Gray when disabled/loading
   submitButtonText: { color: '#fff', fontSize: 18, fontWeight: '600', marginLeft: 8 },
 });
 
