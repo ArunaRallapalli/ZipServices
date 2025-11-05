@@ -1,11 +1,31 @@
 /**
  * SearchResultsScreen.tsx
  * 
- * Main container screen for searching and displaying service providers.
- * This is the PRIMARY SCREEN that orchestrates all search functionality.
+ * OVERVIEW:
+ * Main screen component for the service search functionality. This is the home screen
+ * where customers can search for service providers by category and location.
  * 
- * Called from: MainStackNavigator as "SearchResults" or "Home" screen
- * Uses: 5 child components (Header, SearchForm, CategoryTiles, ServiceCard via SearchResultsList)
+ * KEY FEATURES:
+ * - Displays search form with category picker and ZIP code input
+ * - Shows popular category tiles for quick access
+ * - Auto-populates location from customer profile if logged in
+ * - Validates ZIP codes and fetches city/state automatically
+ * - Handles search execution and result display
+ * - Supports guest users and authenticated users
+ * - Provides chat functionality with service providers
+ * - Pull-to-refresh support for updating search results
+ * 
+ * NAVIGATION FLOW:
+ * 1. User enters ZIP code and selects category
+ * 2. Clicks Search or taps a category tile
+ * 3. Screen transitions to SearchResultsList showing matches
+ * 4. User can return to search form via back button
+ * 
+ * STATE MANAGEMENT:
+ * - Manages search form state (ZIP, city, state, category)
+ * - Tracks search results and loading states
+ * - Handles category loading from API
+ * - Manages ZIP code validation state
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -19,38 +39,36 @@ import {
   StyleSheet,
 } from "react-native";
 
-// Navigation & Authentication imports
-import { useAuth } from "../contexts/AuthContext"; // Access user authentication state
+import { useAuth } from "../contexts/AuthContext";
 import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList, TabParamList } from "../navigation/MainStackNavigator";
 
-// Import CHILD COMPONENTS - these are rendered in this screen
-import Header from "../components/SearchHeader"; // Top header with title & sign-in button
-import SearchForm from "../components/SearchForm"; // Search input fields (ZIP, category, etc.)
-import CategoryTiles from "../components/SearchCategoryTiles"; // Popular category grid tiles
-import SearchResultsList from "../components/SearchResultsList"; // Results view (contains ServiceCard components)
+import Header from "../components/SearchHeader";
+import SearchForm from "../components/SearchForm";
+import CategoryTiles from "../components/SearchCategoryTiles";
+import SearchResultsList from "../components/SearchResultsList";
 
-// Import UTILITIES - helper functions and types
 import {
-  ServicePost,        // TypeScript interface for service post data
-  SearchResults,      // TypeScript interface for search results structure
-  fetchLocationFromZip,  // API call: Get city/state from ZIP code
-  fetchCategories,    // API call: Get list of service categories
-  searchServicePosts, // API call: Perform search and get results
-  isValidZipCode,     // Validation: Check if ZIP code format is valid
-  popularCategories,  // Config: Array of 6 popular categories for tiles
+  ServicePost,
+  SearchResults,
+  fetchLocationFromZip,
+  fetchCategories,
+  searchServicePosts,
+  isValidZipCode,
+  popularCategories,
 } from "../Utils/searchUtils";
 
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
 
-// Navigation types for type-safe navigation
 type SearchResultsRouteProp = RouteProp<TabParamList, "Home">;
 type SearchResultsNavProp = NativeStackNavigationProp<RootStackParamList>;
 
-// Customer information passed from previous screen or auth context
+/**
+ * Customer information passed via navigation params
+ */
 interface CustomerInfo {
   user_id: number;
   user_type?: 'customer' | 'business_owner';
@@ -67,71 +85,79 @@ interface CustomerInfo {
 // ============================================================================
 
 const SearchResultsScreen: React.FC = () => {
-  // ----------------------------------------------------------------------------
-  // HOOKS - Navigation, Route, and Authentication
-  // ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // HOOKS AND NAVIGATION
+  // --------------------------------------------------------------------------
   
-  const route = useRoute<SearchResultsRouteProp>();        // Get route params
-  const navigation = useNavigation<SearchResultsNavProp>(); // Navigation object for screen transitions
-  const auth = useAuth();                                   // Authentication context (user login state)
+  const route = useRoute<SearchResultsRouteProp>();
+  const navigation = useNavigation<SearchResultsNavProp>();
+  const auth = useAuth();
   
-  // Extract route parameters (passed from previous screen or deep link)
+  // Extract route parameters with defaults
   const routeParams = route.params || {};
-  const customerInfo: CustomerInfo | undefined = routeParams.customerInfo; // User info if logged in
-  const isGuest = routeParams.isGuest || false;            // True if user is browsing without login
-  const preselectedCategory = routeParams.preselectedCategory || ""; // Category selected from previous screen
+  const customerInfo: CustomerInfo | undefined = routeParams.customerInfo;
+  const isGuest = routeParams.isGuest || false;
+  const preselectedCategory = routeParams.preselectedCategory || "";
 
-  // ----------------------------------------------------------------------------
-  // STATE MANAGEMENT - All component state variables
-  // ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // STATE MANAGEMENT
+  // --------------------------------------------------------------------------
   
-  // SEARCH FORM STATE - User input values
-  const [businessName, setBusinessName] = useState<string>(""); // Optional business name filter
-  const [zipCode, setZipCode] = useState(customerInfo?.zip_code || ""); // User's ZIP code
-  const [city, setCity] = useState(customerInfo?.city || "");     // User's city (auto-filled from ZIP)
-  const [state, setState] = useState(customerInfo?.state || "");  // User's state (auto-filled from ZIP)
-  const [serviceNeeded, setServiceNeeded] = useState(preselectedCategory || ""); // Selected service category
+  // Search form state - pre-populated from customer profile if available
+  const [businessName, setBusinessName] = useState<string>("");
+  const [zipCode, setZipCode] = useState(customerInfo?.zip_code || "");
+  const [city, setCity] = useState(customerInfo?.city || "");
+  const [state, setState] = useState(customerInfo?.state || "");
+  const [serviceNeeded, setServiceNeeded] = useState(preselectedCategory || "");
   
-  // DATA STATE - Data fetched from API
-  const [categories, setCategories] = useState<string[]>([]); // List of all available service categories
+  // Categories and search results state
+  const [categories, setCategories] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResults>({
-    zipCodeMatches: [],      // Services in user's ZIP code
-    stateMatches: [],        // Services in user's state (but different ZIP)
-    hasZipCodeMatches: false, // Flag: Are there ZIP matches?
-    hasStateMatches: false    // Flag: Are there state matches?
+    zipCodeMatches: [],
+    stateMatches: [],
+    hasZipCodeMatches: false,
+    hasStateMatches: false
   });
   
-  // UI STATE - Control loading spinners and view visibility
-  const [loading, setLoading] = useState(false);                // True during search API call
-  const [loadingCategories, setLoadingCategories] = useState(true); // True during category fetch
-  const [hasSearched, setHasSearched] = useState(false);        // True after first search performed
-  const [showResults, setShowResults] = useState(false);        // True to show results view, false for search view
-  const [isZipValid, setIsZipValid] = useState(false);          // True if ZIP code is valid
-  const [refreshing, setRefreshing] = useState(false);          // True during pull-to-refresh
+  // UI state management
+  const [loading, setLoading] = useState(false);                    // Search in progress
+  const [loadingCategories, setLoadingCategories] = useState(true); // Categories loading
+  const [hasSearched, setHasSearched] = useState(false);            // User has performed search
+  const [showResults, setShowResults] = useState(false);            // Show results view vs search form
+  const [isZipValid, setIsZipValid] = useState(false);              // ZIP code validation status
+  const [refreshing, setRefreshing] = useState(false);              // Pull-to-refresh state
   
-  // REFS - Values that persist across renders without causing re-renders
-  const zipDebounceRef = useRef<NodeJS.Timeout | null>(null);  // Timer for ZIP code debouncing (500ms delay)
-  const isInitialMount = useRef(true);                          // Flag to prevent alert on initial mount
+  // --------------------------------------------------------------------------
+  // REFS FOR DEBOUNCING AND MOUNT TRACKING
+  // --------------------------------------------------------------------------
+  
+  const zipDebounceRef = useRef<NodeJS.Timeout | null>(null);  // Debounce timer for ZIP validation
+  const isInitialMount = useRef(true);                          // Track first render
 
-  // ----------------------------------------------------------------------------
-  // HELPER FUNCTIONS - Utilities used within this component
-  // ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // UTILITY FUNCTIONS
+  // --------------------------------------------------------------------------
   
   /**
-   * Check if a post belongs to the current user
-   * Used by: ServiceCard component (to disable chat for own posts)
+   * Checks if a service post belongs to the current user
+   * Used to prevent users from contacting themselves
    */
   const isOwnPost = (postUserId: number): boolean => {
     return auth.userInfo?.user_id === postUserId;
   };
 
+  // --------------------------------------------------------------------------
+  // CHAT FUNCTIONALITY
+  // --------------------------------------------------------------------------
+  
   /**
-   * Handle "Contact Provider" button press on a service card
-   * Called from: ServiceCard component -> SearchResultsList -> here
-   * Navigates to: ChatScreen
+   * Handles user pressing "Chat" button on a service post
+   * Performs authentication check and validates user isn't messaging themselves
+   * 
+   * @param item - The service post the user wants to chat about
    */
   const handleChatPress = async (item: ServicePost) => {
-    // Check authentication - guests cannot chat
+    // Check if user is authenticated
     if (!auth.isAuthenticated || !auth.userInfo?.user_id) {
       Alert.alert(
         "Sign In Required",
@@ -144,7 +170,7 @@ const SearchResultsScreen: React.FC = () => {
       return;
     }
 
-    // Prevent user from chatting with themselves
+    // Prevent users from messaging their own posts
     if (isOwnPost(item.user_id)) {
       Alert.alert(
         "Cannot Contact Yourself",
@@ -154,9 +180,8 @@ const SearchResultsScreen: React.FC = () => {
       return;
     }
 
-    // Navigate to chat screen with proper user IDs
     try {
-      // Ensure IDs are numbers (handle string or number types)
+      // Parse user IDs to ensure they're numbers
       const currentUserId = typeof auth.userInfo.user_id === 'string' 
         ? parseInt(auth.userInfo.user_id, 10) 
         : auth.userInfo.user_id;
@@ -165,7 +190,7 @@ const SearchResultsScreen: React.FC = () => {
         ? parseInt(item.user_id, 10)
         : item.user_id;
 
-      // Navigate to ChatScreen with required params
+      // Navigate to chat screen with conversation parameters
       navigation.navigate("ChatScreen", {
         currentUserId: currentUserId,
         otherUserId: otherUserId,
@@ -178,9 +203,7 @@ const SearchResultsScreen: React.FC = () => {
   };
 
   /**
-   * Handle sign-in button press
-   * Called from: Header component (sign-in icon) and chat authentication flow
-   * Navigates to: BusinessOwnerHomeScreen
+   * Navigates to sign-in screen for guest users
    */
   const handleSignIn = () => {
     try {
@@ -191,55 +214,67 @@ const SearchResultsScreen: React.FC = () => {
     }
   };
 
+  // --------------------------------------------------------------------------
+  // PULL-TO-REFRESH FUNCTIONALITY
+  // --------------------------------------------------------------------------
+  
   /**
-   * Handle pull-to-refresh gesture
-   * Called from: ScrollView's RefreshControl component
-   * Refreshes: Current search results (if a search has been performed)
+   * Handles pull-to-refresh gesture
+   * Re-executes the last search if user has searched before
    */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    
-    // Only refresh if we have previous search parameters
+    // Only refresh if user has already performed a search
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
       try {
-        await performSearch(true); // Silent refresh (no error alerts)
+        await performSearch(true); // Silent refresh (no alerts)
       } catch (error) {
         console.error("Refresh error:", error);
       }
     }
-    
     setRefreshing(false);
   }, [hasSearched, serviceNeeded, zipCode, city, state]);
 
+  // --------------------------------------------------------------------------
+  // ZIP CODE HANDLING
+  // --------------------------------------------------------------------------
+  
   /**
-   * Handle ZIP code input change with debouncing
-   * Called from: SearchForm component (ZIP code TextInput)
-   * Side effects: Auto-fills city/state, validates ZIP code
+   * Handles ZIP code input with debounced validation and location lookup
+   * 
+   * FLOW:
+   * 1. User types ZIP code
+   * 2. Clear any existing debounce timer
+   * 3. If 5 digits entered and valid format:
+   *    - Wait 500ms (debounce)
+   *    - Fetch city/state from API
+   *    - Auto-populate location fields
+   * 4. If invalid, clear location fields
+   * 
+   * @param text - The ZIP code input text
    */
   const handleZipChange = async (text: string) => {
     setZipCode(text);
     
-    // Clear previous debounce timer if user is still typing
+    // Clear existing debounce timer
     if (zipDebounceRef.current) {
       clearTimeout(zipDebounceRef.current);
     }
 
-    // Only validate and fetch location if ZIP is 5 digits
+    // Only validate if we have 5 digits and they're all numeric
     if (text.length === 5 && isValidZipCode(text)) {
-      // Debounce: Wait 500ms after user stops typing before making API call
+      // Debounce the API call to avoid excessive requests
       zipDebounceRef.current = setTimeout(async () => {
-        const location = await fetchLocationFromZip(text); // API call to get city/state
+        const location = await fetchLocationFromZip(text);
         
         if (location) {
-          // Success: Auto-fill city and state
+          // Valid ZIP - populate city and state
           setCity(location.city);
           setState(location.state);
-          setIsZipValid(true); // Enable category tiles
+          setIsZipValid(true);
         } else {
-          // Invalid ZIP code
+          // Invalid ZIP - show alert (except on first mount)
           setIsZipValid(false);
-          
-          // Show alert only if not initial mount (avoid alert on page load)
           if (!isInitialMount.current) {
             Alert.alert(
               "Invalid ZIP Code",
@@ -249,168 +284,267 @@ const SearchResultsScreen: React.FC = () => {
         }
       }, 500); // 500ms debounce delay
     } else {
-      // ZIP is incomplete or invalid format
+      // Incomplete or invalid ZIP - clear location data
       setIsZipValid(false);
       setCity("");
       setState("");
     }
   };
 
+  // --------------------------------------------------------------------------
+  // SEARCH EXECUTION
+  // --------------------------------------------------------------------------
+  
   /**
-   * Perform the search API call
-   * Called from: handleSearch (user clicks search button) or handleCategoryPress (user clicks tile)
+   * Executes the service search based on form inputs
+   * Validates required fields before searching
    * 
-   * @param silentRefresh - If true, don't show validation error alerts (used for background refresh)
+   * @param silentRefresh - If true, suppresses error alerts (used for auto-refresh)
+   * @param categoryOverride - Optional category to use instead of state value (fixes closure issue)
+   * 
+   * VALIDATION CHECKS:
+   * 1. Service category must be selected
+   * 2. ZIP code must be provided
+   * 3. ZIP code must be 5 digits
+   * 4. ZIP code must be valid (verified via API)
    */
-  const performSearch = async (silentRefresh: boolean = false) => {
-    // Validation: Service category is required
-    if (!serviceNeeded) {
+  const performSearch = async (silentRefresh: boolean = false, categoryOverride?: string) => {
+    // Use override if provided, otherwise use state
+    // This fixes the stale closure issue when category tiles trigger immediate search
+    const searchCategory = categoryOverride || serviceNeeded;
+    
+    console.log("🔍 [SearchResultsScreen] performSearch called with:", {
+      silentRefresh,
+      categoryOverride,
+      searchCategory,
+      stateServiceNeeded: serviceNeeded
+    });
+    
+    // Validate service category selection
+    if (!searchCategory) {
       if (!silentRefresh) {
         Alert.alert("Missing Information", "Please select a service category.");
       }
       return;
     }
 
-    // Validation: Location is required (either ZIP or city+state)
-    if (!zipCode && (!city || !state)) {
+    // Validate ZIP code is provided
+    if (!zipCode || zipCode.trim() === "") {
       if (!silentRefresh) {
         Alert.alert(
-          "Location Required",
-          "Please enter a ZIP code or provide both city and state."
+          "ZIP Code Required",
+          "Please enter your ZIP code to search for services."
         );
       }
       return;
     }
 
-    // Show loading spinner
+    // Validate ZIP code length
+    if (zipCode.length < 5) {
+      if (!silentRefresh) {
+        Alert.alert(
+          "Invalid ZIP Code",
+          "Please enter a complete 5-digit ZIP code."
+        );
+      }
+      return;
+    }
+
+    // Validate ZIP code is valid (has been verified)
+    if (!isZipValid) {
+      if (!silentRefresh) {
+        Alert.alert(
+          "Invalid ZIP Code",
+          "The ZIP code you entered is not valid. Please check and try again."
+        );
+      }
+      return;
+    }
+
+    // Show loading indicator
     setLoading(true);
     
     try {
-      // Make API call to search for service posts
+      // Execute search API call with the correct category
+      console.log("🔍 [SearchResultsScreen] Calling searchServicePosts with category:", searchCategory);
+      
       const results = await searchServicePosts({
-        businessName: businessName || undefined, // Optional filter
-        serviceCategory: serviceNeeded,          // Required
-        zipCode: zipCode || undefined,           // Optional (can use city/state instead)
-        city: city || undefined,                 // Optional
-        state: state || undefined,               // Optional
+        businessName: businessName || undefined,
+        serviceCategory: searchCategory,  // Use searchCategory instead of serviceNeeded
+        zipCode: zipCode || undefined,
+        city: city || undefined,
+        state: state || undefined,
       });
 
       // Update state with results
       setSearchResults(results);
-      setHasSearched(true);  // Mark that user has performed a search
-      setShowResults(true);  // Switch to results view
-    } catch (error) {
-      console.error("Search error:", error);
+      setHasSearched(true);
+      setShowResults(true);
       
-      // Show error alert unless this is a silent refresh
+      console.log("✅ [SearchResultsScreen] Search completed successfully for:", searchCategory);
+    } catch (error) {
+      console.error("❌ [SearchResultsScreen] Search error:", error);
       if (!silentRefresh) {
         Alert.alert("Search Error", "Failed to search for services. Please try again.");
       }
     } finally {
-      setLoading(false); // Hide loading spinner
+      setLoading(false);
     }
   };
 
   /**
-   * Handle search button press
-   * Called from: SearchForm component (Search button)
+   * Wrapper for performSearch called by the Search button
+   * Always shows alerts (not a silent refresh)
    */
   const handleSearch = () => {
-    performSearch(false); // Not a silent refresh, show validation alerts
+    performSearch(false);
   };
 
+  // --------------------------------------------------------------------------
+  // CATEGORY TILE INTERACTION
+  // --------------------------------------------------------------------------
+  
   /**
-   * Handle category tile press
-   * Called from: CategoryTiles component (TouchableOpacity on each tile)
+   * Handles user tapping a popular category tile
+   * Validates ZIP code before allowing category selection
+   * Auto-triggers search after category selection
    * 
-   * @param categoryName - The name of the selected category (e.g., "Catering")
+   * @param categoryName - The name of the selected category
    */
   const handleCategoryPress = (categoryName: string) => {
-    // Validation: ZIP code must be valid before searching
-    if (!isZipValid) {
+    console.log("🎯 [SearchResultsScreen] Category tile pressed:", categoryName);
+    
+    // Validate ZIP code is entered
+    if (!zipCode || zipCode.trim() === "") {
       Alert.alert(
         "ZIP Code Required",
+        "Please enter your ZIP code before selecting a category."
+      );
+      return;
+    }
+
+    // Validate ZIP code is complete
+    if (zipCode.length < 5) {
+      Alert.alert(
+        "Invalid ZIP Code",
+        "Please enter a complete 5-digit ZIP code."
+      );
+      return;
+    }
+
+    // Validate ZIP code has been verified
+    if (!isZipValid) {
+      Alert.alert(
+        "Invalid ZIP Code",
         "Please enter a valid ZIP code before selecting a category."
       );
       return;
     }
     
-    // Set the selected category and trigger search
+    // Update selected category
     setServiceNeeded(categoryName);
-    handleSearch(); // This will use the updated category from state
+    
+    // Auto-trigger search with the new category value passed directly
+    // This avoids the stale closure issue where performSearch would use old serviceNeeded value
+    setTimeout(() => {
+      console.log("🚀 [SearchResultsScreen] Auto-triggering search for category:", categoryName);
+      performSearch(false, categoryName);  // Pass category directly to avoid stale closure
+    }, 100);
   };
 
   /**
-   * Handle back button press from results view
-   * Called from: SearchResultsList component (back button in header)
-   * Returns to: Main search view
+   * Returns user to search form from results view
    */
   const handleBackPress = () => {
-    setShowResults(false);  // Hide results view
-    setHasSearched(false);  // Reset search flag
+    setShowResults(false);
+    setHasSearched(false);
   };
 
-  // ----------------------------------------------------------------------------
-  // SIDE EFFECTS - useEffect hooks for lifecycle events
-  // ----------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // EFFECTS AND LIFECYCLE
+  // --------------------------------------------------------------------------
   
   /**
-   * EFFECT 1: Load service categories on component mount
-   * Runs: Once when component first renders
-   * API Call: fetchCategories() to get list of all service categories
+   * EFFECT: Load categories on component mount
+   * Fetches available service categories from API
+   * Sets default category if none selected
    */
   useEffect(() => {
     const loadCategories = async () => {
+      console.log("🚀 [SearchResultsScreen] Loading categories...");
       setLoadingCategories(true);
       
       try {
-        const fetchedCategories = await fetchCategories(); // API call
-        setCategories(fetchedCategories); // Store in state for SearchForm picker
+        // Fetch categories from API (with fallback)
+        const fetchedCategories = await fetchCategories();
+        console.log("✅ [SearchResultsScreen] Categories loaded:", fetchedCategories.length);
+        
+        setCategories(fetchedCategories);
+        
+        // Set initial category if none selected
+        if (!serviceNeeded && fetchedCategories.length > 0) {
+          if (preselectedCategory && fetchedCategories.includes(preselectedCategory)) {
+            // Use preselected category from navigation params
+            console.log("✅ [SearchResultsScreen] Using preselected category:", preselectedCategory);
+            setServiceNeeded(preselectedCategory);
+          } else {
+            // Use first category as default
+            console.log("✅ [SearchResultsScreen] Using first category:", fetchedCategories[0]);
+            setServiceNeeded(fetchedCategories[0]);
+          }
+        }
       } catch (error) {
-        console.error("Error loading categories:", error);
-        Alert.alert("Error", "Failed to load service categories");
+        console.error("❌ [SearchResultsScreen] Error loading categories:", error);
       } finally {
-        setLoadingCategories(false); // Hide loading spinner
+        setLoadingCategories(false);
+        console.log("✅ [SearchResultsScreen] Category loading complete");
       }
     };
 
     loadCategories();
-  }, []); // Empty dependency array = run once on mount
+  }, []); // Run once on mount
 
   /**
-   * EFFECT 2: Auto-search when screen gains focus with preselected category
-   * Runs: Every time the screen comes into focus (user navigates to this screen)
-   * Use case: User clicked a category tile from another screen and was directed here
+   * EFFECT: Auto-search when screen gains focus with preselected category
+   * Triggers automatic search if:
+   * - User has preselected category (from navigation)
+   * - ZIP code is valid
+   * - User hasn't searched yet
+   * - Categories have loaded
    */
   useFocusEffect(
     useCallback(() => {
-      // Only auto-search if:
-      // 1. Category was preselected from previous screen
-      // 2. ZIP code is valid
-      // 3. Haven't already searched (prevent duplicate searches)
-      if (preselectedCategory && isZipValid && !hasSearched) {
-        performSearch(true); // Silent search (no validation alerts)
+      if (preselectedCategory && isZipValid && !hasSearched && categories.length > 0) {
+        console.log("🎯 [SearchResultsScreen] Auto-searching with preselected category:", preselectedCategory);
+        performSearch(true, preselectedCategory); // Silent search (no alerts), pass category directly
       }
-    }, [preselectedCategory, isZipValid])
+    }, [preselectedCategory, isZipValid, hasSearched, categories])
   );
 
   /**
-   * EFFECT 3: Mark that component has finished initial mount
-   * Runs: Once after first render
-   * Purpose: Prevent ZIP validation alert on initial page load
+   * EFFECT: Mark component as no longer on initial mount
+   * Used to suppress certain alerts on first render
    */
   useEffect(() => {
     isInitialMount.current = false;
   }, []);
 
-  // ----------------------------------------------------------------------------
-  // RENDER LOGIC - Conditional rendering based on state
-  // ----------------------------------------------------------------------------
-  
   /**
-   * LOADING STATE: Show spinner while categories are loading
-   * Displayed: On initial component mount before categories load
+   * EFFECT: Debug logging for category state
    */
+  useEffect(() => {
+    console.log("📊 [SearchResultsScreen] Category state:", {
+      categoriesCount: categories.length,
+      serviceNeeded: serviceNeeded,
+      loadingCategories: loadingCategories,
+    });
+  }, [categories, serviceNeeded, loadingCategories]);
+
+  // --------------------------------------------------------------------------
+  // RENDER LOGIC
+  // --------------------------------------------------------------------------
+  
+  // Show loading spinner while categories are loading
   if (loadingCategories) {
     return (
       <View style={styles.loadingContainer}>
@@ -419,37 +553,22 @@ const SearchResultsScreen: React.FC = () => {
     );
   }
 
-  /**
-   * RESULTS VIEW: Show search results
-   * Displayed: When showResults === true (after search is performed)
-   * Component: SearchResultsList
-   *   └─> ServiceCard (rendered for each result)
-   */
+  // Show results view if user has searched
   if (showResults) {
     return (
       <SearchResultsList
-        searchResults={searchResults}       // The search results data
-        isOwnPost={isOwnPost}              // Function to check if post belongs to current user
-        onChatPress={handleChatPress}      // Handler for "Contact Provider" button
-        onBackPress={handleBackPress}      // Handler for back button
-        zipCode={zipCode}                  // For displaying location context
-        city={city}                        // For displaying location context
-        state={state}                      // For displaying location context
+        searchResults={searchResults}
+        isOwnPost={isOwnPost}
+        onChatPress={handleChatPress}
+        onBackPress={handleBackPress}
+        zipCode={zipCode}
+        city={city}
+        state={state}
       />
     );
   }
 
-  /**
-   * MAIN SEARCH VIEW: Show search form and category tiles
-   * Displayed: Default view when showResults === false
-   * 
-   * Component hierarchy:
-   *   SafeAreaView
-   *     └─> ScrollView (with pull-to-refresh)
-   *           ├─> Header (title, sign-in button, welcome message)
-   *           ├─> SearchForm (business name, category, ZIP, city/state inputs)
-   *           └─> CategoryTiles (6 popular category tiles)
-   */
+  // Show main search form view
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -457,53 +576,41 @@ const SearchResultsScreen: React.FC = () => {
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
-            onRefresh={onRefresh}  // Pull-to-refresh handler
+            onRefresh={onRefresh}
           />
         }
       >
-        {/* 
-          COMPONENT 1: Header
-          Purpose: Display app title, sign-in button (for guests), welcome message (for authenticated users)
-          Location: components/SearchHeader.tsx
-        */}
+        {/* Header with user greeting and sign-in option */}
         <Header
-          isAuthenticated={auth.isAuthenticated}        // Show/hide sign-in vs welcome
-          customerName={customerInfo?.full_name}        // Display in welcome message
-          onSignInPress={handleSignIn}                  // Navigate to sign-in screen
+          isAuthenticated={auth.isAuthenticated}
+          customerName={customerInfo?.full_name}
+          onSignInPress={handleSignIn}
         />
 
-        {/* 
-          COMPONENT 2: SearchForm
-          Purpose: Collect search parameters (business name, category, ZIP/location)
-          Location: components/SearchForm.tsx
-        */}
+        {/* Search form with inputs and validation */}
         <SearchForm
-          businessName={businessName}                   // Controlled input value
-          setBusinessName={setBusinessName}             // Update function
-          zipCode={zipCode}                             // Controlled input value
-          setZipCode={setZipCode}                       // Update function (not used, handleZipChange is used instead)
-          city={city}                                   // Controlled input value (auto-filled from ZIP)
-          setCity={setCity}                             // Update function
-          state={state}                                 // Controlled input value (auto-filled from ZIP)
-          setState={setState}                           // Update function
-          serviceNeeded={serviceNeeded}                 // Selected category
-          setServiceNeeded={setServiceNeeded}           // Category selector
-          categories={categories}                       // List for category picker dropdown
-          isZipValid={isZipValid}                       // Show validation state (green/red border)
-          isGuest={isGuest}                             // Show/hide certain fields for guests
-          handleSearch={handleSearch}                   // Search button handler
-          onZipChange={handleZipChange}                 // ZIP input change handler (with debounce)
+          businessName={businessName}
+          setBusinessName={setBusinessName}
+          zipCode={zipCode}
+          setZipCode={setZipCode}
+          city={city}
+          setCity={setCity}
+          state={state}
+          setState={setState}
+          serviceNeeded={serviceNeeded}
+          setServiceNeeded={setServiceNeeded}
+          categories={categories}
+          isZipValid={isZipValid}
+          isGuest={isGuest}
+          handleSearch={handleSearch}
+          onZipChange={handleZipChange}
         />
 
-        {/* 
-          COMPONENT 3: CategoryTiles
-          Purpose: Display 6 popular service categories as clickable tiles
-          Location: components/SearchCategoryTiles.tsx
-        */}
+        {/* Popular category tiles for quick access */}
         <CategoryTiles
-          categories={popularCategories}                // Array of 6 popular categories (from searchUtils)
-          onCategoryPress={handleCategoryPress}         // Handler when tile is clicked
-          isZipValid={isZipValid}                       // Disable tiles if ZIP not valid
+          categories={popularCategories}
+          onCategoryPress={handleCategoryPress}
+          isZipValid={isZipValid}
         />
       </ScrollView>
     </SafeAreaView>
@@ -530,69 +637,3 @@ const styles = StyleSheet.create({
 });
 
 export default SearchResultsScreen;
-
-/**
- * ============================================================================
- * COMPONENT CALL HIERARCHY
- * ============================================================================
- * 
- * This screen is called from:
- *   └─> MainStackNavigator (registered as "SearchResults" or "Home" screen)
- * 
- * This screen calls these components:
- *   ├─> Header (SearchHeader.tsx)
- *   │     Purpose: Display title and authentication UI
- *   │     Props: isAuthenticated, customerName, onSignInPress
- *   │
- *   ├─> SearchForm (SearchForm.tsx)
- *   │     Purpose: Collect search inputs
- *   │     Props: All search form state + handlers (13 props)
- *   │
- *   ├─> CategoryTiles (SearchCategoryTiles.tsx)
- *   │     Purpose: Display popular category tiles
- *   │     Props: categories, onCategoryPress, isZipValid
- *   │
- *   └─> SearchResultsList (SearchResultsList.tsx)
- *         Purpose: Display search results
- *         Props: searchResults, isOwnPost, onChatPress, onBackPress, location data
- *         │
- *         └─> ServiceCard (ServiceCard.tsx) - rendered inside SearchResultsList
- *               Purpose: Display individual service post
- *               Props: item, isOwnPost, onChatPress
- * 
- * This screen calls these utilities (searchUtils.ts):
- *   ├─> fetchLocationFromZip() - Get city/state from ZIP code
- *   ├─> fetchCategories() - Get list of service categories
- *   ├─> searchServicePosts() - Perform search API call
- *   ├─> isValidZipCode() - Validate ZIP code format
- *   └─> popularCategories - Array of 6 popular categories
- * 
- * This screen navigates to:
- *   ├─> ChatScreen - When user clicks "Contact Provider"
- *   └─> BusinessOwnerHomeScreen - When user clicks "Sign In"
- * 
- * ============================================================================
- * DATA FLOW SUMMARY
- * ============================================================================
- * 
- * 1. User enters ZIP code
- *    └─> handleZipChange() debounces input
- *        └─> fetchLocationFromZip() API call
- *            └─> Auto-fills city/state
- * 
- * 2. User selects category or clicks tile
- *    └─> handleSearch() or handleCategoryPress()
- *        └─> performSearch() validates and calls API
- *            └─> searchServicePosts() API call
- *                └─> Updates searchResults state
- *                    └─> Shows SearchResultsList component
- * 
- * 3. User clicks "Contact Provider"
- *    └─> handleChatPress() checks authentication
- *        └─> Navigates to ChatScreen with user IDs
- * 
- * 4. User pulls to refresh
- *    └─> onRefresh() repeats last search
- * 
- * ============================================================================
- */

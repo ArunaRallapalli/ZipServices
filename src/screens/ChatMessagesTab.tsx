@@ -7,8 +7,8 @@
  * Features:
  * - Displays all conversations with preview of last message
  * - Shows unread message count badge on each conversation
- * - Supports both customer and business owner user types
- * - Different API endpoints for different user types
+* - Works for all user types (customers and business owners)
+ * - Uses universal /conversations endpoint
  * - Tapping a conversation navigates to the full chat screen
  * - Loading states and empty states
  * - Auto-fetches conversations on mount
@@ -80,7 +80,7 @@ export default function MessagesTab({
 
   /**
    * Effect: Fetch conversations when component mounts or when user info changes
-   * Runs whenever currentUserId or userType changes
+   * Runs whenever currentUserId changes
    */
   useEffect(() => {
     // Early exit if no user ID is available
@@ -89,53 +89,33 @@ export default function MessagesTab({
       setLoading(false);
       return;
     }
-
-    /**
-     * Fetch conversations from the backend
-     * Uses different endpoints for customers vs business owners
+/**
+     * Fetch conversations from the backend using the universal /conversations endpoint
      */
     const fetchData = async () => {
+  
       try {
         setLoading(true);
         
-        // Construct API URL based on user type
-        // Customers: /messages/customer/{id}/conversations
-        // Business owners: /messages/business-owner/{id}
-     const url =
-  userType === "customer"
-    ? `${API_URL}/messages/customer/${currentUserId}/conversations`
-    : `${API_URL}/messages/business-owner/${currentUserId}`;
+     // Use universal conversations endpoint for all users
+       const url = `${API_URL}/messages/conversations/${currentUserId}`;
         
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = await res.json();
-
-        /**
-         * Normalize the API response into a consistent format
-         * Different endpoints return slightly different field names
+/**
+         * Map the API response to our Conversation interface
+         * The /conversations endpoint returns consistent field names for all users
          */
         const normalized: Conversation[] = (raw || []).map((item: any) => ({
-          // Extract other user's ID (field name varies by endpoint)
-          other_user_id:
-            userType === "customer"
-              ? item.other_user_id
-              : item.user_id ?? item.sender_id,
-          
-          // Extract other user's display name (field name varies by endpoint)
-          other_user_name:
-            userType === "customer"
-              ? item.business_name || item.receiver_business_name || "Business"
-              : item.full_name || item.sender_name || item.sender_email || "Customer",
-          
-          // Extract last message text
-          last_message: item.last_message || item.message_text || "",
-          
-          // Extract last message timestamp
-          last_message_time: item.last_message_time || item.created_at || "",
-          
-          // Extract unread count (defaults to 0 if not present)
+          other_user_id: item.other_user_id,
+          other_user_name: item.contact_name || "Unknown User",
+          last_message: item.last_message || "",
+          last_message_time: item.last_message_time || "",
           unread_count: item.unread_count || 0,
         }));
+        
+       
 
         setConversations(normalized);
       } catch (e) {
@@ -147,7 +127,7 @@ export default function MessagesTab({
     };
 
     fetchData();
-  }, [currentUserId, userType]);
+ }, [currentUserId]);
 
   /**
    * Navigate to the chat screen when a conversation is tapped

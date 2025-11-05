@@ -10,17 +10,10 @@ import businessOwnerAuthRouter from "./routes/business_owner_auth";
 import businessOwnersRouter from "./routes/Business_Owners_registration";
 import messagesRouter from "./routes/messages";
 import businessOwnerSearchRouter from "./routes/business_owners_search";
-import ownerChatsRouter from "./routes/owner_chats";
 import businessOwnerProfileRouter from "./business-owners";
 import serviceCategoriesRouter from "./routes/serviceCategories"; // ✅ ADD THIS
 import servicePostsRouter from './routes/ServicePosts';
-//import customersRouter from "./routes/customerSignup";
-//import existingCustomerLoginRouter from "./routes/Existing_customers_search";
-//import customersRoutes from "./routes/Past_customers";
-//import BecomeCustomerRouter from "./routes/Old_BecomeCustomer";
-//import unifiedSignupRouter from "./routes/UnifiedSignupAPIEndpoint";
-//import UnifiedLoginRouter from "./routes/Pld_UnifiedLoginAPIEndPoint";
-//import customerProfileRouter from "./routes/Past_customers";
+
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -70,23 +63,16 @@ app.use('/', servicePostsRouter);
 
 // ✅ EXISTING ROUTES (keep these for backward compatibility)
 app.use("/users", usersRouter);
-//app.use("/customers", customersRouter);
-//app.use("/customers", existingCustomerLoginRouter); // Existing customer login
 
 // Business owner routes
 app.use("/business_owners", businessOwnerAuthRouter);
 app.use("/business_owners/crud", businessOwnersRouter);
 app.use("/business_owners/search", businessOwnerSearchRouter);
-//app.use("/business_owners/customers", businessOwnerCustomersRouter);
 app.use("/business-owners", businessOwnerProfileRouter);
-//app.use("/customers", customerProfileRouter);
-//app.use("/customers", customersRoutes);
-//app.use("/users", BecomeCustomerRouter);
 app.use('/service-posts', servicePostsRouter); // Keep non-api version too
 
 // Messages routes
 app.use("/messages", messagesRouter);
-app.use("/owner_chats", ownerChatsRouter);
 
 // Debug: Log all registered routes
 console.log("=== REGISTERED ROUTES ===");

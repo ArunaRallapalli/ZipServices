@@ -10,7 +10,7 @@ import CustomerProfileScreen from "../screens/Profile/BusinessOwnerProfileScreen
 import SearchResultsScreen from "../screens/Old_SearchResultsScreen";
 import PostServiceScreen from "../screens/PostServiceScreen";
 import BusinessOwnerChatScreen from "../screens/BusinessOwnerChatScreen";
-import UserHomeScreen from "../screens/UserHomeScreen";
+import UserHomeScreen from "../screens/Old_UserHomeScreen";
 
 // ----- Tab types -----
 type TabParamList = {

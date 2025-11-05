@@ -35,7 +35,7 @@ import API_URL from "../config/apiConfig"; // Backend API URL configuration
 // Import screen components for each tab
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
-import SearchResultsScreen from "./Old_SearchResultsScreen";
+import SearchResultsScreen from "./SearchresultsScreen";
 import PostServiceScreen from "./PostServiceScreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import { useAuth } from "../contexts/AuthContext"; // Auth context for user info and authentication state
