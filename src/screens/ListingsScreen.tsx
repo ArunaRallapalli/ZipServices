@@ -23,13 +23,14 @@ import {
   Text,
   FlatList,
   ActivityIndicator,
-  Alert,
-  StyleSheet,
+    StyleSheet,
   TouchableOpacity,
   SafeAreaView,
   RefreshControl,
   TextInput,
 } from "react-native";
+import { createResponsiveStyles } from '../Utils/globalStyles';
+import { Alert } from "../Utils/Alert";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -37,6 +38,7 @@ import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { useAuth } from "../contexts/AuthContext";
 import API_URL from "../config/apiConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BackButton } from '../components/BackButton';
 
 // Navigation type definition for type safety
 type AllListingsNavProp = NativeStackNavigationProp<RootStackParamList, "ListingsScreen">;
@@ -77,6 +79,7 @@ interface CustomerInfo {
 const ListingsScreen: React.FC = () => {
   const navigation = useNavigation<AllListingsNavProp>();
   const { isAuthenticated } = useAuth();
+  
   
   // State: All listings fetched from the backend
   const [listings, setListings] = useState<ServicePost[]>([]);
@@ -234,24 +237,21 @@ const ListingsScreen: React.FC = () => {
 
   /**
    * Handle edit button press
-   * Shows confirmation dialog and navigates to edit screen
+   * Navigates directly to edit screen without confirmation dialog
    */
   const handleEditPress = (item: ServicePost) => {
-    // Show confirmation dialog before navigating
-    Alert.alert(
-      "Edit Listing",
-      "Navigate to edit screen for: " + item.title,
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Edit", 
-          onPress: () => {
-            navigation.navigate("EditListing", { postId: item.id });
-            console.log("Edit post:", item.id);
-          }
-        }
-      ]
-    );
+    try {
+      console.log("Navigating to EditListing with postId:", item.id);
+      // Navigate directly without confirmation dialog
+      navigation.navigate("EditListing", { postId: item.id });
+    } catch (error) {
+      console.error("Navigation error:", error);
+      Alert.alert(
+        "Navigation Error",
+        "Unable to open the edit screen. Please try again.",
+        [{ text: "OK" }]
+      );
+    }
   };
 
   /**
@@ -259,20 +259,21 @@ const ListingsScreen: React.FC = () => {
    * Shows confirmation dialog before inactivating the listing
    */
   const handleInactivatePress = async (item: ServicePost) => {
-    Alert.alert(
-      "Inactivate Listing",
-      `Are you sure you want to inactivate "${item.title}"? This will hide it from other users.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Inactivate", 
-          style: "destructive",
-          onPress: () => inactivateListing(item.id)
-        }
-      ]
-    );
-  };
+  console.log('🔴 handleInactivatePress called for item:', item.id, item.title);
   
+  Alert.alert(
+    "Inactivate Listing",
+    `Are you sure you want to inactivate "${item.title}"? This will hide it from other users.`,
+    [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Inactivate", 
+        style: "destructive",
+        onPress: () => inactivateListing(item.id)
+      }
+    ]
+  );
+};
   /**
    * Inactivate a listing by ID
    * Makes API call to mark the listing as inactive
@@ -328,7 +329,7 @@ const ListingsScreen: React.FC = () => {
       preselectedCategory: ""
     });
   };
-
+   
   /**
    * Format date string to readable format (e.g., "Jan 15, 2024")
    */
@@ -458,7 +459,8 @@ const ListingsScreen: React.FC = () => {
 
   // Early return: Show sign-in required screen if user is not authenticated
   if (!isAuthenticated) {
-    return (
+        return (
+     
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="log-in-outline" size={64} color="#ccc" />
@@ -507,12 +509,20 @@ const ListingsScreen: React.FC = () => {
   // Main render: Show header, search bar, and listings
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with title and listing count */}
+      {/* Header with title, listing count, and Cancel button */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Listings</Text>
-        <Text style={styles.headerSubtitle}>
-          {filteredListings.length} {filteredListings.length === 1 ? 'listing' : 'listings'}
-        </Text>
+       <BackButton 
+  iconColor="#fff"
+  textColor="#fff"
+  backgroundColor="transparent"
+/>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>My Listings</Text>
+          <Text style={styles.headerSubtitle}>
+ {String(filteredListings.length)} {filteredListings.length === 1 ? 'listing' : 'listings'}
+</Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Search Bar with icon and clear button */}
@@ -570,11 +580,23 @@ const ListingsScreen: React.FC = () => {
 };
 
 // Styles: All styling for the component
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 10 },
   loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
-  header: { backgroundColor: "#4A90E2", paddingVertical: 20, paddingHorizontal: 20, paddingTop: 60 },
+  header: { 
+    backgroundColor: "#4A90E2", 
+    paddingVertical: 20, 
+    paddingHorizontal: 20, 
+    paddingTop: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTextContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
   headerTitle: { fontSize: 26, fontWeight: "bold", color: "#fff", textAlign: "center" },
   headerSubtitle: { fontSize: 14, color: "#fff", textAlign: "center", marginTop: 5, opacity: 0.9 },
   searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", margin: 15, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#ddd" },

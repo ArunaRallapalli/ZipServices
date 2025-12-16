@@ -9,7 +9,7 @@
  * Features:
  * - Visual distinction between OFFER and REQUEST posts with colored badges
  * - "Your Post" banner for posts created by the current user
- * - Comprehensive post information display (title, description, price, location, contact)
+ * - Comprehensive post information display (title, description, price, location)
  * - "Contact Provider" button that triggers chat navigation
  * - Disabled state for user's own posts (can't contact yourself)
  * - Icons for better visual hierarchy and scannability
@@ -176,24 +176,6 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
       </View>
 
       {/* 
-        Contact Information Section
-        - Optional phone number with call icon
-        - Optional email with mail icon
-        - Only shown if the respective fields exist
-      */}
-      {item.phone_number && (
-        <Text style={styles.contactText}>
-          <Ionicons name="call" size={12} color="#666" /> {item.phone_number}
-        </Text>
-      )}
-
-      {item.contact_email && (
-        <Text style={styles.contactText}>
-          <Ionicons name="mail" size={12} color="#666" /> {item.contact_email}
-        </Text>
-      )}
-
-      {/* 
         Action Section - Conditional rendering based on post ownership
         
         Case 1: Not user's own post
@@ -328,13 +310,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   
-  // Contact info text - gray, smaller font
-  contactText: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 4,
-  },
-  
   // "Contact Provider" button - blue, prominent call-to-action
   chatButton: {
     marginTop: 12,
@@ -409,7 +384,6 @@ export default ServiceCard;
  *     city: "Phoenix",
  *     state: "AZ",
  *     zip_code: "85001",
- *     phone_number: "(555) 123-4567",
  *     // ... other fields
  *   }}
  *   isOwnPost={false}

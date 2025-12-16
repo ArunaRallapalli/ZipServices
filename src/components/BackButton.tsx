@@ -1,37 +1,55 @@
-import React from "react";
-import { TouchableOpacity, Text, StyleSheet, ViewStyle } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../navigation/MainStackNavigator";
+import React from 'react';
+import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 interface BackButtonProps {
-  style?: ViewStyle;
+  onPress?: () => void;
+  text?: string;
+  iconColor?: string;
+  textColor?: string;
+  backgroundColor?: string;
 }
 
-// ✅ Explicitly tell useNavigation about your stack
-type NavProp = NativeStackNavigationProp<RootStackParamList>;
+export const BackButton: React.FC<BackButtonProps> = ({ 
+  onPress, 
+  text = 'Back',
+  iconColor = '#4A90E2',
+  textColor = '#4A90E2',
+  backgroundColor = '#fff',
+}) => {
+  const navigation = useNavigation();
 
-const BackButton: React.FC<BackButtonProps> = ({ style }) => {
-  const navigation = useNavigation<NavProp>();
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      navigation.goBack();
+    }
+  };
 
   return (
-    <TouchableOpacity
-      style={[styles.button, style]}
-      onPress={() => navigation.navigate("SearchResultsScreen")}
+    <TouchableOpacity 
+      style={[styles.backButton, { backgroundColor }]} 
+      onPress={handlePress}
+      activeOpacity={0.7}
     >
-      <Text style={styles.text}>Back</Text>
+      <Ionicons name="arrow-back" size={24} color={iconColor} />
+      <Text style={[styles.backButtonText, { color: textColor }]}>{text}</Text>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  button: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: "#4f46e5",
-    borderRadius: 8,
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    gap: 8,
   },
-  text: { color: "#fff", fontWeight: "bold", textAlign: "center" },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
-
-export default BackButton;

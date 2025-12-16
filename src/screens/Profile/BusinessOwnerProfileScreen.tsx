@@ -1,5 +1,5 @@
 /**
- * BusinessOwnerProfileScreen Component
+ * BusinessOwnerProfileScreen Component - WITH LEGAL SECTION
  * 
  * This screen displays and allows editing of a business owner's profile information.
  * It shows account details, business information, and location/service area settings.
@@ -8,6 +8,7 @@
  * - Fetches business owner profile data by user ID
  * - Displays all profile fields in editable form
  * - Three sections: Account Information, Business Information, Location & Service Area
+ * - Legal section with links to Terms of Service and Privacy Policy
  * - Editable fields: email, password, business name, category, description, phone, address, service radius
  * - Save button to update profile changes to backend
  * - Back button to navigate to previous screen
@@ -19,14 +20,31 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, Button, ActivityIndicator, Alert, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  Button, 
+  ActivityIndicator, 
+  StyleSheet, 
+  ScrollView, 
+  KeyboardAvoidingView, 
+  Platform, 
+  SafeAreaView,
+  TouchableOpacity 
+} from "react-native";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
+import { Alert } from "../../Utils/Alert";
 import API_URL from "../../config/apiConfig";
 import { useAuth } from "../../contexts/AuthContext"; // Get authentication context
+import { createResponsiveStyles } from '../../Utils/globalStyles';
+import { BackButton } from '../../components/BackButton';
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 // Route type definition for type safety
 type BusinessOwnerProfileRouteProp = RouteProp<RootStackParamList, "BusinessOwnerProfileScreen">;
+type NavProp = NativeStackNavigationProp<RootStackParamList, "BusinessOwnerProfileScreen">;
 
 // BusinessOwnerProfile interface: represents the complete business owner profile structure
 interface BusinessOwnerProfile {
@@ -50,7 +68,7 @@ interface BusinessOwnerProfile {
 
 const BusinessOwnerProfileScreen: React.FC = () => {
   const route = useRoute<BusinessOwnerProfileRouteProp>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   
   // Get user info and signOut function from authentication context
   const { userInfo, signOut } = useAuth();
@@ -201,14 +219,17 @@ const BusinessOwnerProfileScreen: React.FC = () => {
 
   // Main render: Profile form with all editable fields
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+    <BackButton /> 
+     
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
         {/* Header: Business name */}
         <Text style={[styles.header, { fontSize: 24, marginTop: 20 }]}>
-          Business Profile: {profile.business_name}
+          Profile: {profile.business_name}
         </Text>
 
         {/* Section 1: Account Information */}
@@ -317,6 +338,27 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         {/* Save button - sends updated profile to backend */}
         <Button title="Save Profile" onPress={handleSave} />
 
+        {/* Section 4: Legal - NEW SECTION */}
+        <Text style={styles.sectionHeader}>Legal</Text>
+        
+        {/* Terms of Service Link */}
+        <TouchableOpacity 
+          style={styles.legalMenuItem}
+          onPress={() => navigation.navigate('TermsOfService')}
+        >
+          <Text style={styles.legalMenuText}>Terms of Service</Text>
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
+
+        {/* Privacy Policy Link */}
+        <TouchableOpacity 
+          style={styles.legalMenuItem}
+          onPress={() => navigation.navigate('PrivacyPolicy')}
+        >
+          <Text style={styles.legalMenuText}>Privacy Policy</Text>
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
+
         {/* Back button - navigate to previous screen */}
         <View style={{ marginTop: 20 }}>
           <Button
@@ -326,7 +368,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         </View>
 
         {/* Logout button - shows confirmation dialog then signs out */}
-        <View style={{ marginTop: 20 }}>
+        <View style={{ marginTop: 20, marginBottom: 40 }}>
           <Button
             title="🚪 Logout"
             onPress={handleLogout}
@@ -335,11 +377,15 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView> 
   );
 };
 
 // Styles: All styling for the component
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
+  contentContainer: {
+    padding: 20,
+  },
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   header: { fontWeight: "bold", marginBottom: 20, textAlign: "center" },
   sectionHeader: { 
@@ -354,6 +400,28 @@ const styles = StyleSheet.create({
   },
   label: { fontWeight: "bold", marginTop: 15 },
   input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginTop: 5, borderRadius: 5 },
+  // Legal menu item styles - NEW
+  legalMenuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  legalMenuText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  arrow: {
+    fontSize: 20,
+    color: '#999',
+  },
 });
 
 export default BusinessOwnerProfileScreen;

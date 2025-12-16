@@ -27,17 +27,18 @@
  * - Handles category loading from API
  * - Manages ZIP code validation state
  */
-
+// Add this line
+import { createResponsiveStyles } from '../Utils/globalStyles';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
-  Alert,
   ActivityIndicator,
   ScrollView,
   SafeAreaView,
   RefreshControl,
   StyleSheet,
 } from "react-native";
+import { Alert } from "../Utils/Alert";
 
 import { useAuth } from "../contexts/AuthContext";
 import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -111,13 +112,15 @@ const SearchResultsScreen: React.FC = () => {
   const [serviceNeeded, setServiceNeeded] = useState(preselectedCategory || "");
   
   // Categories and search results state
-  const [categories, setCategories] = useState<string[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchResults>({
-    zipCodeMatches: [],
-    stateMatches: [],
-    hasZipCodeMatches: false,
-    hasStateMatches: false
-  });
+  const [categories, setCategories] = useState<string[]>([]); 
+const [searchResults, setSearchResults] = useState<SearchResults>({
+  exactZipMatches: [],      // ← Add this
+  nearbyZipMatches: [],     // ← Add this
+  zipCodeMatches: [],       // ← Keep this for backward compatibility
+  stateMatches: [],
+  hasZipCodeMatches: false,
+  hasStateMatches: false
+});
   
   // UI state management
   const [loading, setLoading] = useState(false);                    // Search in progress
@@ -149,14 +152,16 @@ const SearchResultsScreen: React.FC = () => {
   // --------------------------------------------------------------------------
   // CHAT FUNCTIONALITY
   // --------------------------------------------------------------------------
-  
   /**
-   * Handles user pressing "Chat" button on a service post
-   * Performs authentication check and validates user isn't messaging themselves
-   * 
-   * @param item - The service post the user wants to chat about
-   */
-  const handleChatPress = async (item: ServicePost) => {
+ * Handles user pressing "Chat" button on a service post
+ * Performs authentication check and validates user isn't messaging themselves
+ * 
+ * @param item - The service post the user wants to chat about
+ */
+//from here 
+//from here 
+const handleChatPress = async (item: ServicePost) => {
+  try {
     // Check if user is authenticated
     if (!auth.isAuthenticated || !auth.userInfo?.user_id) {
       Alert.alert(
@@ -180,27 +185,55 @@ const SearchResultsScreen: React.FC = () => {
       return;
     }
 
-    try {
-      // Parse user IDs to ensure they're numbers
-      const currentUserId = typeof auth.userInfo.user_id === 'string' 
-        ? parseInt(auth.userInfo.user_id, 10) 
-        : auth.userInfo.user_id;
-      
-      const otherUserId = typeof item.user_id === 'string'
-        ? parseInt(item.user_id, 10)
-        : item.user_id;
+    // Helper function to extract username from email
+    const extractUsername = (email: string | null | undefined): string => {
+      if (!email) return "Provider";
+      const username = email.split('@')[0];
+      return username || "Provider";
+    };
 
-      // Navigate to chat screen with conversation parameters
-      navigation.navigate("ChatScreen", {
-        currentUserId: currentUserId,
-        otherUserId: otherUserId,
-        otherUserName: item.business_name || item.poster_name || item.title,
-      });
-    } catch (error) {
-      console.error("Chat navigation error:", error);
-      Alert.alert("Navigation Error", "Unable to open chat. Please try again.");
-    }
-  };
+    // 🔍 DEBUG: Log all the data
+    console.log("🐛 [DEBUG] Item data:", {
+      business_name: item.business_name,
+      poster_name: item.poster_name,
+      contact_email: item.contact_email,
+      title: item.title
+    });
+
+    // Parse user IDs to ensure they're numbers
+    const currentUserId = typeof auth.userInfo.user_id === 'string' 
+      ? parseInt(auth.userInfo.user_id, 10) 
+      : auth.userInfo.user_id;
+    
+    const otherUserId = typeof item.user_id === 'string'
+      ? parseInt(item.user_id, 10)
+      : item.user_id;
+
+    // Determine display name with fallback priority
+    // FIXED: Extract username from poster_name if it's an email
+    const otherUserName = 
+      item.business_name ||  // Best: "ABC Plumbing"
+      (item.poster_name && item.poster_name.includes('@') 
+        ? extractUsername(item.poster_name)  // Extract from poster_name if it's an email
+        : item.poster_name) ||  // Use poster_name as-is if it's a real name
+      extractUsername(item.contact_email);  // Fallback to contact_email
+
+    // 🔍 DEBUG: Log what we're passing
+    console.log("🐛 [DEBUG] Navigating with otherUserName:", otherUserName);
+
+    // Navigate to chat screen with conversation parameters
+    navigation.navigate("ChatScreen", {
+      currentUserId: currentUserId,
+      otherUserId: otherUserId,
+      otherUserName: otherUserName,
+    });
+  } catch (error) {
+    console.error("Chat navigation error:", error);
+    Alert.alert("Navigation Error", "Unable to open chat. Please try again.");
+  }
+};
+
+  //until here for hiding email display 
 
   /**
    * Navigates to sign-in screen for guest users
@@ -621,7 +654,7 @@ const SearchResultsScreen: React.FC = () => {
 // STYLES
 // ============================================================================
 
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
   container: {
     flex: 1,
     backgroundColor: "#ffffff",

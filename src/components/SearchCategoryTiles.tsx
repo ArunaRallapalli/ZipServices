@@ -28,6 +28,7 @@ import {
   MaterialIcons,
   AntDesign,
 } from "@expo/vector-icons";
+import { Alert } from "../Utils/Alert";
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -109,39 +110,44 @@ const SearchCategoryTiles: React.FC<SearchCategoryTilesProps> = ({
    * @param index - Array index (used for unique key)
    * @returns A TouchableOpacity with icon and text
    */
-  const renderCategoryTile = (category: Category, index: number) => {
-    // Get the correct icon component for this category
-    const IconComponent = getIconComponent(category.family);
+const renderCategoryTile = (category: Category, index: number) => {
+  const IconComponent = getIconComponent(category.family);
 
-    return (
-      <TouchableOpacity
-        key={`category-${index}-${category.name}`}
-        style={[
-          styles.categoryTile,
-          { 
-            backgroundColor: category.bgColor,  // Each tile has unique background
-            borderColor: category.color         // Border matches icon/text color
-          },
-        ]}
-        onPress={() => onCategoryPress(category.name)}
-        disabled={!isZipValid}                  // Disable if ZIP not valid
-        activeOpacity={0.7}                     // Visual feedback on press
-      >
-        {/* Category Icon */}
-        <IconComponent 
-          name={category.icon} 
-          size={24} 
-          color={category.color}
-          suppressHighlighting={true}           // Prevent icon color change on press
-        />
-        
-        {/* Category Name */}
-        <Text style={[styles.categoryTileText, { color: category.color }]}>
-          {category.name}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+  return (
+    <TouchableOpacity
+      key={`category-${index}-${category.name}`}
+      style={[
+        styles.categoryTile,
+        { 
+          backgroundColor: category.bgColor,
+          borderColor: category.color
+        },
+      ]}
+      onPress={() => {
+        if (!isZipValid) {
+          Alert.alert(
+            "ZIP Code Required",
+            "Please enter a valid ZIP code before selecting a category."
+          );
+          return;
+        }
+        onCategoryPress(category.name);
+      }}
+      activeOpacity={0.7}
+    >
+      <IconComponent 
+        name={category.icon} 
+        size={24} 
+        color={category.color}
+        suppressHighlighting={true}
+      />
+      
+      <Text style={[styles.categoryTileText, { color: category.color }]}>
+        {category.name}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
   return (
     <View style={styles.contentSection}>

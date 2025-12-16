@@ -1,6 +1,6 @@
 // backend/routes/messages.ts
 import { Router, Request, Response } from "express";
-import pool from "../config/pool";
+import { supabase } from "../config/Supabase";
 
 const router = Router();
 
@@ -9,12 +9,18 @@ const router = Router();
  */
 router.get("/health", async (_req: Request, res: Response) => {
   try {
-    // Test database connection
-    const result = await pool.query('SELECT NOW()');
+    // Test database connection by querying a simple table
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id')
+      .limit(1);
+    
+    if (error) throw error;
+
     res.json({ 
       status: "ok", 
       database: "connected",
-      timestamp: result.rows[0].now 
+      timestamp: new Date().toISOString()
     });
   } catch (err: any) {
     console.error("Health check failed:", err);
@@ -31,20 +37,28 @@ router.get("/health", async (_req: Request, res: Response) => {
  */
 router.get("/business-owners/all", async (_req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT bo.business_id, bo.user_id, bo.phone_number, bo.zip_code, 
-              bo.business_name, bo.service_category, u.email
-       FROM business_owners bo
-       JOIN users u ON bo.user_id = u.user_id
-       WHERE u.user_type = 'business_owner'
-       ORDER BY bo.business_name ASC`
-    );
-    
-    // Convert bigint IDs to numbers
-    const businessOwners = result.rows.map(row => ({
-      ...row,
+    const { data, error } = await supabase
+      .from('business_owners')
+      .select(`
+        business_id,
+        user_id,
+        phone_number,
+        zip_code,
+        business_name,
+        service_category,
+        users!business_owners_user_id_fkey(email, user_type)
+      `)
+      .eq('users.user_type', 'business_owner')
+      .order('business_name', { ascending: true });
+    // Convert bigint IDs to numbers and flatten structure
+    const businessOwners = (data || []).map((row: any) => ({
       business_id: parseInt(row.business_id, 10),
-      user_id: parseInt(row.user_id, 10)
+      user_id: parseInt(row.user_id, 10),
+      phone_number: row.phone_number,
+      zip_code: row.zip_code,
+      business_name: row.business_name,
+      service_category: row.service_category,
+      email: Array.isArray(row.users) ? row.users[0]?.email : row.users?.email
     }));
     
     res.json(businessOwners);
@@ -70,21 +84,25 @@ router.get("/business-owner/info/:userId", async (req: Request, res: Response) =
   }
 
   try {
-    const result = await pool.query(
-      `SELECT * FROM business_owners WHERE user_id = $1`,
-      [id]
-    );
+    const { data, error } = await supabase
+      .from('business_owners')
+      .select('*')
+      .eq('user_id', id)
+      .single();
 
-    if (result.rows.length === 0) {
-      console.log(`[business-owner-info] No business owner found for user_id: ${id}`);
-      return res.status(404).json({ error: "Business owner not found" });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log(`[business-owner-info] No business owner found for user_id: ${id}`);
+        return res.status(404).json({ error: "Business owner not found" });
+      }
+      throw error;
     }
 
     // Convert bigint IDs to numbers
     const businessOwner = {
-      ...result.rows[0],
-      user_id: parseInt(result.rows[0].user_id, 10),
-      business_id: parseInt(result.rows[0].business_id, 10)
+      ...data,
+      user_id: parseInt(data.user_id, 10),
+      business_id: parseInt(data.business_id, 10)
     };
 
     console.log(`[business-owner-info] Successfully fetched business owner:`, businessOwner);
@@ -105,34 +123,38 @@ router.get("/business-owner/:userId", async (req: Request, res: Response) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid user IDs" });
 
   try {
-    const result = await pool.query(
-      `SELECT
-        m.id,
-        m.sender_id,
-        m.receiver_id,
-        m.message_text,
-        m.is_read,
-        m.created_at,
-        sender_bo.business_name AS sender_name,
-        sender_u.email AS sender_email,
-        receiver_bo.business_name AS receiver_name,
-        receiver_u.email AS receiver_email
-      FROM messages m
-      LEFT JOIN users sender_u ON m.sender_id = sender_u.user_id
-      LEFT JOIN users receiver_u ON m.receiver_id = receiver_u.user_id
-      LEFT JOIN business_owners sender_bo ON m.sender_id = sender_bo.user_id
-      LEFT JOIN business_owners receiver_bo ON m.receiver_id = receiver_bo.user_id
-      WHERE m.receiver_id = $1 OR m.sender_id = $1
-      ORDER BY m.created_at ASC`,
-      [id]
-    );
-    
-    // Convert bigint IDs to numbers
-    const messages = result.rows.map(row => ({
-      ...row,
+    const { data, error } = await supabase
+      .from('messages')
+      .select(`
+        id,
+        sender_id,
+        receiver_id,
+        message_text,
+        is_read,
+        created_at,
+        sender:users!messages_sender_id_fkey(
+          email,
+          business_owners(business_name)
+        ),
+        receiver:users!messages_receiver_id_fkey(
+          email,
+          business_owners(business_name)
+        )
+      `)
+      .or(`receiver_id.eq.${id},sender_id.eq.${id}`)
+      .order('created_at', { ascending: true });
+    // Convert bigint IDs to numbers and flatten structure
+    const messages = (data || []).map((row: any) => ({
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
-      receiver_id: parseInt(row.receiver_id, 10)
+      receiver_id: parseInt(row.receiver_id, 10),
+      message_text: row.message_text,
+      is_read: row.is_read,
+      created_at: row.created_at,
+      sender_name: row.sender?.business_owners?.[0]?.business_name,
+      sender_email: row.sender?.email,
+      receiver_name: row.receiver?.business_owners?.[0]?.business_name,
+      receiver_email: row.receiver?.email
     }));
     
     res.json(messages);
@@ -160,64 +182,80 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
   try {
     console.log(`[API] Fetching conversations for user ${id}`);
     
-    // Get all unique conversations for this user
-    const result = await pool.query(
-      `WITH conversation_users AS (
-        SELECT DISTINCT
-          CASE 
-            WHEN m.sender_id = $1 THEN m.receiver_id 
-            ELSE m.sender_id 
-          END as other_user_id
-        FROM messages m
-        WHERE m.sender_id = $1 OR m.receiver_id = $1
-      )
-      SELECT 
-        cu.other_user_id,
-        COALESCE(bo.business_name, 'Unknown') as contact_name,
-        bo.business_id,
-        u.user_type,
-        u.email,
-        (
-          SELECT m2.message_text 
-          FROM messages m2 
-          WHERE (m2.sender_id = $1 AND m2.receiver_id = cu.other_user_id) 
-             OR (m2.receiver_id = $1 AND m2.sender_id = cu.other_user_id)
-          ORDER BY m2.created_at DESC 
-          LIMIT 1
-        ) as last_message,
-        (
-          SELECT m2.created_at 
-          FROM messages m2 
-          WHERE (m2.sender_id = $1 AND m2.receiver_id = cu.other_user_id) 
-             OR (m2.receiver_id = $1 AND m2.sender_id = cu.other_user_id)
-          ORDER BY m2.created_at DESC 
-          LIMIT 1
-        ) as last_message_time,
-        (
-          SELECT COUNT(*) 
-          FROM messages m2 
-          WHERE m2.receiver_id = $1 
-            AND m2.sender_id = cu.other_user_id
-            AND m2.is_read = false
-        ) as unread_count
-      FROM conversation_users cu
-      JOIN users u ON cu.other_user_id = u.user_id
-      LEFT JOIN business_owners bo ON u.user_id = bo.user_id
-      ORDER BY last_message_time DESC NULLS LAST`,
-      [id]
-    );
+    // Get all messages for this user
+    const { data: allMessages, error: messagesError } = await supabase
+      .from('messages')
+      .select('sender_id, receiver_id, message_text, created_at')
+      .or(`sender_id.eq.${id},receiver_id.eq.${id}`)
+      .order('created_at', { ascending: false });
+    
+    if (messagesError) throw messagesError;
 
-    console.log(`[API] Found ${result.rows.length} conversations for user ${id}`);
+    // Get unique conversation partners
+    const conversationUserIds = new Set<number>();
+    (allMessages || []).forEach((msg: any) => {
+      const otherId = msg.sender_id === id ? msg.receiver_id : msg.sender_id;
+      conversationUserIds.add(otherId);
+    });
+
+    if (conversationUserIds.size === 0) {
+      return res.json([]);
+    }
+
+    // Fetch user and business owner details for all conversation partners
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select(`
+        user_id,
+        email,
+        user_type,
+        business_owners!business_owners_user_id_fkey(business_id, business_name)
+      `)
+      .in('user_id', Array.from(conversationUserIds));
     
-    // Convert bigint IDs to numbers
-    const conversations = result.rows.map(row => ({
-      ...row,
-      other_user_id: parseInt(row.other_user_id, 10),
-      business_id: row.business_id ? parseInt(row.business_id, 10) : null,
-      unread_count: parseInt(row.unread_count, 10)
-    }));
+    if (usersError) throw usersError;
+
+    // Get unread counts for each conversation
+    const { data: unreadMessages, error: unreadError } = await supabase
+      .from('messages')
+      .select('sender_id')
+      .eq('receiver_id', id)
+      .eq('is_read', false);
     
-    // Log first conversation for debugging
+    if (unreadError) throw unreadError;
+
+    const unreadCounts: Record<number, number> = {};
+    (unreadMessages || []).forEach((msg: any) => {
+      unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
+    });
+
+    // Build conversations array
+    const conversations = (users || []).map((user: any) => {
+      const userMessages = (allMessages || []).filter((msg: any) => 
+        (msg.sender_id === id && msg.receiver_id === user.user_id) ||
+        (msg.receiver_id === id && msg.sender_id === user.user_id)
+      );
+      
+      const lastMessage = userMessages[0]; // Already sorted DESC
+
+      return {
+        other_user_id: parseInt(user.user_id, 10),
+        contact_name: user.business_owners?.[0]?.business_name || 'Unknown',
+        business_id: user.business_owners?.[0]?.business_id ? parseInt(user.business_owners[0].business_id, 10) : null,
+        user_type: user.user_type,
+        email: user.email,
+        last_message: lastMessage?.message_text || null,
+        last_message_time: lastMessage?.created_at || null,
+        unread_count: unreadCounts[user.user_id] || 0
+      };
+    }).sort((a, b) => {
+      if (!a.last_message_time) return 1;
+      if (!b.last_message_time) return -1;
+      return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
+    });
+
+    console.log(`[API] Found ${conversations.length} conversations for user ${id}`);
+    
     if (conversations.length > 0) {
       console.log(`[API] Sample conversation:`, conversations[0]);
     }
@@ -254,41 +292,41 @@ router.get("/:currentUserId/:otherUserId", async (req: Request, res: Response) =
 
   try {
     // First, fetch all messages between the two users
-    const result = await pool.query(
-      `SELECT 
-        m.*,
-        CASE 
-          WHEN m.sender_id != $1 THEN 
-            COALESCE(bo.business_name, 'Unknown')
-          ELSE NULL 
-        END as sender_name
-       FROM messages m
-       LEFT JOIN business_owners bo ON m.sender_id = bo.user_id
-       WHERE (sender_id = $1 AND receiver_id = $2)
-          OR (sender_id = $2 AND receiver_id = $1)
-       ORDER BY created_at ASC`,
-      [currentId, otherId]
-    );
+    const { data, error } = await supabase
+      .from('messages')
+      .select(`
+        *,
+        sender:users!messages_sender_id_fkey(
+          business_owners(business_name)
+        )
+      `)
+      .or(`and(sender_id.eq.${currentId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${currentId})`)
+      .order('created_at', { ascending: true });
 
-    console.log(`Found ${result.rows.length} messages`);
+    if (error) throw error;
+
+    console.log(`Found ${data?.length || 0} messages`);
 
     // Then mark messages as read (messages sent TO the current user FROM the other user)
-    const markReadResult = await pool.query(
-      `UPDATE messages
-       SET is_read = true
-       WHERE receiver_id = $1 AND sender_id = $2 AND is_read = false
-       RETURNING id`,
-      [currentId, otherId]
-    );
+    const { data: markedMessages, error: markError } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('receiver_id', currentId)
+      .eq('sender_id', otherId)
+      .eq('is_read', false)
+      .select('id');
 
-    console.log(`Marked ${markReadResult.rows.length} messages as read`);
+    if (markError) throw markError;
 
-    // Convert bigint IDs to numbers
-    const messages = result.rows.map(row => ({
+    console.log(`Marked ${markedMessages?.length || 0} messages as read`);
+
+    // Convert bigint IDs to numbers and add sender_name
+    const messages = (data || []).map((row: any) => ({
       ...row,
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
-      receiver_id: parseInt(row.receiver_id, 10)
+      receiver_id: parseInt(row.receiver_id, 10),
+      sender_name: row.sender_id !== currentId ? (row.sender?.business_owners?.[0]?.business_name || 'Unknown') : null
     }));
 
     res.json(messages);
@@ -308,18 +346,26 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await pool.query(
-      `INSERT INTO messages (sender_id, receiver_id, message_text, is_read, created_at)
-       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [sender_id, receiver_id, message_text, false]
-    );
+    const { data, error } = await supabase
+      .from('messages')
+      .insert([{
+        sender_id,
+        receiver_id,
+        message_text,
+        is_read: false,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
 
     // Convert bigint IDs to numbers
     const message = {
-      ...result.rows[0],
-      id: parseInt(result.rows[0].id, 10),
-      sender_id: parseInt(result.rows[0].sender_id, 10),
-      receiver_id: parseInt(result.rows[0].receiver_id, 10)
+      ...data,
+      id: parseInt(data.id, 10),
+      sender_id: parseInt(data.sender_id, 10),
+      receiver_id: parseInt(data.receiver_id, 10)
     };
 
     res.status(201).json(message);
@@ -348,22 +394,22 @@ router.put("/mark-read", async (req: Request, res: Response) => {
   console.log(`[mark-read] Marking ${message_ids.length} messages as read for user ${userId}`);
 
   try {
-    const result = await pool.query(
-      `UPDATE messages
-       SET is_read = true
-       WHERE id = ANY($1::int[])
-         AND receiver_id = $2
-         AND is_read = false
-       RETURNING id`,
-      [message_ids, userId]
-    );
+    const { data, error } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .in('id', message_ids)
+      .eq('receiver_id', userId)
+      .eq('is_read', false)
+      .select('id');
 
-    console.log(`[mark-read] Successfully marked ${result.rows.length} messages as read`);
+    if (error) throw error;
+
+    console.log(`[mark-read] Successfully marked ${data?.length || 0} messages as read`);
     
     res.json({ 
       success: true, 
-      marked_count: result.rows.length,
-      message_ids: result.rows.map(row => parseInt(row.id, 10))
+      marked_count: data?.length || 0,
+      message_ids: (data || []).map((row: any) => parseInt(row.id, 10))
     });
   } catch (err) {
     console.error("[mark-read] Error marking messages as read:", err);

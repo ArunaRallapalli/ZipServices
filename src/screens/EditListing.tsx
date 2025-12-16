@@ -1,5 +1,5 @@
 /**
- * EditServicePostScreen Component
+ * EditListing Component
  * 
  * This screen allows users to edit their existing service listings/posts.
  * It loads the current post data, displays it in editable form fields, validates inputs,
@@ -7,18 +7,20 @@
  * 
  * Features:
  * - Fetches existing post data by postId from route parameters
+ * - Dynamically loads service categories from the API
  * - Editable fields: post type, title, description, category, price, contact info, zip code
  * - Real-time form validation with error messages
  * - Phone number auto-formatting (###-###-####)
  * - Character counter for description field (500 char limit)
  * - Post type toggle: "Offering Service" vs "Requesting Service"
- * - Dropdown picker for service categories
+ * - Dropdown picker for service categories (loaded from database)
  * - Required field indicators (*)
- * - Loading state while fetching post data
+ * - Loading state while fetching post data and categories
  * - Saving state with disabled form during save operation
  * - Success/error alerts for save operations
  * - Cancel button to go back without saving
  * - Keyboard-aware scrolling for better UX
+ * - Fallback categories if API fails
  */
 
 import React, { useState, useEffect } from "react";
@@ -30,11 +32,12 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-  Alert,
-  ActivityIndicator,
+    ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { createResponsiveStyles } from '../Utils/globalStyles';
+import { Alert } from "../Utils/Alert";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -43,8 +46,8 @@ import API_URL from "../config/apiConfig";
 import { Picker } from "@react-native-picker/picker";
 
 // Navigation type definitions for type safety
-type EditServicePostNavProp = NativeStackNavigationProp<RootStackParamList, "EditListing">;
-type EditServicePostRouteProp = RouteProp<RootStackParamList, "EditListing">;
+type EditListingNavProp = NativeStackNavigationProp<RootStackParamList, "EditListing">;
+type EditListingRouteProp = RouteProp<RootStackParamList, "EditListing">;
 
 // ServicePost interface: represents the structure of a service post
 interface ServicePost {
@@ -63,36 +66,24 @@ interface ServicePost {
   state?: string;
 }
 
-// Available service categories for the dropdown picker
-const serviceCategories = [
-  "Cleaning",
-  "Plumbing",
-  "Electrical",
-  "Landscaping",
-  "Home Repair",
-  "Pet Care",
-  "Moving",
-  "Tutoring",
-  "Photography",
-  "Catering",
-  "Beauty",
-  "Decoration",
-  "Tailoring",
-  "Other",
-];
-
-const EditServicePostScreen: React.FC = () => {
-  const navigation = useNavigation<EditServicePostNavProp>();
-  const route = useRoute<EditServicePostRouteProp>();
+const EditListing: React.FC = () => {
+  const navigation = useNavigation<EditListingNavProp>();
+  const route = useRoute<EditListingRouteProp>();
+  
+  console.log("EditListing screen mounted");
+  console.log("Route params:", route.params);
   
   // Extract postId from route parameters - used to fetch and update the specific post
-  const { postId } = route.params;
+  const { postId } = route.params || {};
 
   // State: Loading indicator while fetching post data from backend
   const [loading, setLoading] = useState(true);
   
   // State: Saving indicator while updating post data
   const [saving, setSaving] = useState(false);
+  
+  // State: Service categories fetched from API
+  const [serviceCategories, setServiceCategories] = useState<string[]>([]);
   
   // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
@@ -108,11 +99,81 @@ const EditServicePostScreen: React.FC = () => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   /**
-   * Effect: Fetch post data when component mounts or postId changes
+   * Effect: Fetch categories and post data when component mounts
    */
   useEffect(() => {
-    fetchPostData();
+    console.log("useEffect triggered with postId:", postId);
+    if (postId) {
+      // Fetch both categories and post data in parallel
+      Promise.all([fetchServiceCategories(), fetchPostData()]);
+    } else {
+      console.error("No postId provided in route params");
+      Alert.alert("Error", "No post ID provided", [
+        { text: "OK", onPress: () => navigation.goBack() }
+      ]);
+      setLoading(false);
+    }
   }, [postId]);
+
+  /**
+   * Fetch available service categories from the API
+   */
+  const fetchServiceCategories = async () => {
+    try {
+      console.log("Fetching service categories from API...");
+      const response = await fetch(`${API_URL}/api/service-categories`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch categories: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Received categories:", data);
+      
+      if (data.success && Array.isArray(data.categories)) {
+        setServiceCategories(data.categories);
+        console.log(`✅ Loaded ${data.categories.length} categories`);
+      } else {
+        // Fallback categories if API fails
+        console.warn("Invalid category data, using fallback categories");
+        setServiceCategories([
+          "Cleaning",
+          "Plumbing",
+          "Electrical",
+          "Landscaping",
+          "Home Repair",
+          "Pet Care",
+          "Moving",
+          "Tutoring",
+          "Photography",
+          "Catering",
+          "Beauty",
+          "Decoration",
+          "Tailoring",
+          "Other",
+        ]);
+      }
+    } catch (error) {
+      console.error("Error fetching service categories:", error);
+      // Use fallback categories on error
+      setServiceCategories([
+        "Cleaning",
+        "Plumbing",
+        "Electrical",
+        "Landscaping",
+        "Home Repair",
+        "Pet Care",
+        "Moving",
+        "Tutoring",
+        "Photography",
+        "Catering",
+        "Beauty",
+        "Decoration",
+        "Tailoring",
+        "Other",
+      ]);
+    }
+  };
 
   /**
    * Fetch the existing post data from the backend by postId
@@ -120,20 +181,28 @@ const EditServicePostScreen: React.FC = () => {
    */
   const fetchPostData = async () => {
     try {
+      console.log("Fetching post data for ID:", postId);
       setLoading(true);
       
       // API call to get post data by ID
-      const response = await fetch(`${API_URL}/api/service-posts/${postId}`);
+      const apiUrl = `${API_URL}/api/service-posts/${postId}`;
+      console.log("Fetching from URL:", apiUrl);
+      
+      const response = await fetch(apiUrl);
+      
+      console.log("Response status:", response.status);
       
       if (!response.ok) {
-        throw new Error("Failed to fetch post data");
+        throw new Error(`Failed to fetch post data: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("Received data:", data);
       
       // Populate form fields if data is successfully retrieved
       if (data.success && data.post) {
         const post: ServicePost = data.post;
+        console.log("Setting form fields with post data");
         setPostType(post.post_type as "offer" | "request");
         setTitle(post.title || "");
         setDescription(post.description || "");
@@ -142,11 +211,19 @@ const EditServicePostScreen: React.FC = () => {
         setPhoneNumber(post.phone_number || "");
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
+        console.log("Form fields set successfully");
+      } else {
+        throw new Error("Invalid data format received from server");
       }
     } catch (error) {
       console.error("Error fetching post data:", error);
-      Alert.alert("Error", "Failed to load post data. Please try again.");
-      navigation.goBack(); // Go back if fetch fails
+      Alert.alert(
+        "Error", 
+        `Failed to load post data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        [
+          { text: "OK", onPress: () => navigation.goBack() }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -196,6 +273,8 @@ const EditServicePostScreen: React.FC = () => {
    * Validates form, then sends PUT request to update the post
    */
   const handleSave = async () => {
+    console.log("Save button pressed");
+    
     // Validate form before saving
     if (!validateForm()) {
       Alert.alert("Validation Error", "Please fix the errors before saving.");
@@ -204,6 +283,7 @@ const EditServicePostScreen: React.FC = () => {
 
     try {
       setSaving(true);
+      console.log("Saving post with ID:", postId);
 
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
@@ -217,6 +297,8 @@ const EditServicePostScreen: React.FC = () => {
         post_type: postType,
       };
 
+      console.log("Update data:", updateData);
+
       // API call to update the post
       const response = await fetch(`${API_URL}/api/service-posts/${postId}`, {
         method: "PUT",
@@ -226,11 +308,16 @@ const EditServicePostScreen: React.FC = () => {
         body: JSON.stringify(updateData),
       });
 
+      console.log("Update response status:", response.status);
+
       if (!response.ok) {
-        throw new Error("Failed to update post");
+        const errorText = await response.text();
+        console.error("Update error response:", errorText);
+        throw new Error(`Failed to update post: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("Update response data:", data);
 
       // Show success message and navigate back if update successful
       if (data.success) {
@@ -245,7 +332,10 @@ const EditServicePostScreen: React.FC = () => {
       }
     } catch (error) {
       console.error("Error updating post:", error);
-      Alert.alert("Error", "Failed to update listing. Please try again.");
+      Alert.alert(
+        "Error", 
+        `Failed to update listing: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setSaving(false);
     }
@@ -269,6 +359,29 @@ const EditServicePostScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Handle cancel button press
+   */
+  const handleCancel = () => {
+    console.log("Cancel button pressed");
+    navigation.goBack();
+  };
+
+  // Error boundary: If postId is missing, show error screen
+  if (!postId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#FF6B6B" />
+          <Text style={styles.errorText}>Invalid Post ID</Text>
+          <TouchableOpacity style={styles.errorButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.errorButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // Loading state: Show spinner while fetching post data
   if (loading) {
     return (
@@ -291,7 +404,7 @@ const EditServicePostScreen: React.FC = () => {
       >
         {/* Header with back button and title */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleCancel} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Listing</Text>
@@ -316,6 +429,7 @@ const EditServicePostScreen: React.FC = () => {
                   postType === "offer" && styles.postTypeButtonActive,
                 ]}
                 onPress={() => setPostType("offer")}
+                disabled={saving}
               >
                 <Ionicons
                   name="briefcase-outline"
@@ -328,7 +442,7 @@ const EditServicePostScreen: React.FC = () => {
                     postType === "offer" && styles.postTypeTextActive,
                   ]}
                 >
-                  Offering Service
+                   Offering Service
                 </Text>
               </TouchableOpacity>
               {/* Requesting Service button */}
@@ -338,6 +452,7 @@ const EditServicePostScreen: React.FC = () => {
                   postType === "request" && styles.postTypeButtonActive,
                 ]}
                 onPress={() => setPostType("request")}
+                disabled={saving}
               >
                 <Ionicons
                   name="search-outline"
@@ -367,6 +482,7 @@ const EditServicePostScreen: React.FC = () => {
               value={title}
               onChangeText={setTitle}
               maxLength={100}
+              editable={!saving}
             />
             {/* Show error message if validation fails */}
             {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
@@ -382,9 +498,10 @@ const EditServicePostScreen: React.FC = () => {
                 selectedValue={serviceCategory}
                 onValueChange={setServiceCategory}
                 style={styles.picker}
+                enabled={!saving}
               >
                 <Picker.Item label="Select a category..." value="" />
-                {/* Map through all available categories */}
+                {/* Map through dynamically loaded categories */}
                 {serviceCategories.map((category) => (
                   <Picker.Item key={category} label={category} value={category} />
                 ))}
@@ -407,6 +524,7 @@ const EditServicePostScreen: React.FC = () => {
               multiline
               numberOfLines={4}
               maxLength={500}
+              editable={!saving}
             />
             {/* Character counter showing current/max length */}
             <Text style={styles.charCount}>{description.length}/500</Text>
@@ -423,6 +541,7 @@ const EditServicePostScreen: React.FC = () => {
               value={priceRange}
               onChangeText={setPriceRange}
               maxLength={50}
+              editable={!saving}
             />
           </View>
 
@@ -439,6 +558,7 @@ const EditServicePostScreen: React.FC = () => {
               keyboardType="email-address"
               autoCapitalize="none"
               maxLength={100}
+              editable={!saving}
             />
             {/* Show error message if validation fails */}
             {errors.contactEmail && (
@@ -456,6 +576,7 @@ const EditServicePostScreen: React.FC = () => {
               onChangeText={(text) => setPhoneNumber(formatPhoneNumber(text))}
               keyboardType="phone-pad"
               maxLength={12}
+              editable={!saving}
             />
             {/* Show error message if validation fails */}
             {errors.phoneNumber && (
@@ -473,6 +594,7 @@ const EditServicePostScreen: React.FC = () => {
               onChangeText={setZipCode}
               keyboardType="number-pad"
               maxLength={5}
+              editable={!saving}
             />
             {/* Show error message if validation fails */}
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
@@ -498,7 +620,7 @@ const EditServicePostScreen: React.FC = () => {
           {/* Cancel Button - Navigate back without saving */}
           <TouchableOpacity
             style={styles.cancelButton}
-            onPress={() => navigation.goBack()}
+            onPress={handleCancel}
             disabled={saving}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -510,7 +632,7 @@ const EditServicePostScreen: React.FC = () => {
 };
 
 // Styles: All styling for the component
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({ 
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -528,6 +650,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    gap: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#FF6B6B",
+    textAlign: "center",
+  },
+  errorButton: {
+    backgroundColor: "#4A90E2",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+  },
+  errorButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   header: {
     backgroundColor: "#4A90E2",
@@ -606,11 +752,6 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
   },
-  errorText: {
-    color: "#FF6B6B",
-    fontSize: 12,
-    marginTop: 5,
-  },
   postTypeContainer: {
     flexDirection: "row",
     gap: 10,
@@ -674,4 +815,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default EditServicePostScreen;
+export default EditListing;

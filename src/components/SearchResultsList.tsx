@@ -15,12 +15,14 @@
  * - Visual indicators for result categories (icons, colors, borders)
  * 
  * RESULT DISPLAY LOGIC:
- * 1. ZIP Code Matches (Local): Services in user's exact ZIP code
- * 2. State Matches (Broader): Services in user's state (excluding duplicates)
- * 3. Empty State: No results found with helpful suggestions
+ * 1. Exact ZIP Code Matches: Services in user's exact ZIP code
+ * 2. Nearby ZIP Matches: Services in neighboring ZIP codes
+ * 3. State Matches (Broader): Services in user's state (excluding duplicates)
+ * 4. Empty State: No results found with helpful suggestions
  * 
  * VISUAL HIERARCHY:
- * - Green banner: Local results found
+ * - Green banner: Exact local results found
+ * - Cyan banner: Nearby ZIP code results
  * - Orange banner: No local results, showing state results
  * - Blue banner: Additional state results after local results
  * - Gray empty state: No results at all
@@ -43,6 +45,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ServiceCard from "./ServiceCard";
+import { createResponsiveStyles } from "../Utils/globalStyles"
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -71,10 +74,12 @@ interface ServicePost {
 
 /**
  * Search results organized by proximity
- * ZIP code matches are prioritized over state matches
+ * Exact and nearby ZIP matches are kept separate
  */
 interface SearchResults {
-  zipCodeMatches: ServicePost[];      // Services in exact ZIP code
+  exactZipMatches: ServicePost[];     // Services in exact ZIP code
+  nearbyZipMatches: ServicePost[];    // Services in nearby ZIP codes
+  zipCodeMatches: ServicePost[];      // Combined exact + nearby (for backward compatibility)
   stateMatches: ServicePost[];        // Services in same state (deduplicated)
   hasZipCodeMatches: boolean;         // Flag: has local results
   hasStateMatches: boolean;           // Flag: has state-wide results
@@ -111,6 +116,13 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   // --------------------------------------------------------------------------
   
   /**
+   * Use the pre-separated exact and nearby matches from searchUtils
+   * No need to filter here - the data comes already separated
+   */
+  const exactZipMatches = searchResults.exactZipMatches;
+  const nearbyZipMatches = searchResults.nearbyZipMatches;
+  
+  /**
    * Check if any results exist (local or state-wide)
    * Used to determine whether to show results or empty state
    */
@@ -145,11 +157,11 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 
   /**
    * Renders the main content area - either results or empty state
-   * Handles three scenarios:
+   * Handles scenarios:
    * 1. No results: Empty state with message
-   * 2. Local results only: ZIP code matches
-   * 3. Mixed results: ZIP code + state matches
-   * 4. State results only: No local, but state matches found
+   * 2. Exact ZIP results: Services in user's exact ZIP code
+   * 3. Nearby ZIP results: Services in neighboring ZIP codes
+   * 4. State results: Broader state-wide matches
    * 
    * @returns Content component based on search results
    */
@@ -176,29 +188,29 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
     }
 
     // --------------------------------------------------------------------------
-    // SCENARIO 2-4: RESULTS FOUND
+    // SCENARIO 2-5: RESULTS FOUND
     // --------------------------------------------------------------------------
     return (
       <>
         {/* --------------------------------------------------------------------
-            SECTION A: LOCAL ZIP CODE MATCHES
-            Shows services in the user's exact ZIP code
+            SECTION A: EXACT ZIP CODE MATCHES
+            Shows services in the user's exact ZIP code only
             Green banner indicates these are the closest/most relevant
         -------------------------------------------------------------------- */}
-        {searchResults.hasZipCodeMatches && (
+        {exactZipMatches.length > 0 && (
           <>
-            {/* Info banner showing count of local services */}
-            <View style={styles.infoContainer}>
-              <Ionicons name="location" size={20} color="#4CAF50" />
-              <Text style={styles.infoText}>
-                Found {searchResults.zipCodeMatches.length} service
-                {searchResults.zipCodeMatches.length !== 1 ? "s" : ""} in your
-                area ({zipCode})
-              </Text>
-            </View>
+            
+            {/* Info banner showing count of exact local services */}
+<View style={styles.infoContainer}>
+  <Ionicons name="location" size={20} color="#4CAF50" />
+  <Text style={styles.infoText}>
+    Found {String(exactZipMatches.length)} service
+    {exactZipMatches.length !== 1 ? "s" : ""} in {zipCode}
+  </Text>
+</View>
 
-            {/* Render each local service as a card */}
-            {searchResults.zipCodeMatches.map((item) => (
+            {/* Render each exact local service as a card */}
+            {exactZipMatches.map((item) => (
               <ServiceCard
                 key={item.post_id}
                 item={item}
@@ -210,7 +222,34 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
         )}
 
         {/* --------------------------------------------------------------------
-            SECTION B: NO LOCAL RESULTS MESSAGE
+            SECTION B: NEARBY ZIP CODE MATCHES
+            Shows services from neighboring ZIP codes (not exact match)
+            Cyan banner indicates these are nearby but in different ZIP codes
+        -------------------------------------------------------------------- */}
+        {nearbyZipMatches.length > 0 && (
+          <>
+            {/* Info banner showing nearby services */}
+            <View style={styles.nearbyResultsContainer}>
+              <Ionicons name="navigate" size={20} color="#00BCD4" />
+              <Text style={styles.nearbyResultsText}>
+                {exactZipMatches.length > 0 ? "Other nearby locations" : "Nearby locations"}
+              </Text>
+            </View>
+
+            {/* Render each nearby service as a card */}
+            {nearbyZipMatches.map((item) => (
+              <ServiceCard
+                key={item.post_id}
+                item={item}
+                isOwnPost={isOwnPost(item.user_id)}
+                onChatPress={onChatPress}
+              />
+            ))}
+          </>
+        )}
+
+        {/* --------------------------------------------------------------------
+            SECTION C: NO LOCAL RESULTS MESSAGE
             Only shown when no ZIP matches but state matches exist
             Orange banner indicates broader search was performed
         -------------------------------------------------------------------- */}
@@ -226,7 +265,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
           )}
 
         {/* --------------------------------------------------------------------
-            SECTION C: ADDITIONAL STATE RESULTS DIVIDER
+            SECTION D: ADDITIONAL STATE RESULTS DIVIDER
             Only shown when BOTH local and state results exist
             Blue banner separates local from broader results
         -------------------------------------------------------------------- */}
@@ -240,7 +279,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
         )}
 
         {/* --------------------------------------------------------------------
-            SECTION D: STATE-WIDE MATCHES
+            SECTION E: STATE-WIDE MATCHES
             Shows services from the broader state area
             These are already deduplicated (no ZIP code duplicates)
         -------------------------------------------------------------------- */}
@@ -290,7 +329,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 // STYLES
 // ============================================================================
 
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
   // Main container - full screen
   container: {
     flex: 1,
@@ -342,7 +381,7 @@ const styles = StyleSheet.create({
   // RESULT BANNER STYLES
   // --------------------------------------------------------------------------
   
-  // Green banner for local ZIP code results
+  // Green banner for exact ZIP code results
   infoContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -356,6 +395,28 @@ const styles = StyleSheet.create({
   
   // Text inside info banner
   infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#333",
+    marginLeft: 10,
+    fontWeight: "500",
+  },
+  
+  // Cyan banner for nearby ZIP code results
+  nearbyResultsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E0F7FA",               // Light cyan background
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    marginTop: 20,                            // Extra spacing above
+    borderLeftWidth: 4,
+    borderLeftColor: "#00BCD4",               // Cyan accent border
+  },
+  
+  // Text inside nearby results banner
+  nearbyResultsText: {
     flex: 1,
     fontSize: 13,
     color: "#333",

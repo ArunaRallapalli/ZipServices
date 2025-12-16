@@ -1,0 +1,10 @@
+[dotenv@17.2.3] injecting env (9) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 POOL.TS Configuration
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PG_HOST: [2600:1f18:2e13:9d20:5832:d5e0:dcff:ea9f]
+PG_DATABASE: postgres
+PG_USER: postgres
+PG_PORT: 5432
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild

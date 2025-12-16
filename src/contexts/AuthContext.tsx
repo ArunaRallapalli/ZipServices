@@ -13,7 +13,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert } from "../Utils/Alert";
 import { useFocusEffect } from '@react-navigation/native';
 
 interface UserInfo {

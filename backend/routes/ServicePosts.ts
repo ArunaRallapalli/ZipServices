@@ -3,8 +3,7 @@
 
 // Import Express types for routing and handling requests/responses
 import { Router, Request, Response } from 'express';
-// Import PostgreSQL database pool for executing queries
-import { Pool } from 'pg';
+import { supabase } from "../config/Supabase";
 
 // Create a new Express router instance
 const router = Router();
@@ -17,8 +16,6 @@ const router = Router();
 //          Returns exact matches first, then nearby matches in Phoenix area if no exact matches
 // ============================================================================
 router.get('/api/service-posts/search', async (req: Request, res: Response): Promise<void> => {
-  // Extract the PostgreSQL connection pool from the request object
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract search parameters from query string
@@ -45,59 +42,52 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
     // Only execute if at least one location parameter is provided
     // ========================================================================
     if (zip_code || city || state) {
-      // Build SQL query with LEFT JOINs to get poster information
-      let exactQuery = `
-        SELECT 
-           sp.id as post_id,
-          sp.*,
-          COALESCE(bo.business_name, c.full_name, u.email) as poster_name,
-          bo.business_name
-        FROM service_posts sp
-        LEFT JOIN users u ON sp.user_id = u.user_id
-        LEFT JOIN customers c ON sp.user_id = c.user_id
-        LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
-        WHERE sp.service_category = $1
-          AND sp.status = 'active'
-      `;
-
-      // Initialize parameters array with service_category as first parameter
-      const exactParams: any[] = [service_category];
-      let paramIndex = 2; // Start at 2 since $1 is already used
+      // Build Supabase query with joins through users
+      let query = supabase
+        .from('service_posts')
+        .select(`
+          *,
+          users!service_posts_user_id_fkey(
+            email,
+            customers(full_name),
+            business_owners(business_name)
+          )
+        `)
+        .eq('service_category', service_category as string)
+        .eq('status', 'active');
 
       // Dynamically add location filters based on provided parameters
-      // This builds the WHERE clause and parameters array dynamically
-      
-      // Add ZIP code filter if provided
       if (zip_code) {
-        exactQuery += ` AND sp.zip_code = $${paramIndex}`;
-        exactParams.push(zip_code);
-        paramIndex++;
+        query = query.eq('zip_code', zip_code as string);
       }
       
-      // Add city filter if provided (case-insensitive)
       if (city) {
-        exactQuery += ` AND LOWER(sp.city) = LOWER($${paramIndex})`;
-        exactParams.push(city);
-        paramIndex++;
+        query = query.ilike('city', city as string);
       }
       
-      // Add state filter if provided (case-insensitive)
       if (state) {
-        exactQuery += ` AND LOWER(sp.state) = LOWER($${paramIndex})`;
-        exactParams.push(state);
-        paramIndex++;
+        query = query.ilike('state', state as string);
       }
 
       // Order by most recent posts first, limit to 50 results
-      exactQuery += ` ORDER BY sp.created_at DESC LIMIT 50`;
+      query = query.order('created_at', { ascending: false }).limit(50);
 
-      // Log the final query and parameters for debugging
-      console.log('📊 Exact match query:', exactQuery);
-      console.log('📊 Exact match params:', exactParams);
+      console.log('📊 Executing exact match query');
 
-      // Execute the query against the database
-      const exactResult = await pool.query(exactQuery, exactParams);
-      exactMatches = exactResult.rows;
+      // Execute the query
+      const { data, error } = await query;
+      
+      if (error) throw error;
+
+      // Map results to include poster_name and id as post_id
+      exactMatches = (data || []).map((post: any) => ({
+        ...post,
+        post_id: post.id,
+        poster_name: post.users?.business_owners?.[0]?.business_name || 
+                     post.users?.customers?.[0]?.full_name || 
+                     post.users?.email,
+        business_name: post.users?.business_owners?.[0]?.business_name
+      }));
 
       console.log(`Found ${exactMatches.length} exact matches`);
     }
@@ -108,32 +98,35 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
     // This provides fallback results when no local matches exist
     // ========================================================================
     if (exactMatches.length === 0) {
-      const nearbyQuery = `
-        SELECT 
-           sp.id as post_id,
-          sp.*,
-          COALESCE(bo.business_name, c.full_name, u.email) as poster_name,
-          bo.business_name
-        FROM service_posts sp
-        LEFT JOIN users u ON sp.user_id = u.user_id
-        LEFT JOIN customers c ON sp.user_id = c.user_id
-        LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
-        WHERE sp.service_category = $1
-          AND sp.status = 'active'
-          AND (
-            LOWER(sp.city) LIKE '%phoenix%'
-            OR LOWER(sp.state) = 'az'
-            OR LOWER(sp.state) = 'arizona'
+      console.log('📊 Executing nearby match query');
+
+      const { data, error } = await supabase
+        .from('service_posts')
+        .select(`
+          *,
+          users!service_posts_user_id_fkey(
+            email,
+            customers(full_name),
+            business_owners(business_name)
           )
-        ORDER BY sp.created_at DESC
-        LIMIT 50
-      `;
+        `)
+        .eq('service_category', service_category as string)
+        .eq('status', 'active')
+        .or('city.ilike.%phoenix%,state.ilike.az,state.ilike.arizona')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-      console.log('📊 Nearby match query:', nearbyQuery);
+      if (error) throw error;
 
-      // Execute nearby search with only service_category as parameter
-      const nearbyResult = await pool.query(nearbyQuery, [service_category]);
-      nearbyMatches = nearbyResult.rows;
+      // Map results to include poster_name and id as post_id
+      nearbyMatches = (data || []).map((post: any) => ({
+        ...post,
+        post_id: post.id,
+        poster_name: post.users?.business_owners?.[0]?.business_name || 
+                     post.users?.customers?.[0]?.full_name || 
+                     post.users?.email,
+        business_name: post.users?.business_owners?.[0]?.business_name
+      }));
 
       console.log(`Found ${nearbyMatches.length} nearby matches`);
     }
@@ -172,7 +165,6 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
 //          Supports filtering by post_type (offer/request)
 // ============================================================================
 router.get('/api/service-posts/all', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Parse pagination and filter parameters from query string
@@ -183,73 +175,58 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
 
     console.log('📋 Fetching all service posts, limit:', limit, 'offset:', offset);
 
-    // Build base query to fetch all active posts with poster information
-    let query = `
-      SELECT 
-        sp.id as post_id,
-        sp.*,
-        COALESCE(bo.business_name, c.full_name, u.email) as poster_name,
-        bo.business_name
-      FROM service_posts sp
-      LEFT JOIN users u ON sp.user_id = u.user_id
-      LEFT JOIN customers c ON sp.user_id = c.user_id
-      LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
-      WHERE sp.status = 'active'
-    `;
-
-    // Initialize parameters array and parameter index counter
-    const params: (string | number)[] = [];
-    let paramIndex = 1;
+    // Build Supabase query
+    let query = supabase
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          customers(full_name),
+          business_owners(business_name)
+        )
+      `, { count: 'exact' })
+      .eq('status', 'active');
 
     // Optionally filter by post_type if provided and valid
     if (post_type && (post_type === 'offer' || post_type === 'request')) {
-      query += ` AND sp.post_type = $${paramIndex}`;
-      params.push(post_type);
-      paramIndex++;
+      query = query.eq('post_type', post_type);
     }
 
     // Add ordering and pagination
-    // Most recent posts first, with limit and offset for pagination
-    query += ` ORDER BY sp.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(limit, offset);
+    query = query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    console.log('📊 All listings query:', query);
-    console.log('📊 Query params:', params);
+    console.log('📊 Executing all listings query');
 
-    // Execute the main query
-    const result = await pool.query(query, params);
-
-    console.log(`✅ Found ${result.rows.length} active service posts`);
-
-    // ========================================================================
-    // Get total count for pagination metadata
-    // This helps the client know if there are more pages to load
-    // ========================================================================
-    let countQuery = `
-      SELECT COUNT(*) as total
-      FROM service_posts
-      WHERE status = 'active'
-    `;
-    const countParams: (string | number)[] = [];
+    // Execute the query
+    const { data, error, count } = await query;
     
-    // Apply same post_type filter to count query if used
-    if (post_type && (post_type === 'offer' || post_type === 'request')) {
-      countQuery += ' AND post_type = $1';
-      countParams.push(post_type);
-    }
-    
-    // Execute count query
-    const countResult = await pool.query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].total);
+    if (error) throw error;
+
+    // Map results to include poster_name and id as post_id
+    const posts = (data || []).map((post: any) => ({
+      ...post,
+      post_id: post.id,
+      poster_name: post.users?.business_owners?.[0]?.business_name || 
+                   post.users?.customers?.[0]?.full_name || 
+                   post.users?.email,
+      business_name: post.users?.business_owners?.[0]?.business_name
+    }));
+
+    console.log(`✅ Found ${posts.length} active service posts`);
+
+    const total = count || 0;
 
     // Return posts with pagination metadata
     res.json({
       success: true,
-      posts: result.rows,
+      posts: posts,
       total: total,
       limit: limit,
       offset: offset,
-      hasMore: (offset + result.rows.length) < total // Flag indicating if more pages exist
+      hasMore: (offset + posts.length) < total // Flag indicating if more pages exist
     });
 
   } catch (error: unknown) {
@@ -270,7 +247,6 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
 //          Used for "My Posts" functionality
 // ============================================================================
 router.get('/api/service-posts/user/:userId', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract userId from URL parameters
@@ -278,47 +254,50 @@ router.get('/api/service-posts/user/:userId', async (req: Request, res: Response
 
     console.log('📋 Fetching service posts for user:', userId);
 
-    // Query to get all posts for a specific user with computed is_active field
-    const query = `
-      SELECT 
-        sp.id,
-        sp.user_id,
-        sp.poster_type,
-        sp.post_type,
-        sp.title,
-        sp.description,
-        sp.service_category,
-        sp.price_range,
-        sp.phone_number,
-        sp.contact_email,
-        sp.zip_code,
-        sp.city,
-        sp.state,
-        sp.status,
-        sp.created_at,
-        sp.updated_at,
-        CASE 
-          WHEN sp.status = 'active' THEN true 
-          ELSE false 
-        END as is_active,
-        COALESCE(bo.business_name, u.email) as poster_name,
-        bo.business_name
-      FROM service_posts sp
-      LEFT JOIN users u ON sp.user_id = u.user_id
-      LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
-      WHERE sp.user_id = $1
-      ORDER BY sp.created_at DESC
-    `;
+    // Execute query
+    const { data, error } = await supabase
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          business_owners(business_name)
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-    // Execute query with userId parameter
-    const result = await pool.query(query, [userId]);
+    if (error) throw error;
 
-    console.log(`✅ Found ${result.rows.length} posts for user ${userId}`);
+    // Map results and add computed is_active field
+    const posts = (data || []).map((post: any) => ({
+      id: post.id,
+      user_id: post.user_id,
+      poster_type: post.poster_type,
+      post_type: post.post_type,
+      title: post.title,
+      description: post.description,
+      service_category: post.service_category,
+      price_range: post.price_range,
+      phone_number: post.phone_number,
+      contact_email: post.contact_email,
+      zip_code: post.zip_code,
+      city: post.city,
+      state: post.state,
+      status: post.status,
+      created_at: post.created_at,
+      updated_at: post.updated_at,
+      is_active: post.status === 'active',
+      poster_name: post.users?.business_owners?.[0]?.business_name || post.users?.email,
+      business_name: post.users?.business_owners?.[0]?.business_name
+    }));
+
+    console.log(`✅ Found ${posts.length} posts for user ${userId}`);
 
     res.json({
       success: true,
-      posts: result.rows,
-      total: result.rows.length
+      posts: posts,
+      total: posts.length
     });
 
   } catch (error: unknown) {
@@ -332,49 +311,12 @@ router.get('/api/service-posts/user/:userId', async (req: Request, res: Response
 });
 
 // ============================================================================
-// ENDPOINT: Get service categories
-// Method: GET
-// Path: /api/service-categories
-// Purpose: Retrieve list of all unique service categories from active posts
-//          Used to populate category dropdowns in the UI
-// ============================================================================
-router.get('/api/service-categories', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
-  
-  try {
-    // Query to get all distinct categories from active posts, sorted alphabetically
-    const result = await pool.query(`
-      SELECT DISTINCT service_category 
-      FROM service_posts 
-      WHERE status = 'active'
-      ORDER BY service_category
-    `);
-
-    console.log(`✅ Found ${result.rows.length} service categories`);
-
-    res.json({
-      success: true,
-      categories: result.rows.map(row => ({ name: row.service_category }))
-    });
-
-  } catch (error: unknown) {
-    console.error('❌ Error fetching service categories:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch service categories',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// ============================================================================
 // ENDPOINT: Create new service post
 // Method: POST
 // Path: /api/service-posts
 // Purpose: Create a new service listing (offer or request)
 // ============================================================================
 router.post('/api/service-posts', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract post data from request body
@@ -435,8 +377,9 @@ router.post('/api/service-posts', async (req: Request, res: Response): Promise<v
     }
 
     // Insert new post into database
-    const insertQuery = `
-      INSERT INTO service_posts (
+    const { data: newPost, error } = await supabase
+      .from('service_posts')
+      .insert([{
         user_id,
         poster_type,
         post_type,
@@ -449,36 +392,18 @@ router.post('/api/service-posts', async (req: Request, res: Response): Promise<v
         zip_code,
         city,
         state,
-        status,
-        created_at,
-        updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active', NOW(), NOW())
-      RETURNING *
-    `;
+        status: 'active'
+      }])
+      .select()
+      .single();
 
-    const values = [
-      user_id,
-      poster_type,
-      post_type,
-      title,
-      description,
-      service_category,
-      price_range,
-      phone_number,
-      contact_email,
-      zip_code,
-      city,
-      state
-    ];
+    if (error) throw error;
 
-    // Execute the insert query
-    const result = await pool.query(insertQuery, values);
-
-    console.log('✅ Service post created successfully with ID:', result.rows[0].id);
+    console.log('✅ Service post created successfully with ID:', newPost.id);
 
     res.status(201).json({
       success: true,
-      post: result.rows[0],
+      post: newPost,
       message: 'Service post created successfully'
     });
 
@@ -499,73 +424,73 @@ router.post('/api/service-posts', async (req: Request, res: Response): Promise<v
 // Purpose: Retrieve complete user profile including customer and business info
 // ============================================================================
 router.get('/api/users/:userId/profile', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     const { userId } = req.params;
 
     console.log('👤 Fetching profile for user:', userId);
 
-    // Query joins users table with both customers and business_owners tables
-    // This allows retrieving profile data regardless of user type
-    const query = `
-      SELECT 
-        u.user_id,
-        u.email,
-        u.user_type,
-        u.created_at,
-        c.full_name as customer_name,
-        c.phone_number as customer_phone,
-        c.zip_code as customer_zip,
-        c.city as customer_city,
-        c.state as customer_state,
-        bo.business_name,
-        bo.phone_number as business_phone,
-        bo.zip_code as business_zip,
-        bo.city as business_city,
-        bo.state as business_state
-      FROM users u
-      LEFT JOIN customers c ON u.user_id = c.user_id
-      LEFT JOIN business_owners bo ON u.user_id = bo.user_id
-      WHERE u.user_id = $1
-    `;
+    // Query with joins to get user and profile data
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        user_id,
+        email,
+        user_type,
+        created_at,
+        customers(
+          full_name,
+          phone_number,
+          zip_code,
+          city,
+          state
+        ),
+        business_owners(
+          business_name,
+          phone_number,
+          zip_code,
+          city,
+          state
+        )
+      `)
+      .eq('user_id', userId)
+      .single();
 
-    const result = await pool.query(query, [userId]);
-
-    // Return 404 if user doesn't exist
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-      return;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+      throw error;
     }
-
-    const row = result.rows[0];
 
     // Structure the profile data, only including profiles that exist
     const profile = {
       user: {
-        user_id: row.user_id,
-        email: row.email,
-        user_type: row.user_type,
-        created_at: row.created_at
+        user_id: data.user_id,
+        email: data.email,
+        user_type: data.user_type,
+        created_at: data.created_at
       },
       // Only include customer profile if customer data exists
-      customerProfile: row.customer_name ? {
-        full_name: row.customer_name,
-        phone_number: row.customer_phone,
-        zip_code: row.customer_zip,
-        city: row.customer_city,
-        state: row.customer_state
+      customerProfile: data.customers && data.customers.length > 0 ? {
+        full_name: data.customers[0].full_name,
+        phone_number: data.customers[0].phone_number,
+        zip_code: data.customers[0].zip_code,
+        city: data.customers[0].city,
+        state: data.customers[0].state
       } : null,
       // Only include business profile if business data exists
-      businessProfile: row.business_name ? {
-        business_name: row.business_name,
-        phone_number: row.business_phone,
-        zip_code: row.business_zip,
-        city: row.business_city,
-        state: row.business_state
+      businessProfile: data.business_owners && data.business_owners.length > 0 ? {
+        business_name: data.business_owners[0].business_name,
+        phone_number: data.business_owners[0].phone_number,
+        zip_code: data.business_owners[0].zip_code,
+        city: data.business_owners[0].city,
+        state: data.business_owners[0].state
       } : null
     };
 
@@ -591,7 +516,6 @@ router.get('/api/users/:userId/profile', async (req: Request, res: Response): Pr
 // Purpose: Retrieve detailed information about a specific service post
 // ============================================================================
 router.get('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract postId from URL parameters
@@ -599,51 +523,47 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
 
     console.log('📋 Fetching service post:', postId);
 
-    // Query with JOINs to get post data along with poster information
-    const query = `
-      SELECT 
-        sp.id as post_id,
-        sp.id,
-        sp.user_id,
-        sp.poster_type,
-        sp.post_type,
-        sp.title,
-        sp.description,
-        sp.service_category,
-        sp.price_range,
-        sp.phone_number,
-        sp.contact_email,
-        sp.zip_code,
-        sp.city,
-        sp.state,
-        sp.status,
-        sp.created_at,
-        sp.updated_at,
-        COALESCE(bo.business_name, c.full_name, u.email) as poster_name,
-        bo.business_name
-      FROM service_posts sp
-      LEFT JOIN users u ON sp.user_id = u.user_id
-      LEFT JOIN customers c ON sp.user_id = c.user_id
-      LEFT JOIN business_owners bo ON sp.user_id = bo.user_id
-      WHERE sp.id = $1
-    `;
+    // Query with joins to get post data along with poster information
+    const { data, error } = await supabase
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          customers(full_name),
+          business_owners(business_name)
+        )
+      `)
+      .eq('id', postId)
+      .single();
 
-    const result = await pool.query(query, [postId]);
-
-    // Return 404 if post not found
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'Service post not found'
-      });
-      return;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found
+        res.status(404).json({
+          success: false,
+          error: 'Service post not found'
+        });
+        return;
+      }
+      throw error;
     }
 
-    console.log('✅ Found service post:', result.rows[0]);
+    // Map result to include poster_name and id as post_id
+    const post = {
+      ...data,
+      post_id: data.id,
+      poster_name: data.users?.business_owners?.[0]?.business_name || 
+                   data.users?.customers?.[0]?.full_name || 
+                   data.users?.email,
+      business_name: data.users?.business_owners?.[0]?.business_name
+    };
+
+    console.log('✅ Found service post:', post);
 
     res.json({
       success: true,
-      post: result.rows[0]
+      post: post
     });
 
   } catch (error: unknown) {
@@ -663,7 +583,6 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
 // Purpose: Update an existing service post with new information
 // ============================================================================
 router.put('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract postId from URL and updated fields from request body
@@ -710,56 +629,42 @@ router.put('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       }
     }
 
-    // Update query with all fields and updated_at timestamp
-    const updateQuery = `
-      UPDATE service_posts 
-      SET 
-        title = $1,
-        description = $2,
-        service_category = $3,
-        price_range = $4,
-        phone_number = $5,
-        contact_email = $6,
-        zip_code = $7,
-        city = $8,
-        state = $9,
-        post_type = $10,
-        updated_at = NOW()
-      WHERE id = $11
-      RETURNING *
-    `;
-
-    const values = [
-      title,
-      description,
-      service_category,
-      price_range,
-      phone_number,
-      contact_email,
-      zip_code,
-      city,
-      state,
-      post_type,
-      postId
-    ];
-
     // Execute update query
-    const result = await pool.query(updateQuery, values);
+    const { data: updatedPost, error } = await supabase
+      .from('service_posts')
+      .update({
+        title,
+        description,
+        service_category,
+        price_range,
+        phone_number,
+        contact_email,
+        zip_code,
+        city,
+        state,
+        post_type,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', postId)
+      .select()
+      .single();
 
-    // Return 404 if post not found
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'Service post not found'
-      });
-      return;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        res.status(404).json({
+          success: false,
+          error: 'Service post not found'
+        });
+        return;
+      }
+      throw error;
     }
 
     console.log('✅ Service post updated successfully');
 
     res.json({
       success: true,
-      post: result.rows[0],
+      post: updatedPost,
       message: 'Service post updated successfully'
     });
 
@@ -780,7 +685,6 @@ router.put('/api/service-posts/:postId', async (req: Request, res: Response): Pr
 // Purpose: Permanently delete a service post from the database
 // ============================================================================
 router.delete('/api/service-posts/:postId', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     // Extract postId from URL parameters
@@ -788,22 +692,21 @@ router.delete('/api/service-posts/:postId', async (req: Request, res: Response):
 
     console.log('🗑️ Deleting service post:', postId);
 
-    // Delete query with RETURNING to confirm deletion
-    const query = `
-      DELETE FROM service_posts 
-      WHERE id = $1
-      RETURNING *
-    `;
+    // Execute delete query
+    const { error } = await supabase
+      .from('service_posts')
+      .delete()
+      .eq('id', postId);
 
-    const result = await pool.query(query, [postId]);
-
-    // Return 404 if post not found
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'Service post not found'
-      });
-      return;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        res.status(404).json({
+          success: false,
+          error: 'Service post not found'
+        });
+        return;
+      }
+      throw error;
     }
 
     console.log('✅ Service post deleted successfully');
@@ -822,6 +725,7 @@ router.delete('/api/service-posts/:postId', async (req: Request, res: Response):
     });
   }
 });
+
 // ============================================================================
 // ENDPOINT: Inactivate service post
 // Method: PATCH
@@ -829,7 +733,6 @@ router.delete('/api/service-posts/:postId', async (req: Request, res: Response):
 // Purpose: Mark a service post as inactive (soft delete)
 // ============================================================================
 router.patch('/api/service-posts/:postId/inactivate', async (req: Request, res: Response): Promise<void> => {
-  const pool: Pool = (req as any).pool;
   
   try {
     const { postId } = req.params;
@@ -837,30 +740,32 @@ router.patch('/api/service-posts/:postId/inactivate', async (req: Request, res: 
     console.log('🔒 Inactivating service post:', postId);
 
     // Update status to inactive
-    const query = `
-      UPDATE service_posts 
-      SET 
-        status = 'closed',
-        updated_at = NOW()
-      WHERE id = $1
-      RETURNING *
-    `;
+    const { data: inactivatedPost, error } = await supabase
+      .from('service_posts')
+      .update({
+        status: 'closed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', postId)
+      .select()
+      .single();
 
-    const result = await pool.query(query, [postId]);
-
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'Service post not found'
-      });
-      return;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        res.status(404).json({
+          success: false,
+          error: 'Service post not found'
+        });
+        return;
+      }
+      throw error;
     }
 
     console.log('✅ Service post inactivated successfully');
 
     res.json({
       success: true,
-      post: result.rows[0],
+      post: inactivatedPost,
       message: 'Service post inactivated successfully'
     });
 
@@ -873,5 +778,6 @@ router.patch('/api/service-posts/:postId/inactivate', async (req: Request, res: 
     });
   }
 });
+
 // Export the router to be used in the main server file
 export default router;

@@ -34,10 +34,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
-} from "react-native";
+    } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { Ionicons } from "@expo/vector-icons";
+import { Alert } from "../Utils/Alert";
 
 // ============================================================================
 // COMPONENT PROPS INTERFACE
@@ -105,8 +105,9 @@ const SearchForm: React.FC<SearchFormProps> = ({
    * Logs the change for debugging purposes
    * 
    * @param itemValue - The selected category value
-   */
-  const handleCategoryChange = useCallback((itemValue: string) => {
+      */
+
+      const handleCategoryChange = useCallback((itemValue: string) => {
     console.log("🔄 [SearchForm] Category changed to:", itemValue);
     setServiceNeeded(itemValue);
   }, [setServiceNeeded]);
@@ -166,6 +167,10 @@ const SearchForm: React.FC<SearchFormProps> = ({
   
   return (
     <View style={styles.searchSection}>
+           {/* Subtitle text */}
+      <Text style={styles.subtitleText}>
+        Connect with service providers in your Area
+      </Text>
       
       {/* ====================================================================
           SERVICE CATEGORY PICKER
@@ -326,6 +331,14 @@ const styles = StyleSheet.create({
     color: "#FF4500",
     fontSize: 14,
     fontWeight: "normal",
+  },
+  subtitleText: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 15,
+     fontWeight: "bold",
+    fontStyle: 'italic',
   },
   
   // ============================================================================

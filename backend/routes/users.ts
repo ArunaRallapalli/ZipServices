@@ -1,7 +1,7 @@
 // Updated users.ts routes
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import pool from "../config/pool";
+import { supabase } from "../config/Supabase";
 
 const router = Router();
 
@@ -17,43 +17,42 @@ router.get("/:userId/profile", async (req: Request, res: Response) => {
     const { userId } = req.params;
 
     // Get user basic info
-    const userResult = await pool.query(
-      `SELECT user_id, user_type, email, created_at FROM users WHERE user_id = $1`,
-      [userId]
-    );
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('user_id, user_type, email, created_at')
+      .eq('user_id', userId)
+      .single();
 
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "User not found" 
-      });
+    if (userError) {
+      if (userError.code === 'PGRST116') {
+        return res.status(404).json({ 
+          success: false, 
+          error: "User not found" 
+        });
+      }
+      throw userError;
     }
 
-    const user = userResult.rows[0];
-
     // Get customer profile if exists
-    const customerResult = await pool.query(
-      `SELECT customer_id, full_name, phone_number, zip_code, service_needed 
-       FROM customers 
-       WHERE user_id = $1`,
-      [userId]
-    );
+    const { data: customerData } = await supabase
+      .from('customers')
+      .select('customer_id, full_name, phone_number, zip_code, service_needed')
+      .eq('user_id', userId)
+      .single();
 
     // Get business profile if exists
-    const businessResult = await pool.query(
-      `SELECT business_id, business_name, service_category, description, 
-              phone_number, zip_code, service_radius_miles 
-       FROM business_owners 
-       WHERE user_id = $1`,
-      [userId]
-    );
+    const { data: businessData } = await supabase
+      .from('business_owners')
+      .select('business_id, business_name, service_category, description, phone_number, zip_code, service_radius_miles')
+      .eq('user_id', userId)
+      .single();
 
     res.json({
       success: true,
       profile: {
         user: user,
-        customerProfile: customerResult.rows[0] || null,
-        businessProfile: businessResult.rows[0] || null
+        customerProfile: customerData || null,
+        businessProfile: businessData || null
       }
     });
   } catch (error) {
@@ -71,25 +70,22 @@ router.get("/:userId/roles", async (req: Request, res: Response) => {
     const { userId } = req.params;
     
     // Check if user exists in customers table
-    const customerResult = await pool.query(
-      `SELECT customer_id, full_name, phone_number, zip_code, service_needed 
-       FROM customers 
-       WHERE user_id = $1`,
-      [userId]
-    );
+    const { data: customerData } = await supabase
+      .from('customers')
+      .select('customer_id, full_name, phone_number, zip_code, service_needed')
+      .eq('user_id', userId)
+      .single();
 
     // Check if user exists in business_owners table
-    const businessResult = await pool.query(
-      `SELECT business_id, business_name, service_category, description, 
-              phone_number, zip_code, service_radius_miles 
-       FROM business_owners 
-       WHERE user_id = $1`,
-      [userId]
-    );
+    const { data: businessData } = await supabase
+      .from('business_owners')
+      .select('business_id, business_name, service_category, description, phone_number, zip_code, service_radius_miles')
+      .eq('user_id', userId)
+      .single();
 
     const roles = {
-      customer: customerResult.rows[0] ?? null,
-      business_owner: businessResult.rows[0] ?? null,
+      customer: customerData ?? null,
+      business_owner: businessData ?? null,
       availableRoles: [] as string[],
     };
 
@@ -106,14 +102,17 @@ router.get("/:userId/roles", async (req: Request, res: Response) => {
 // GET /users → fetch all users
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT user_id, user_type, email, created_at FROM users ORDER BY user_id DESC`
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, user_type, email, created_at')
+      .order('user_id', { ascending: false });
     
+    if (error) throw error;
+
     res.json({
       success: true,
-      users: result.rows,
-      count: result.rows.length
+      users: data,
+      count: data?.length || 0
     });
   } catch (err: any) {
     console.error("Error fetching users:", err);
@@ -128,26 +127,23 @@ router.get("/", async (req: Request, res: Response) => {
 // GET /users/stats/summary → get user statistics
 router.get("/stats/summary", async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        user_type,
-        COUNT(*) as count
-      FROM users 
-      GROUP BY user_type
-    `);
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_type');
     
+    if (error) throw error;
+
     const stats = {
-      total: 0,
+      total: data?.length || 0,
       customers: 0,
       business_owners: 0
     };
     
-    result.rows.forEach((row: UserStatsRow) => {
-      stats.total += parseInt(row.count);
+    (data || []).forEach((row) => {
       if (row.user_type === 'customer') {
-        stats.customers = parseInt(row.count);
+        stats.customers++;
       } else if (row.user_type === 'business_owner') {
-        stats.business_owners = parseInt(row.count);
+        stats.business_owners++;
       }
     });
 
@@ -178,21 +174,25 @@ router.get("/:id", async (req: Request, res: Response) => {
       });
     }
 
-    const result = await pool.query(
-      `SELECT user_id, user_type, email, created_at FROM users WHERE user_id = $1`,
-      [userId]
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, user_type, email, created_at')
+      .eq('user_id', userId)
+      .single();
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "User not found" 
-      });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ 
+          success: false, 
+          error: "User not found" 
+        });
+      }
+      throw error;
     }
 
     res.json({
       success: true,
-      user: result.rows[0]
+      user: data
     });
   } catch (err: any) {
     console.error("Error fetching user:", err);
@@ -231,11 +231,13 @@ router.post("/", async (req: Request, res: Response) => {
     
     // Check if email already exists (if provided)
     if (email) {
-      const existingUser = await pool.query(
-        "SELECT user_id FROM users WHERE email = $1",
-        [email]
-      );
-      if (existingUser.rowCount && existingUser.rowCount > 0) {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('email', email)
+        .single();
+
+      if (existingUser) {
         return res.status(400).json({ 
           success: false, 
           error: "Email already registered" 
@@ -249,15 +251,19 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Insert user with email and password (if provided)
-    const result = await pool.query(
-      `INSERT INTO users (user_type, email, password, created_at) 
-       VALUES ($1, $2, $3, NOW()) 
-       RETURNING user_id, user_type, email, created_at`,
-      [user_type, email || null, hashedPassword]
-    );
+    const { data: newUser, error } = await supabase
+      .from('users')
+      .insert([{
+        user_type,
+        email: email || null,
+        password: hashedPassword,
+        created_at: new Date().toISOString()
+      }])
+      .select('user_id, user_type, email, created_at')
+      .single();
 
-    const newUser = result.rows[0];
-    
+    if (error) throw error;
+
     res.status(201).json({
       success: true,
       message: "User created successfully",
@@ -296,23 +302,30 @@ router.put("/:id", async (req: Request, res: Response) => {
       });
     }
 
-    const result = await pool.query(
-      `UPDATE users SET user_type = $1, email = $2 WHERE user_id = $3 
-       RETURNING user_id, user_type, email, created_at`,
-      [user_type, email || null, userId]
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        user_type,
+        email: email || null
+      })
+      .eq('user_id', userId)
+      .select('user_id, user_type, email, created_at')
+      .single();
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "User not found" 
-      });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ 
+          success: false, 
+          error: "User not found" 
+        });
+      }
+      throw error;
     }
 
     res.json({
       success: true,
       message: "User updated successfully",
-      user: result.rows[0]
+      user: data
     });
   } catch (err: any) {
     console.error("Error updating user:", err);
@@ -336,22 +349,27 @@ router.delete("/:id", async (req: Request, res: Response) => {
       });
     }
 
-    const result = await pool.query(
-      `DELETE FROM users WHERE user_id = $1 RETURNING user_id, user_type, email`,
-      [userId]
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .delete()
+      .eq('user_id', userId)
+      .select('user_id, user_type, email')
+      .single();
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: "User not found" 
-      });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ 
+          success: false, 
+          error: "User not found" 
+        });
+      }
+      throw error;
     }
 
     res.json({
       success: true,
       message: "User deleted successfully",
-      deletedUser: result.rows[0]
+      deletedUser: data
     });
   } catch (err: any) {
     console.error("Error deleting user:", err);

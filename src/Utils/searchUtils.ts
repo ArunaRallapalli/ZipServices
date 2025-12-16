@@ -13,12 +13,13 @@
  * KEY FEATURES:
  * - Fetches service categories from backend with fallback to hardcoded list
  * - Searches service posts by category, ZIP code, city, and state
+ * - Separates exact ZIP matches from nearby ZIP matches
  * - Deduplicates results between ZIP code and state matches
  * - Integrates with zippopotam.us API for ZIP code to location conversion
  */
 
 import API_URL from "../config/apiConfig";
-import { Alert } from "react-native";
+import { Alert } from "./Alert";
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -46,12 +47,14 @@ export interface ServicePost {
 }
 
 /**
- * Structured search results separating ZIP code matches from state-level matches
+ * Structured search results separating exact ZIP, nearby ZIP, and state-level matches
  */
 export interface SearchResults {
-  zipCodeMatches: ServicePost[];      // Posts matching the specific ZIP code or nearby
+  exactZipMatches: ServicePost[];      // Posts matching the exact ZIP code
+  nearbyZipMatches: ServicePost[];     // Posts matching nearby ZIP codes
+  zipCodeMatches: ServicePost[];       // Combined exact + nearby (for backward compatibility)
   stateMatches: ServicePost[];         // Posts matching the state (excluding ZIP matches)
-  hasZipCodeMatches: boolean;          // Quick check for ZIP results
+  hasZipCodeMatches: boolean;          // Quick check for any ZIP results
   hasStateMatches: boolean;            // Quick check for state results
 }
 
@@ -248,16 +251,17 @@ export const fetchLocationFromZip = async (zipCode: string): Promise<LocationDat
 /**
  * Searches for service posts based on provided parameters
  * Performs two searches: one by ZIP code, one by state
+ * Keeps exact and nearby ZIP matches separate
  * Deduplicates results to avoid showing same post twice
  * 
  * @param params - Search parameters including category, ZIP, and location
- * @returns Promise resolving to SearchResults with separated ZIP and state matches
+ * @returns Promise resolving to SearchResults with separated exact, nearby, and state matches
  * 
  * FLOW:
- * 1. Search by ZIP code (if provided) - returns exact and nearby matches
+ * 1. Search by ZIP code (if provided) - returns exact and nearby matches separately
  * 2. Search by state (if provided) - returns state-wide matches
  * 3. Deduplicate state results to exclude posts already in ZIP results
- * 4. Return structured results with both match types
+ * 4. Return structured results with all match types
  */
 export const searchServicePosts = async (params: SearchParams): Promise<SearchResults> => {
   console.log("🔍 [searchUtils] Searching with params:", params);
@@ -265,7 +269,8 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
   const { serviceCategory, zipCode, state } = params;
 
   // Initialize result arrays
-  let zipMatches: ServicePost[] = [];
+  let exactMatches: ServicePost[] = [];
+  let nearbyMatches: ServicePost[] = [];
   let stateMatches: ServicePost[] = [];
 
   try {
@@ -290,11 +295,10 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
         console.log("📥 [searchUtils] ZIP results:", zipData);
         
         if (zipData.success) {
-          // Combine exact matches (same ZIP) and nearby matches (neighboring ZIPs)
-          const exact = Array.isArray(zipData.exactMatches) ? zipData.exactMatches : [];
-          const nearby = Array.isArray(zipData.nearbyMatches) ? zipData.nearbyMatches : [];
-          zipMatches = [...exact, ...nearby];
-          console.log(`✅ [searchUtils] Combined ZIP results: ${exact.length} exact + ${nearby.length} nearby = ${zipMatches.length} total`);
+          // Keep exact and nearby matches separate
+          exactMatches = Array.isArray(zipData.exactMatches) ? zipData.exactMatches : [];
+          nearbyMatches = Array.isArray(zipData.nearbyMatches) ? zipData.nearbyMatches : [];
+          console.log(`✅ [searchUtils] ZIP results: ${exactMatches.length} exact + ${nearbyMatches.length} nearby`);
         }
       }
     }
@@ -325,28 +329,35 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
           const nearby = Array.isArray(stateData.nearbyMatches) ? stateData.nearbyMatches : [];
           const allStateResults = [...exact, ...nearby];
           
-          // DEDUPLICATION: Remove any posts that already appear in ZIP results
+          // DEDUPLICATION: Remove any posts that already appear in ZIP results (exact or nearby)
           // This prevents showing the same service provider twice
+          const allZipPostIds = [...exactMatches, ...nearbyMatches].map(post => post.post_id);
           stateMatches = allStateResults.filter(
-            (statePost: ServicePost) => 
-              !zipMatches.some(zipPost => zipPost.post_id === statePost.post_id)
+            (statePost: ServicePost) => !allZipPostIds.includes(statePost.post_id)
           );
-          console.log(`✅ [searchUtils] Combined state results: ${exact.length} exact + ${nearby.length} nearby = ${allStateResults.length} total, ${stateMatches.length} after deduplication`);
+          console.log(`✅ [searchUtils] State results: ${exact.length} exact + ${nearby.length} nearby = ${allStateResults.length} total, ${stateMatches.length} after deduplication`);
         }
       }
     }
 
+    // Combine exact and nearby for backward compatibility
+    const allZipMatches = [...exactMatches, ...nearbyMatches];
+
     // Return structured results
     return {
-      zipCodeMatches: zipMatches,
+      exactZipMatches: exactMatches,
+      nearbyZipMatches: nearbyMatches,
+      zipCodeMatches: allZipMatches,        // Combined for backward compatibility
       stateMatches: stateMatches,
-      hasZipCodeMatches: zipMatches.length > 0,
+      hasZipCodeMatches: allZipMatches.length > 0,
       hasStateMatches: stateMatches.length > 0,
     };
   } catch (error) {
     // Return empty results on error
     console.error("❌ [searchUtils] Search error:", error);
     return {
+      exactZipMatches: [],
+      nearbyZipMatches: [],
       zipCodeMatches: [],
       stateMatches: [],
       hasZipCodeMatches: false,

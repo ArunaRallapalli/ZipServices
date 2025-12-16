@@ -15,9 +15,9 @@ Authorization: Bearer <your-current-jwt-token>*/
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { supabase } from "../config/Supabase";
 
 interface AuthRequest extends Request {
-  pool?: any;
   user?: { user_id: string; business_id: number };
 }
 
@@ -45,27 +45,36 @@ const verifyToken = (token: string): { user_id: string; business_id: number } | 
 // POST /business_owners/login
 // -----------------------------
 router.post("/login", async (req: AuthRequest, res: Response) => {
-  const pool = req.pool;
   const { email, password } = req.body;
 
   if (!email || !password) return res.status(400).json({ message: "Missing email or password" });
-  if (!pool) return res.status(500).json({ message: "Database connection error" });
 
   try {
     // 1️⃣ Fetch user by email from `users` table
-    const userResult = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
-    const user = userResult.rows[0];
-    if (!user || !user.user_id || !user.password)
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (userError || !user || !user.user_id || !user.password) {
       return res.status(400).json({ message: "Invalid email or password" });
+    }
 
     // 2️⃣ Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
 
     // 3️⃣ Fetch business owner profile
-    const boResult = await pool.query(`SELECT * FROM business_owners WHERE user_id = $1`, [user.user_id]);
-    const owner = boResult.rows[0];
-    if (!owner) return res.status(404).json({ message: "Business owner profile not found" });
+    const { data: owner, error: ownerError } = await supabase
+      .from('business_owners')
+      .select('*')
+      .eq('user_id', user.user_id)
+      .single();
+
+    if (ownerError || !owner) {
+      return res.status(404).json({ message: "Business owner profile not found" });
+    }
 
     // 4️⃣ Generate JWT
     const token = generateToken(user.user_id, owner.business_id);
@@ -83,7 +92,6 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
 // Fetch logged-in business owner profile based on JWT
 // -----------------------------
 router.get("/me", async (req: AuthRequest, res: Response) => {
-  const pool = req.pool;
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
@@ -92,12 +100,17 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
   const decoded = verifyToken(token);
   
   if (!decoded) return res.status(401).json({ message: "Invalid token" });
-  if (!pool) return res.status(500).json({ message: "Database connection error" });
 
   try {
-    const boResult = await pool.query(`SELECT * FROM business_owners WHERE user_id = $1`, [decoded.user_id]);
-    const owner = boResult.rows[0];
-    if (!owner) return res.status(404).json({ message: "Business owner not found" });
+    const { data: owner, error } = await supabase
+      .from('business_owners')
+      .select('*')
+      .eq('user_id', decoded.user_id)
+      .single();
+
+    if (error || !owner) {
+      return res.status(404).json({ message: "Business owner not found" });
+    }
 
     res.json(owner);
   } catch (err) {
@@ -111,7 +124,6 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
 // Fetch business owner profile by user_id (now requires authentication)
 // -----------------------------
 router.get("/profile/:user_id", async (req: AuthRequest, res: Response) => {
-  const pool = req.pool;
   const authHeader = req.headers.authorization;
   const userIdInt = parseInt(req.params.user_id, 10);
 
@@ -122,12 +134,17 @@ router.get("/profile/:user_id", async (req: AuthRequest, res: Response) => {
   const decoded = verifyToken(token);
   
   if (!decoded) return res.status(401).json({ message: "Invalid token" });
-  if (!pool) return res.status(500).json({ message: "Database connection error" });
 
   try {
-    const ownerResult = await pool.query(`SELECT * FROM business_owners WHERE user_id = $1`, [userIdInt]);
-    const owner = ownerResult.rows[0];
-    if (!owner) return res.status(404).json({ message: "Business owner not found" });
+    const { data: owner, error } = await supabase
+      .from('business_owners')
+      .select('*')
+      .eq('user_id', userIdInt)
+      .single();
+
+    if (error || !owner) {
+      return res.status(404).json({ message: "Business owner not found" });
+    }
 
     // Option 1: Just return the profile
     res.json(owner);
@@ -146,7 +163,6 @@ router.get("/profile/:user_id", async (req: AuthRequest, res: Response) => {
 // Refresh JWT token for authenticated user
 // -----------------------------
 router.post("/refresh-token", async (req: AuthRequest, res: Response) => {
-  const pool = req.pool;
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
@@ -155,13 +171,18 @@ router.post("/refresh-token", async (req: AuthRequest, res: Response) => {
   const decoded = verifyToken(token);
   
   if (!decoded) return res.status(401).json({ message: "Invalid token" });
-  if (!pool) return res.status(500).json({ message: "Database connection error" });
 
   try {
     // Verify the business owner still exists
-    const boResult = await pool.query(`SELECT * FROM business_owners WHERE user_id = $1`, [decoded.user_id]);
-    const owner = boResult.rows[0];
-    if (!owner) return res.status(404).json({ message: "Business owner not found" });
+    const { data: owner, error } = await supabase
+      .from('business_owners')
+      .select('*')
+      .eq('user_id', decoded.user_id)
+      .single();
+
+    if (error || !owner) {
+      return res.status(404).json({ message: "Business owner not found" });
+    }
 
     // Generate new token
     const newToken = generateToken(decoded.user_id, decoded.business_id);

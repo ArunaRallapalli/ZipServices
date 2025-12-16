@@ -82,9 +82,10 @@ const SearchHeader: React.FC<SearchHeaderProps> = ({
         - Explains the purpose of the app
         - Semi-transparent white for hierarchy
       */}
-      <Text style={styles.subtitle}>
-        Connect with service providers in your state
-      </Text>
+     <Text style={[styles.subtitle, { fontWeight: 'bold' }]}>
+  Turn your hidden skills into meaningful opportunities!!!
+</Text>
+
 
       {/* 
         Welcome Message

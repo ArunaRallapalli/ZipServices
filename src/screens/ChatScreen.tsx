@@ -25,12 +25,14 @@ import {
   Text,
   SafeAreaView,
   StyleSheet,
-  Alert,
-} from "react-native";
+  } from "react-native";
+  import { createResponsiveStyles } from '../Utils/globalStyles';
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import API_URL from "../config/apiConfig";
+import { Alert } from "../Utils/Alert";
+import { BackButton } from '../components/BackButton';
 
 // Navigation type definitions for type safety
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, "ChatScreen">;
@@ -216,7 +218,7 @@ export default function ChatScreen() {
    */
   useEffect(() => {
     navigation.setOptions({
-      title: otherUserName || "Chat",
+      headerTitle: otherUserName || "Chat",
       headerShown: false, // Using custom header instead
     });
     
@@ -278,14 +280,11 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.container}>
       {/* Custom Header: Back button, user name, and spacer for centering */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerBackButton}
-          onPress={handleBackPress}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.headerBackText}>← Back</Text>
-        </TouchableOpacity>
-        
+       <BackButton 
+  iconColor="#4A90E2"
+  textColor="#4A90E2"
+  backgroundColor="transparent"
+/>
         {/* User name - bold and colored if there are unread messages */}
         <Text
           style={[
@@ -341,7 +340,7 @@ export default function ChatScreen() {
 }
 
 // Styles: All styling for the component
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
     flexDirection: "row",
@@ -362,9 +361,10 @@ const styles = StyleSheet.create({
     minWidth: 60,
   },
   headerBackText: {
-    fontSize: 21,
-    fontWeight: "600",
-    color: "#4f46e5",
+      fontSize: 16,
+      
+    fontWeight: '600',
+     color: "#4A90E2",
     textAlign: "center",
   },
   headerTitle: {
@@ -377,6 +377,7 @@ const styles = StyleSheet.create({
   headerTitleBold: {
     fontWeight: "800",
     color: "#4f46e5",
+    
   },
   headerSpacer: {
     width: 76, // Matches back button width to center title

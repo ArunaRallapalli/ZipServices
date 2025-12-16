@@ -1,103 +1,148 @@
+// backend/routes/Business_Owners_registration.ts
+/**
+ * Business Owner Registration Routes
+ * 
+ * Mounted at: /business_owners/crud
+ * 
+ * Responsibilities:
+ * - New business owner registration
+ * - User account creation
+ * - Business profile creation
+ */
+
 import { Router, Request, Response } from "express";
-import pool from "../config/pool";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { supabase } from "../config/Supabase";
 
 const router = Router();
 
-console.log("BusinessOwners router loaded");
+// Helper function to generate JWT token
+const generateToken = (user_id: string, business_id: number): string => {
+  return jwt.sign(
+    { user_id, business_id },
+    process.env.JWT_SECRET || "secret",
+    { expiresIn: "1h" }
+  );
+};
 
-// POST /register → this maps to /business_owners/crud/register
+// -----------------------------
+// POST /business_owners/crud/register
+// Register a new business owner
+// -----------------------------
 router.post("/register", async (req: Request, res: Response) => {
-  const client = await pool.connect();
+  const {
+    name,
+    email,
+    password,
+    city,
+    state,
+    zip_code,
+    description,
+    phone_number,
+    street,
+    service_radius_miles
+  } = req.body;
+
+  // Validate required fields
+  if (!name || !email || !password || !zip_code) {
+    return res.status(400).json({
+      message: 'Name, email, password, and zip code are required'
+    });
+  }
+
+  // Validate city and state (should be auto-filled from frontend)
+  if (!city || !state) {
+    return res.status(400).json({
+      message: 'City and state are required. Please enter a valid US zip code.'
+    });
+  }
+
   try {
-    const {
-      business_name,
-      service_category,
-      description,
-      phone_number,
-      email,
-      password,
-      street,
-      city,
-      state,
-      zip_code,
-      service_radius_miles,
-    } = req.body;
+    console.log("📝 Starting registration for:", email);
 
-    // Validate required fields (removed business_name and service_category)
-    const missingFields = [];
-    if (!email) missingFields.push("email");
-    if (!password) missingFields.push("password");
-    if (!street) missingFields.push("street");
-    if (!city) missingFields.push("city");
-    if (!state) missingFields.push("state");
-    if (!zip_code) missingFields.push("zip_code");
+    // 1️⃣ Check if email already exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email)
+      .maybeSingle();
 
-    if (missingFields.length > 0) {
+    if (existingUser) {
+      console.log("❌ Email already exists:", email);
       return res.status(400).json({
-        message: "Missing required fields",
-        missing_fields: missingFields,
+        message: 'Email already exists. Please use a different email address.'
       });
     }
 
-    await client.query("BEGIN");
+    // 2️⃣ Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("🔒 Password hashed successfully");
 
-    // Check if email already exists in users table
-    const existingUser = await client.query("SELECT 1 FROM users WHERE email = $1", [email]);
-    if (existingUser.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Email already registered" });
+    // 3️⃣ Create user in users table
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert({
+        email: email,
+        password: hashedPassword,
+        user_type: 'business_owner'
+      })
+      .select()
+      .single();
+
+    if (userError) {
+      console.error("❌ Error creating user:", userError);
+      throw userError;
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("✅ User created with ID:", newUser.user_id);
 
-    // Insert into users table
-    const userResult = await client.query(
-      `INSERT INTO users (email, password, user_type, created_at)
-       VALUES ($1, $2, 'business_owner', NOW())
-       RETURNING user_id`,
-      [email, hashedPassword]
-    );
-    const user_id = userResult.rows[0].user_id;
+    // 4️⃣ Create business owner profile
+    const { data: businessOwner, error: businessError } = await supabase
+      .from('business_owners')
+      .insert({
+        user_id: newUser.user_id,
+        business_name: name,
+        city: city,
+        state: state,
+        zip_code: zip_code,
+        description: description || null,
+        phone_number: phone_number || null,
+        street: street || null,
+        service_radius_miles: service_radius_miles || null
+      })
+      .select()
+      .single();
 
-    // Insert into business_owners table (business_name and service_category now optional/nullable)
-    const businessResult = await client.query(
-      `INSERT INTO business_owners
-        (user_id, business_name, service_category, description, phone_number, street, city, state, zip_code, service_radius_miles)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING business_id, business_name, zip_code, street, city, state, service_category`,
-      [
-        user_id,
-        business_name || null,
-        service_category || null,
-        description || null,
-        phone_number || null,
-        street,
-        city,
-        state,
-        zip_code,
-        service_radius_miles ? Number(service_radius_miles) : null,
-      ]
-    );
+    if (businessError) {
+      console.error("❌ Error creating business owner profile:", businessError);
+      throw businessError;
+    }
 
-    await client.query("COMMIT");
+    console.log("✅ Business owner profile created with ID:", businessOwner.business_id);
 
-    return res.status(201).json({
-      message: "Business owner registered successfully",
-      business: businessResult.rows[0],
+    // 5️⃣ Generate JWT token for automatic login
+    const token = generateToken(newUser.user_id, businessOwner.business_id);
+
+    // 6️⃣ Return success response with token
+    res.status(201).json({
+      message: 'Business owner registered successfully',
+      token: token,
+      user: {
+        user_id: newUser.user_id,
+        email: newUser.email,
+        business_id: businessOwner.business_id,
+        business_name: businessOwner.business_name
+      }
     });
-  } catch (error: any) {
-    await client.query("ROLLBACK");
-    console.error("Business registration error:", error);
-    return res.status(500).json({
-      message: "Failed to register business owner",
-      error: error.message,
+
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    res.status(500).json({
+      message: 'Failed to register business owner',
+      error: (error as Error).message
     });
-  } finally {
-    client.release();
   }
 });
-
 
 export default router;

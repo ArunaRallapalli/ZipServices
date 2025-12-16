@@ -4,7 +4,8 @@
  * Backend API: GET /messages/business-owner/:userId
  * Shows all contacts with message previews and unread indicators
  */
-
+import { createResponsiveStyles } from '../Utils/globalStyles';
+import { BackButton } from '../components/BackButton';
 import React, { useEffect, useState } from "react"; 
 import {
   View,
@@ -114,32 +115,39 @@ export default function BusinessOwnerChatScreen() {
 
       // Process each message to extract contact information
       data.forEach((item: any) => {
-        let otherUserId: number | null = null;
-        let otherUserName: string = "Unknown User";
-        let otherUserEmail: string = "";
-        
-        // Determine the OTHER user in this conversation
-        if (item.sender_id === businessOwnerUserId) {
-          // Current user sent this message, so receiver is the contact
-          otherUserId = typeof item.receiver_id === "string" 
-            ? parseInt(item.receiver_id, 10) 
-            : item.receiver_id;
-          otherUserName = item.receiver_name || item.receiver_email || "Unknown User";
-          otherUserEmail = item.receiver_email || "";
-        } else if (item.receiver_id === businessOwnerUserId) {
-          // Current user received this message, so sender is the contact
-          otherUserId = typeof item.sender_id === "string" 
-            ? parseInt(item.sender_id, 10) 
-            : item.sender_id;
-          otherUserName = item.sender_name || item.sender_email || "Unknown User";
-          otherUserEmail = item.sender_email || "";
-        }
-        
-        if (!otherUserId) {
-          console.warn('[BusinessOwnerChat] Could not identify other user from item:', item);
-          return;
-        }
-        
+  let otherUserId: number | null = null;
+  let otherUserName: string = "Unknown User";
+  let otherUserEmail: string = "";
+  
+  // Helper function to extract username from email
+  const extractUsername = (email: string | null | undefined): string => {
+    if (!email) return "Unknown User";
+    const username = email.split('@')[0];
+    return username || "Unknown User";
+  };
+  
+  // Determine the OTHER user in this conversation
+  if (item.sender_id === businessOwnerUserId) {
+    // Current user sent this message, so receiver is the contact
+    otherUserId = typeof item.receiver_id === "string" 
+      ? parseInt(item.receiver_id, 10) 
+      : item.receiver_id;
+    otherUserName = item.receiver_name || extractUsername(item.receiver_email);
+    otherUserEmail = item.receiver_email || "";
+  } else if (item.receiver_id === businessOwnerUserId) {
+    // Current user received this message, so sender is the contact
+    otherUserId = typeof item.sender_id === "string" 
+      ? parseInt(item.sender_id, 10) 
+      : item.sender_id;
+    otherUserName = item.sender_name || extractUsername(item.sender_email);
+    otherUserEmail = item.sender_email || "";
+  }
+  
+  if (!otherUserId) {
+    console.warn('[BusinessOwnerChat] Could not identify other user from item:', item);
+    return;
+  }
+        //until here to hide email       
         const existingContact = contactMap.get(otherUserId);
         const messageTime = item.created_at;
         
@@ -214,16 +222,6 @@ export default function BusinessOwnerChatScreen() {
     });
   };
 
-  const navigateToBusinessHome = () => {
-    navigation.navigate("Home" as any);
-  };
-
-  const navigateToBusinessHomeReset = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "Home" as any }],
-    });
-  };
 
   // Render each contact item in the list
   const renderContactItem = ({ item }: { item: Contact }) => (
@@ -289,79 +287,55 @@ export default function BusinessOwnerChatScreen() {
   }
 
   // Error state: no user ID found
-  if (!businessOwnerUserId) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorIcon}>❌</Text>
-        <Text style={styles.errorTitle}>User ID Not Found</Text>
-        <Text style={styles.errorSubtext}>
-          Unable to load your messages. Please try logging in again.
-        </Text>
-        
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugTitle}>Debug Info:</Text>
-          <Text style={styles.debugText}>
-            User Type: {userType || 'undefined'}
-          </Text>
-          <Text style={styles.debugText}>
-            User Info: {userInfo ? 'exists' : 'undefined'}
-          </Text>
-          <Text style={styles.debugText}>
-            User Info Keys: {userInfo ? Object.keys(userInfo).join(', ') : 'no userInfo'}
-          </Text>
-          <Text style={styles.debugText}>
-            Route Params: {route.params ? JSON.stringify(route.params) : 'no params'}
-          </Text>
-        </View>
-        
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.errorButton} onPress={navigateToBusinessHome}>
-            <Text style={styles.errorButtonText}>Go to Home</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.resetButton} onPress={navigateToBusinessHomeReset}>
-            <Text style={styles.resetButtonText}>Reset to Home</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+if (!businessOwnerUserId) {
+  return (
+    <>
+<BackButton />
+    <View style={styles.centerContainer}>
+      
+      <Text style={styles.errorIcon}>❌</Text>
+      <Text style={styles.errorTitle}>User ID Not Found</Text>
+      <Text style={styles.errorSubtext}>
+        Unable to load your messages. Please try logging in again.
+      </Text>
+    </View>
+    </>
+  );
+}
 
-  // Loading state: fetching messages
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-        <Text style={styles.loadingText}>Loading messages...</Text>
-      </View>
-    );
-  }
+// Loading state: fetching messages
+if (loading) {
+  return (
+    <View style={styles.centerContainer}>
+      <ActivityIndicator size="large" color="#4f46e5" />
+      <Text style={styles.loadingText}>Loading messages...</Text>
+    </View>
+  );
+}
 
   // Empty state: no conversations yet
   if (contacts.length === 0) {
     return (
+      <>
+       <BackButton /> 
       <View style={styles.centerContainer}>
+       
         <Text style={styles.emptyStateIcon}>📪</Text>
         <Text style={styles.emptyStateTitle}>No Messages Yet</Text>
         <Text style={styles.emptyStateSubtext}>
           You haven't had any conversations yet. When you message other users or they message you, the conversations will appear here.
         </Text>
-        
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.primaryButton} onPress={navigateToBusinessHome}>
-            <Text style={styles.primaryButtonText}>Back to Home</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.secondaryButton} onPress={navigateToBusinessHomeReset}>
-            <Text style={styles.secondaryButtonText}>Reset to Home</Text>
-          </TouchableOpacity>
-        </View>
+                
       </View>
+      </>
     );
   }
 
   // Main view: display list of conversations
-  return (
+return (
+  
+  <>  
+    <BackButton />
     <View style={styles.container}>
       <Text style={styles.title}>Messages ({contacts.length})</Text>
       
@@ -373,17 +347,12 @@ export default function BusinessOwnerChatScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
       />
-      
-      <View style={styles.navigationContainer}>
-        <TouchableOpacity style={styles.resetNavigationButton} onPress={navigateToBusinessHome}>
-          <Text style={styles.resetNavigationButtonText}>🏠 Home</Text>
-        </TouchableOpacity>
-      </View>
     </View>
-  );
+  </> 
+);
 }
 
-const styles = StyleSheet.create({
+const styles = createResponsiveStyles({
   container: { 
     flex: 1, 
     backgroundColor: "#f8fafc",
