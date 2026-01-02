@@ -53,18 +53,28 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     // 1️⃣ Fetch user by email from `users` table
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('*')
+      .select('user_id, email, password, email_verified, user_type')
       .eq('email', email)
       .single();
 
     if (userError || !user || !user.user_id || !user.password) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
-
+    
     // 2️⃣ Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
-
+// ✅ CHECK IF EMAIL IS VERIFIED
+if (!user.email_verified) {
+  console.log('❌ Login blocked - email not verified:', email);
+  return res.status(403).json({
+    message: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+    user: {
+      email: user.email,
+      email_verified: false
+    }
+  });
+}
     // 3️⃣ Fetch business owner profile
     const { data: owner, error: ownerError } = await supabase
       .from('business_owners')
@@ -80,7 +90,15 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     const token = generateToken(user.user_id, owner.business_id);
 
     // 5️⃣ Return token + business owner profile
-    res.json({ token, user: owner });
+   res.json({ 
+  token, 
+  user: {
+    ...owner,
+    email: user.email,
+    email_verified: user.email_verified,
+    user_type: user.user_type
+  }
+});
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Server error", error: (err as Error).message });

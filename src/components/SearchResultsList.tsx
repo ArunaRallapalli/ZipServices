@@ -1,34 +1,34 @@
 /**
  * SearchResultsList.tsx
  * 
+ * @updated 2025-12-23
+ * @version 2.0.0 - Radius-based search with distance display
+ * 
  * OVERVIEW:
- * Component that displays search results for service providers. Shows results in two
- * categories: exact ZIP code matches (local) and state-level matches (wider area).
- * Provides visual feedback for different result scenarios and handles empty states.
+ * Component that displays search results for service providers using radius-based search.
+ * Shows results sorted by distance with visual distance indicators.
+ * 
+ * UPDATED FOR RADIUS-BASED SEARCH:
+ * - Displays distance in miles for each service
+ * - Shows results sorted by proximity (closest first)
+ * - Header indicates search radius instead of exact ZIP match
+ * - All results are treated as radius-based (no exact/nearby/state separation)
  * 
  * KEY FEATURES:
- * - Displays results in prioritized sections (local first, then state-wide)
- * - Shows contextual messages based on result availability
- * - Renders service cards with contact/chat functionality
- * - Provides back navigation to search form
+ * - Distance-based result display (e.g., "7.3 miles away")
+ * - Visual indicators for proximity
  * - Handles empty state with helpful messaging
- * - Visual indicators for result categories (icons, colors, borders)
+ * - Back navigation to search form
+ * - Contact/chat functionality for each service
  * 
  * RESULT DISPLAY LOGIC:
- * 1. Exact ZIP Code Matches: Services in user's exact ZIP code
- * 2. Nearby ZIP Matches: Services in neighboring ZIP codes
- * 3. State Matches (Broader): Services in user's state (excluding duplicates)
- * 4. Empty State: No results found with helpful suggestions
- * 
- * VISUAL HIERARCHY:
- * - Green banner: Exact local results found
- * - Cyan banner: Nearby ZIP code results
- * - Orange banner: No local results, showing state results
- * - Blue banner: Additional state results after local results
- * - Gray empty state: No results at all
+ * - All services sorted by distance (closest first)
+ * - Each card shows distance in miles
+ * - Header shows total count and search radius
+ * - Empty state for no results within radius
  * 
  * PROPS:
- * - searchResults: Object containing ZIP and state match arrays
+ * - searchResults: Object containing posts with distance information
  * - isOwnPost: Function to check if post belongs to current user
  * - onChatPress: Handler for initiating chat with service provider
  * - onBackPress: Handler for returning to search form
@@ -52,7 +52,8 @@ import { createResponsiveStyles } from "../Utils/globalStyles"
 // ============================================================================
 
 /**
- * Service post data structure returned from search
+ * Service post data structure returned from radius-based search
+ * NOW INCLUDES: distance field (in miles from search center)
  */
 interface ServicePost {
   post_id: number;                    // Unique identifier for the post
@@ -70,19 +71,20 @@ interface ServicePost {
   state?: string;                     // Service provider's state
   poster_name?: string;               // Name of the person who posted
   business_name?: string;             // Business name (if applicable)
+  distance?: number;                  // NEW: Distance in miles from search center
 }
 
 /**
- * Search results organized by proximity
- * Exact and nearby ZIP matches are kept separate
+ * Search results from radius-based search
+ * All results are in a single array, sorted by distance
  */
 interface SearchResults {
-  exactZipMatches: ServicePost[];     // Services in exact ZIP code
-  nearbyZipMatches: ServicePost[];    // Services in nearby ZIP codes
-  zipCodeMatches: ServicePost[];      // Combined exact + nearby (for backward compatibility)
-  stateMatches: ServicePost[];        // Services in same state (deduplicated)
-  hasZipCodeMatches: boolean;         // Flag: has local results
-  hasStateMatches: boolean;           // Flag: has state-wide results
+  exactZipMatches: ServicePost[];     // All results (sorted by distance)
+  nearbyZipMatches: ServicePost[];    // Deprecated (not used)
+  zipCodeMatches: ServicePost[];      // Same as exactZipMatches
+  stateMatches: ServicePost[];        // Deprecated (not used)
+  hasZipCodeMatches: boolean;         // Flag: has any results
+  hasStateMatches: boolean;           // Deprecated (always false)
 }
 
 /**
@@ -112,23 +114,36 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   state,
 }) => {
   // --------------------------------------------------------------------------
-  // RESULT DETECTION
+  // RESULT PROCESSING
   // --------------------------------------------------------------------------
   
   /**
-   * Use the pre-separated exact and nearby matches from searchUtils
-   * No need to filter here - the data comes already separated
+   * Get all results from the search
+   * With radius-based search, all results are in zipCodeMatches
+   * They're already sorted by distance (closest first)
    */
-  const exactZipMatches = searchResults.exactZipMatches;
-  const nearbyZipMatches = searchResults.nearbyZipMatches;
+  const allResults = searchResults.zipCodeMatches || [];
+  // ADD THIS DEBUG CODE HERE 👇
+  console.log('=== DEBUG: All Results ===');
+  console.log('Total results:', allResults.length);
+  console.log('Results with distances:', allResults.map(r => ({
+    title: r.title,
+    distance: r.distance,
+    post_id: r.post_id,
+    hasDistance: r.distance !== undefined
+  })));
+  console.log('Raw searchResults object:', searchResults);
+  /**
+   * Check if any results exist
+   */
+  const hasResults = allResults.length > 0;
+  
   
   /**
-   * Check if any results exist (local or state-wide)
-   * Used to determine whether to show results or empty state
+   * Get distance range for display
    */
-  const hasResults =
-    searchResults.zipCodeMatches.length > 0 ||
-    searchResults.stateMatches.length > 0;
+  const closestDistance = allResults[0]?.distance;
+  const farthestDistance = allResults[allResults.length - 1]?.distance;
 
   // --------------------------------------------------------------------------
   // RENDER FUNCTIONS
@@ -157,11 +172,6 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 
   /**
    * Renders the main content area - either results or empty state
-   * Handles scenarios:
-   * 1. No results: Empty state with message
-   * 2. Exact ZIP results: Services in user's exact ZIP code
-   * 3. Nearby ZIP results: Services in neighboring ZIP codes
-   * 4. State results: Broader state-wide matches
    * 
    * @returns Content component based on search results
    */
@@ -180,122 +190,62 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
           
           {/* Helpful suggestion text */}
           <Text style={styles.noResultsSubtext}>
-            Try adjusting your search criteria or check back later for new
-            listings
+            No services found within 25 miles of {zipCode}.{"\n"}
+            Try searching in a nearby city or check back later for new listings.
           </Text>
         </View>
       );
     }
 
     // --------------------------------------------------------------------------
-    // SCENARIO 2-5: RESULTS FOUND
+    // SCENARIO 2: RESULTS FOUND
     // --------------------------------------------------------------------------
     return (
       <>
         {/* --------------------------------------------------------------------
-            SECTION A: EXACT ZIP CODE MATCHES
-            Shows services in the user's exact ZIP code only
-            Green banner indicates these are the closest/most relevant
+            RESULTS HEADER WITH DISTANCE INFO
+            Shows count of services and distance range
         -------------------------------------------------------------------- */}
-        {exactZipMatches.length > 0 && (
-          <>
-            
-            {/* Info banner showing count of exact local services */}
-<View style={styles.infoContainer}>
-  <Ionicons name="location" size={20} color="#4CAF50" />
-  <Text style={styles.infoText}>
-    Found {String(exactZipMatches.length)} service
-    {exactZipMatches.length !== 1 ? "s" : ""} in {zipCode}
-  </Text>
-</View>
-
-            {/* Render each exact local service as a card */}
-            {exactZipMatches.map((item) => (
-              <ServiceCard
-                key={item.post_id}
-                item={item}
-                isOwnPost={isOwnPost(item.user_id)}
-                onChatPress={onChatPress}
-              />
-            ))}
-          </>
-        )}
-
-        {/* --------------------------------------------------------------------
-            SECTION B: NEARBY ZIP CODE MATCHES
-            Shows services from neighboring ZIP codes (not exact match)
-            Cyan banner indicates these are nearby but in different ZIP codes
-        -------------------------------------------------------------------- */}
-        {nearbyZipMatches.length > 0 && (
-          <>
-            {/* Info banner showing nearby services */}
-            <View style={styles.nearbyResultsContainer}>
-              <Ionicons name="navigate" size={20} color="#00BCD4" />
-              <Text style={styles.nearbyResultsText}>
-                {exactZipMatches.length > 0 ? "Other nearby locations" : "Nearby locations"}
-              </Text>
-            </View>
-
-            {/* Render each nearby service as a card */}
-            {nearbyZipMatches.map((item) => (
-              <ServiceCard
-                key={item.post_id}
-                item={item}
-                isOwnPost={isOwnPost(item.user_id)}
-                onChatPress={onChatPress}
-              />
-            ))}
-          </>
-        )}
-
-        {/* --------------------------------------------------------------------
-            SECTION C: NO LOCAL RESULTS MESSAGE
-            Only shown when no ZIP matches but state matches exist
-            Orange banner indicates broader search was performed
-        -------------------------------------------------------------------- */}
-        {!searchResults.hasZipCodeMatches &&
-          searchResults.hasStateMatches && (
-            <View style={styles.noLocalResultsContainer}>
-              <Ionicons name="information-circle" size={24} color="#FF8C00" />
-              <Text style={styles.noLocalResultsText}>
-                No services found in {zipCode}. Showing results from {city},{" "}
-                {state}
-              </Text>
-            </View>
-          )}
-
-        {/* --------------------------------------------------------------------
-            SECTION D: ADDITIONAL STATE RESULTS DIVIDER
-            Only shown when BOTH local and state results exist
-            Blue banner separates local from broader results
-        -------------------------------------------------------------------- */}
-        {searchResults.hasZipCodeMatches && searchResults.hasStateMatches && (
-          <View style={styles.additionalResultsContainer}>
-            <Ionicons name="map" size={20} color="#4A90E2" />
-            <Text style={styles.additionalResultsText}>
-              Additional services in {city}, {state}
+        <View style={styles.resultsInfoContainer}>
+          <Ionicons name="location" size={20} color="#4CAF50" />
+          <View style={styles.resultsInfoTextContainer}>
+            <Text style={styles.resultsInfoText}>
+              Found {allResults.length} service{allResults.length !== 1 ? "s" : ""} near {zipCode}
             </Text>
+            {closestDistance !== undefined && farthestDistance !== undefined && (
+              <Text style={styles.resultsDistanceText}>
+                {closestDistance === farthestDistance 
+                  ? `${closestDistance} miles away`
+                  : `${closestDistance} - ${farthestDistance} miles away`
+                }
+              </Text>
+            )}
           </View>
-        )}
+        </View>
 
         {/* --------------------------------------------------------------------
-            SECTION E: STATE-WIDE MATCHES
-            Shows services from the broader state area
-            These are already deduplicated (no ZIP code duplicates)
+            SERVICE CARDS
+            Each card displays service info with distance
         -------------------------------------------------------------------- */}
-        {searchResults.hasStateMatches && (
-          <>
-            {/* Render each state-level service as a card */}
-            {searchResults.stateMatches.map((item) => (
-              <ServiceCard
-                key={item.post_id}
-                item={item}
-                isOwnPost={isOwnPost(item.user_id)}
-                onChatPress={onChatPress}
-              />
-            ))}
-          </>
-        )}
+        {allResults.map((item) => (
+          <View key={item.post_id} style={styles.serviceCardContainer}>
+            <ServiceCard
+              item={item}
+              isOwnPost={isOwnPost(item.user_id)}
+              onChatPress={onChatPress}
+            />
+            
+            {/* Distance indicator below each card */}
+            {item.distance !== undefined && (
+              <View style={styles.distanceIndicator}>
+                <Ionicons name="navigate" size={16} color="#4A90E2" />
+                <Text style={styles.distanceText}>
+                  {item.distance} mile{item.distance !== 1 ? "s" : ""} away
+                </Text>
+              </View>
+            )}
+          </View>
+        ))}
       </>
     );
   };
@@ -307,7 +257,6 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   /**
    * Main component render
    * Uses FlatList with single item for scroll performance
-   * Alternative to ScrollView for better optimization
    */
   return (
     <View style={styles.container}>
@@ -341,6 +290,7 @@ const styles = createResponsiveStyles({
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
+    paddingBottom: 20,
   },
   
   // --------------------------------------------------------------------------
@@ -378,94 +328,73 @@ const styles = createResponsiveStyles({
   },
   
   // --------------------------------------------------------------------------
-  // RESULT BANNER STYLES
+  // RESULTS INFO BANNER STYLES
   // --------------------------------------------------------------------------
   
-  // Green banner for exact ZIP code results
-  infoContainer: {
+  // Green banner showing result count and distance range
+  resultsInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#E8F5E9",               // Light green background
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-    borderLeftWidth: 4,
-    borderLeftColor: "#4CAF50",               // Green accent border
-  },
-  
-  // Text inside info banner
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#333",
-    marginLeft: 10,
-    fontWeight: "500",
-  },
-  
-  // Cyan banner for nearby ZIP code results
-  nearbyResultsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E0F7FA",               // Light cyan background
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-    marginTop: 20,                            // Extra spacing above
-    borderLeftWidth: 4,
-    borderLeftColor: "#00BCD4",               // Cyan accent border
-  },
-  
-  // Text inside nearby results banner
-  nearbyResultsText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#333",
-    marginLeft: 10,
-    fontWeight: "500",
-  },
-  
-  // Orange banner when no local results found
-  noLocalResultsContainer: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#FFF4E5",               // Light orange background
     padding: 15,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: "#FF8C00",               // Orange accent border
+    borderLeftColor: "#4CAF50",               // Green accent border
   },
   
-  // Text inside no local results banner
-  noLocalResultsText: {
+  // Container for info text (allows multiline)
+  resultsInfoTextContainer: {
     flex: 1,
+    marginLeft: 10,
+  },
+  
+  // Primary info text (count)
+  resultsInfoText: {
     fontSize: 14,
     color: "#333",
-    marginLeft: 10,
     fontWeight: "600",
-    lineHeight: 20,
+    marginBottom: 4,
   },
   
-  // Blue banner for additional state results section
-  additionalResultsContainer: {
+  // Secondary info text (distance range)
+  resultsDistanceText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  
+  // --------------------------------------------------------------------------
+  // SERVICE CARD STYLES
+  // --------------------------------------------------------------------------
+  
+  // Container for each service card with distance
+  serviceCardContainer: {
+    marginBottom: 20,
+  },
+  
+  // Distance indicator below each card
+  distanceIndicator: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#E3F2FD",               // Light blue background
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-    marginTop: 20,                            // Extra spacing above
-    borderLeftWidth: 4,
-    borderLeftColor: "#4A90E2",               // Blue accent border
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    marginTop: -8,                            // Overlap with card slightly
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderBottomWidth: 3,
+    borderColor: "#4A90E2",                   // Blue border
   },
   
-  // Text inside additional results banner
-  additionalResultsText: {
-    flex: 1,
+  // Distance text
+  distanceText: {
     fontSize: 13,
-    color: "#333",
-    marginLeft: 10,
-    fontWeight: "500",
+    color: "#4A90E2",
+    fontWeight: "600",
+    marginLeft: 6,
   },
   
   // --------------------------------------------------------------------------
@@ -477,6 +406,7 @@ const styles = createResponsiveStyles({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   
   // Primary "No services found" text
@@ -490,11 +420,11 @@ const styles = createResponsiveStyles({
   
   // Secondary suggestion text
   noResultsSubtext: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 14,
     color: "#999",
     textAlign: "center",
-    paddingHorizontal: 20,
+    lineHeight: 22,
   },
 });
 

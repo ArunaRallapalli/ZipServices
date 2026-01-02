@@ -7,7 +7,7 @@
  * 3. City and State auto-populate from Zip Code (read-only)
  * 4. Removed unnecessary fields (street, description, phone, service radius)
  * 5. Better user experience - faster signup process
- * 6. Fixed navigation - navigates to TabWrapperScreen (with bottom tabs) after registration
+ * 6. Email verification required before login
  */
 
 import React, { useState, useRef } from "react";
@@ -43,7 +43,8 @@ const SignUpFormBusinessOwners = () => {
     city: "",        // Auto-populated (read-only)
     state: "",       // Auto-populated (read-only)
   });
-
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [isLoadingZipData, setIsLoadingZipData] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -97,7 +98,7 @@ const SignUpFormBusinessOwners = () => {
     /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/.test(password);
 
   const handleCancel = () => {
-    navigation.goBack();  // Go back to previous screen
+    navigation.goBack();
   };
 
   const handleRegister = async () => {
@@ -109,6 +110,13 @@ const SignUpFormBusinessOwners = () => {
         Alert.alert("Validation Error", `${field} is required`);
         return;
       }
+    }
+
+    // Validate passwords match
+    if (formData.password !== confirmPassword) {
+      setPasswordError("Passwords do not match!");
+      Alert.alert("Validation Error", "Passwords do not match!");
+      return;
     }
 
     // Validate city and state were auto-populated
@@ -163,34 +171,16 @@ const SignUpFormBusinessOwners = () => {
       if (response.ok) {
         console.log("✅ Registration successful!");
         
-        // ✅ FIXED: Navigate to TabWrapperScreen (which has bottom tabs)
+        // Show email verification alert
         Alert.alert(
-          "Success", 
-          "Account created successfully! Welcome!",
+          "Account Created! 📧", 
+          "Please check your email to verify your account. You must verify your email before you can sign in.",
           [
             {
               text: "OK",
               onPress: () => {
-                // Reset navigation stack to TabWrapperScreen
-                navigation.reset({
-                  index: 0,
-                  routes: [
-                    { 
-                      name: 'TabWrapperScreen',
-                      params: {
-                        screen: 'Home', // Navigate to Home tab
-                        params: {
-                          fromSignup: true,
-                          customerInfo: {
-                            user_id: data.user.user_id,
-                            email: data.user.email,
-                            user_type: 'business_owner'
-                          }
-                        }
-                      }
-                    }
-                  ],
-                });
+                // Navigate to sign-in screen
+                navigation.navigate('SigninBusinessOwners');
               }
             }
           ]
@@ -269,6 +259,21 @@ const SignUpFormBusinessOwners = () => {
           Min 8 characters, include uppercase, lowercase, number, and special character
         </Text>
 
+        {/* Confirm Password - Required */}
+        <TextInput
+          placeholder="Confirm Password *"
+          style={[styles.input, passwordError ? styles.inputError : null]}
+          value={confirmPassword}
+          onChangeText={(text) => {
+            setConfirmPassword(text);
+            setPasswordError("");
+          }}
+          secureTextEntry
+        />
+        {passwordError ? (
+          <Text style={styles.errorText}>{passwordError}</Text>
+        ) : null}
+
         {/* Zip Code - Required (triggers city/state auto-fill) */}
         <View style={styles.zipCodeContainer}>
           <TextInput
@@ -328,7 +333,6 @@ const styles = createResponsiveStyles({
     backgroundColor: "#f9f9f9" 
   },
   
-  // This will automatically get maxWidth: 800, centered, border, shadow on web!
   formContainer: { 
     paddingTop: 60,
   },
@@ -380,7 +384,6 @@ const styles = createResponsiveStyles({
     paddingHorizontal: 5,
   },
 
-  // Auto-filled field display
   autoFilledContainer: {
     backgroundColor: '#e8f5e9',
     borderRadius: 10,
@@ -446,6 +449,20 @@ const styles = createResponsiveStyles({
     position: 'absolute',
     right: 12,
     top: 12,
+  },
+
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+  },
+  
+  errorText: {
+    color: '#ef4444',
+    fontSize: 14,
+    marginTop: -10,
+    marginBottom: 15,
+    paddingHorizontal: 5,
+    fontWeight: '600',
   },
 });
 

@@ -14,11 +14,8 @@ const PROD_URL = "https://your-app-api.herokuapp.com"; // Production URL
 const isPhysicalDevice = (() => {
   // For iOS, check multiple indicators
   if (Platform.OS === "ios") {
-    // Constants.isDevice is unreliable for iOS physical devices
-    // If we're in dev mode and the manifest debuggerHost exists, we're likely on a physical device
-    const debuggerHost = Constants.expoConfig?.hostUri || 
-                        Constants.manifest?.debuggerHost ||
-                        Constants.manifest2?.extra?.expoGo?.debuggerHost;
+    // Use the non-deprecated expoConfig API
+    const debuggerHost = Constants.expoConfig?.hostUri;
     
     // If debuggerHost contains an IP address (not localhost), it's a physical device
     if (debuggerHost && !debuggerHost.includes('localhost') && !debuggerHost.includes('127.0.0.1')) {
@@ -45,6 +42,12 @@ const API_URL = (() => {
   // Development - determine URL based on platform and device type
   const platform = Platform.OS;
 
+  // ✅ WEB PLATFORM - Must use localhost
+  if (platform === "web") {
+    console.log("→ Web browser: using localhost");
+    return `http://localhost:${DEV_PORT}`;
+  }
+
   if (platform === "ios") {
     if (isPhysicalDevice) {
       console.log("→ iOS physical device: using LAN IP");
@@ -65,9 +68,9 @@ const API_URL = (() => {
     }
   }
 
-  // Fallback for web or other platforms
-  console.log("→ Fallback: using LAN IP");
-  return `http://${DEV_LAN_IP}:${DEV_PORT}`;
+  // Fallback for unknown platforms - use localhost
+  console.log("→ Unknown platform: using localhost");
+  return `http://localhost:${DEV_PORT}`;
 })();
 
 // Enhanced logging for debugging
@@ -76,7 +79,7 @@ console.log("🔧 API Configuration", {
   Platform: Platform.OS,
   IsPhysicalDevice: isPhysicalDevice,
   ConstantsIsDevice: Constants.isDevice,
-  DebuggerHost: Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost,
+  DebuggerHost: Constants.expoConfig?.hostUri,
   API_URL,
 });
 

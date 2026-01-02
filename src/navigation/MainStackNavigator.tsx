@@ -61,6 +61,8 @@ import RequestServiceCategoryScreen from "../screens/Requestservicecategoryscree
 // Add to imports section
 import TermsOfServiceScreen from "../screens/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 
 /**
  * LoadingScreen Component
@@ -193,6 +195,9 @@ export type RootStackParamList = {
     city: string;
     state: string;
   };
+  ForgotPasswordBusinessOwner: undefined;
+  ResetPassword: { token?: string; email?: string };
+  VerifyEmail: { token?: string; email?: string };
 };
 
 /**
@@ -249,6 +254,7 @@ const NavigationStack: React.FC = () => {
           animation: 'slide_from_right',
           contentStyle: { backgroundColor: '#fff' }
         }}
+
       >
         {/* All your existing screens stay exactly the same */}
         <RootStack.Screen 
@@ -299,6 +305,16 @@ const NavigationStack: React.FC = () => {
         headerTitle: 'Privacy Policy',
         headerBackTitle: 'Back'
       }}
+    />
+    <RootStack.Screen
+  name="ResetPassword"
+  component={ResetPasswordScreen}
+  options={{ headerShown: false }}
+/>
+<RootStack.Screen
+      name="VerifyEmail"
+      component={VerifyEmailScreen}
+      options={{ headerShown: false }}
     />
   </RootStack.Group>
 

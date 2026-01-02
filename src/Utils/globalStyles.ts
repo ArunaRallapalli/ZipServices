@@ -20,7 +20,7 @@ export const createResponsiveStyles = (baseStyles: any) => {
       responsiveStyles[name] = {
         ...responsiveStyles[name],
         ...(Platform.OS === 'web' && {
-          maxWidth: 600,
+          maxWidth: 700,
           alignSelf: 'center',
           width: '100%',
           backgroundColor: '#ffffff',      // White background

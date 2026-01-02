@@ -10,11 +10,14 @@
  * - ZIP code validation
  * - Popular category configuration with icons and colors
  * 
+ * UPDATED: Now supports radius-based search with distance calculation
+ * Backend returns posts sorted by distance with mile information
+ * 
  * KEY FEATURES:
  * - Fetches service categories from backend with fallback to hardcoded list
- * - Searches service posts by category, ZIP code, city, and state
- * - Separates exact ZIP matches from nearby ZIP matches
- * - Deduplicates results between ZIP code and state matches
+ * - Radius-based search: finds services within X miles of ZIP code
+ * - Returns posts sorted by distance (closest first)
+ * - Each result includes distance in miles
  * - Integrates with zippopotam.us API for ZIP code to location conversion
  */
 
@@ -27,6 +30,7 @@ import { Alert } from "./Alert";
 
 /**
  * Represents a service post from a business or service provider
+ * NOW INCLUDES: distance field (in miles) from radius search
  */
 export interface ServicePost {
   post_id: number;
@@ -44,18 +48,20 @@ export interface ServicePost {
   state?: string;
   poster_name?: string;
   business_name?: string;
+  distance?: number;        // NEW: Distance in miles from search center
 }
 
 /**
- * Structured search results separating exact ZIP, nearby ZIP, and state-level matches
+ * Structured search results
+ * UPDATED: Now uses radius-based results instead of exact/nearby/state separation
  */
 export interface SearchResults {
-  exactZipMatches: ServicePost[];      // Posts matching the exact ZIP code
-  nearbyZipMatches: ServicePost[];     // Posts matching nearby ZIP codes
-  zipCodeMatches: ServicePost[];       // Combined exact + nearby (for backward compatibility)
-  stateMatches: ServicePost[];         // Posts matching the state (excluding ZIP matches)
-  hasZipCodeMatches: boolean;          // Quick check for any ZIP results
-  hasStateMatches: boolean;            // Quick check for state results
+  exactZipMatches: ServicePost[];      // Posts sorted by distance (all results)
+  nearbyZipMatches: ServicePost[];     // Deprecated (not used with radius search)
+  zipCodeMatches: ServicePost[];       // Same as exactZipMatches (for compatibility)
+  stateMatches: ServicePost[];         // Deprecated (not used with radius search)
+  hasZipCodeMatches: boolean;          // Quick check for any results
+  hasStateMatches: boolean;            // Always false with radius search
 }
 
 /**
@@ -67,6 +73,7 @@ export interface SearchParams {
   zipCode?: string;
   city?: string;
   state?: string;
+  radius?: number;          // NEW: Search radius in miles (default: 25)
 }
 
 /**
@@ -197,25 +204,16 @@ export const fetchCategories = async (): Promise<string[]> => {
 
 /**
  * Fetches city and state information for a given ZIP code
- * First checks local cache, then queries external API if not found
+ * Queries external API for real-time ZIP code data
  * 
  * @param zipCode - The 5-digit ZIP code to lookup
  * @returns Promise resolving to LocationData or null if not found
  * 
  * USES: Zippopotam.us API for ZIP code to location conversion
+ * This free API provides accurate, up-to-date ZIP code information
+ * for all US ZIP codes without requiring an API key
  */
 export const fetchLocationFromZip = async (zipCode: string): Promise<LocationData | null> => {
-  // Local cache for commonly used ZIP codes (avoids API calls)
-  const knownZipCodes: { [key: string]: LocationData } = {
-    '85288': { city: 'Tempe', state: 'AZ' },
-  };
-
-  // Check local cache first
-  if (knownZipCodes[zipCode]) {
-    console.log(`✅ [searchUtils] Known ZIP code: ${zipCode}`);
-    return knownZipCodes[zipCode];
-  }
-
   try {
     console.log(`🔍 [searchUtils] Fetching location for ZIP: ${zipCode}`);
     
@@ -249,112 +247,178 @@ export const fetchLocationFromZip = async (zipCode: string): Promise<LocationDat
 };
 
 /**
- * Searches for service posts based on provided parameters
- * Performs two searches: one by ZIP code, one by state
- * Keeps exact and nearby ZIP matches separate
- * Deduplicates results to avoid showing same post twice
+ * Searches for service posts using RADIUS-BASED search
  * 
- * @param params - Search parameters including category, ZIP, and location
- * @returns Promise resolving to SearchResults with separated exact, nearby, and state matches
+ * NEW BACKEND INTEGRATION:
+ * - Uses /api/service-posts/search endpoint with radius parameter
+ * - Backend calculates distances using Haversine formula
+ * - Returns posts sorted by distance (closest first)
+ * - Each post includes distance in miles
+ * 
+ * @param params - Search parameters including category, ZIP, and optional radius
+ * @returns Promise resolving to SearchResults with posts sorted by distance
+ * 
+ * BACKEND RESPONSE FORMAT:
+ * {
+ *   success: true,
+ *   posts: [
+ *     { ...postData, distance: 7.3 },  // miles from search center
+ *     { ...postData, distance: 16.7 },
+ *   ],
+ *   searchCenter: { zipCode: "85083", lat: 33.7352, lon: -112.1294 },
+ *   radius: 25,
+ *   count: 2
+ * }
  * 
  * FLOW:
- * 1. Search by ZIP code (if provided) - returns exact and nearby matches separately
- * 2. Search by state (if provided) - returns state-wide matches
- * 3. Deduplicate state results to exclude posts already in ZIP results
- * 4. Return structured results with all match types
+ * 1. Build query with category, ZIP code, and radius
+ * 2. Call backend search endpoint
+ * 3. Backend calculates distances for all posts in category
+ * 4. Backend filters posts beyond radius
+ * 5. Backend sorts by distance (closest first)
+ * 6. Frontend receives sorted posts with distance info
+ * 7. Return structured results
  */
 export const searchServicePosts = async (params: SearchParams): Promise<SearchResults> => {
   console.log("🔍 [searchUtils] Searching with params:", params);
 
-  const { serviceCategory, zipCode, state } = params;
+  const { serviceCategory, zipCode, radius = 25 } = params;
 
   // Initialize result arrays
-  let exactMatches: ServicePost[] = [];
-  let nearbyMatches: ServicePost[] = [];
-  let stateMatches: ServicePost[] = [];
+  let allPosts: ServicePost[] = [];
 
   try {
     // ========================================================================
-    // SEARCH BY ZIP CODE
+    // RADIUS-BASED SEARCH
     // ========================================================================
+    // NEW: Uses backend's radius calculation instead of separate ZIP/state searches
+    // Backend handles distance calculation, filtering, and sorting
+    
     if (zipCode) {
-      // Build query parameters for ZIP code search
-      const zipParams = new URLSearchParams({
+      console.log(`🎯 [searchUtils] Starting radius search for ${serviceCategory} within ${radius} miles of ${zipCode}`);
+      
+      // Build query parameters for radius search
+      const searchParams = new URLSearchParams({
         service_category: serviceCategory,
         zip_code: zipCode,
+        radius: radius.toString(),
       });
 
-      const zipUrl = `${API_URL}/api/service-posts/search?${zipParams.toString()}`;
-      console.log("🔍 [searchUtils] ZIP search URL:", zipUrl);
+      const searchUrl = `${API_URL}/api/service-posts/search?${searchParams.toString()}`;
+      console.log("📍 [searchUtils] Search URL:", searchUrl);
 
-      // Execute ZIP code search
-      const zipResponse = await fetch(zipUrl);
-      
-      if (zipResponse.ok) {
-        const zipData = await zipResponse.json();
-        console.log("📥 [searchUtils] ZIP results:", zipData);
-        
-        if (zipData.success) {
-          // Keep exact and nearby matches separate
-          exactMatches = Array.isArray(zipData.exactMatches) ? zipData.exactMatches : [];
-          nearbyMatches = Array.isArray(zipData.nearbyMatches) ? zipData.nearbyMatches : [];
-          console.log(`✅ [searchUtils] ZIP results: ${exactMatches.length} exact + ${nearbyMatches.length} nearby`);
-        }
-      }
-    }
-
-    // ========================================================================
-    // SEARCH BY STATE
-    // ========================================================================
-    if (state) {
-      // Build query parameters for state search
-      const stateParams = new URLSearchParams({
-        service_category: serviceCategory,
-        state: state,
+      // Execute radius search
+      const response = await fetch(searchUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
       });
-
-      const stateUrl = `${API_URL}/api/service-posts/search?${stateParams.toString()}`;
-      console.log("🔍 [searchUtils] State search URL:", stateUrl);
-
-      // Execute state search
-      const stateResponse = await fetch(stateUrl);
       
-      if (stateResponse.ok) {
-        const stateData = await stateResponse.json();
-        console.log("📥 [searchUtils] State results:", stateData);
+      console.log("📥 [searchUtils] Response status:", response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("📥 [searchUtils] Search response:", data);
         
-        if (stateData.success) {
-          // Combine exact and nearby state matches
-          const exact = Array.isArray(stateData.exactMatches) ? stateData.exactMatches : [];
-          const nearby = Array.isArray(stateData.nearbyMatches) ? stateData.nearbyMatches : [];
-          const allStateResults = [...exact, ...nearby];
+        // ====================================================================
+        // PARSE NEW BACKEND RESPONSE FORMAT
+        // ====================================================================
+        // Expected structure:
+        // {
+        //   success: true,
+        //   posts: [...],           // Array of posts with distance field
+        //   searchCenter: {...},    // Center point info
+        //   radius: 25,             // Search radius used
+        //   count: 2                // Number of results
+        // }
+        
+        if (data.success && Array.isArray(data.posts)) {
+          allPosts = data.posts;
           
-          // DEDUPLICATION: Remove any posts that already appear in ZIP results (exact or nearby)
-          // This prevents showing the same service provider twice
-          const allZipPostIds = [...exactMatches, ...nearbyMatches].map(post => post.post_id);
-          stateMatches = allStateResults.filter(
-            (statePost: ServicePost) => !allZipPostIds.includes(statePost.post_id)
-          );
-          console.log(`✅ [searchUtils] State results: ${exact.length} exact + ${nearby.length} nearby = ${allStateResults.length} total, ${stateMatches.length} after deduplication`);
+          console.log(`✅ [searchUtils] Found ${data.count} posts within ${data.radius} miles`);
+          
+          // Log search center info for debugging
+          if (data.searchCenter) {
+            console.log(`📍 [searchUtils] Search center: ${data.searchCenter.zipCode} at (${data.searchCenter.lat}, ${data.searchCenter.lon})`);
+          }
+          
+          // Log distance for each result
+          if (allPosts.length > 0) {
+            console.log("📏 [searchUtils] Results by distance:");
+            allPosts.forEach((post, index) => {
+              console.log(`   ${index + 1}. ${post.title} - ${post.distance} miles (${post.city}, ${post.state})`);
+            });
+          } else {
+            console.log(`ℹ️ [searchUtils] No services found within ${radius} miles of ${zipCode}`);
+          }
+        } else {
+          console.warn("⚠️ [searchUtils] Invalid response structure:", data);
+        }
+      } else {
+        // Handle HTTP errors
+        const errorText = await response.text();
+        console.error(`❌ [searchUtils] Search failed with status ${response.status}:`, errorText);
+        
+        // Try to parse error message
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error) {
+            console.error(`❌ [searchUtils] Backend error: ${errorData.error}`);
+          }
+        } catch (e) {
+          // Error response wasn't JSON
+          console.error("❌ [searchUtils] Non-JSON error response");
         }
       }
+    } else {
+      console.warn("⚠️ [searchUtils] No ZIP code provided for radius search");
     }
 
-    // Combine exact and nearby for backward compatibility
-    const allZipMatches = [...exactMatches, ...nearbyMatches];
-
-    // Return structured results
-    return {
-      exactZipMatches: exactMatches,
-      nearbyZipMatches: nearbyMatches,
-      zipCodeMatches: allZipMatches,        // Combined for backward compatibility
-      stateMatches: stateMatches,
-      hasZipCodeMatches: allZipMatches.length > 0,
-      hasStateMatches: stateMatches.length > 0,
+    // ========================================================================
+    // RETURN STRUCTURED RESULTS
+    // ========================================================================
+    // All posts are already sorted by distance from backend
+    // Distance information is included in each post
+    
+    const hasResults = allPosts.length > 0;
+    
+    const results: SearchResults = {
+      exactZipMatches: allPosts,          // All results (sorted by distance)
+      nearbyZipMatches: [],               // Not used with radius search
+      zipCodeMatches: allPosts,           // Same as exactZipMatches (for compatibility)
+      stateMatches: [],                   // Not used with radius search
+      hasZipCodeMatches: hasResults,
+      hasStateMatches: false,             // Radius search doesn't separate state matches
     };
+
+    console.log("✅ [searchUtils] Search complete:", {
+      totalResults: allPosts.length,
+      hasResults: hasResults,
+      closestDistance: allPosts[0]?.distance,
+      farthestDistance: allPosts[allPosts.length - 1]?.distance,
+    });
+
+    return results;
+    
   } catch (error) {
+    // ========================================================================
+    // ERROR HANDLING
+    // ========================================================================
     // Return empty results on error
+    // Log error for debugging
+    
     console.error("❌ [searchUtils] Search error:", error);
+    
+    // Show user-friendly error message
+    Alert.alert(
+      "Search Error",
+      "Unable to search for services. Please check your connection and try again.",
+      [{ text: "OK" }]
+    );
+    
+    // Return empty results structure
     return {
       exactZipMatches: [],
       nearbyZipMatches: [],

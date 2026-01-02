@@ -1,8 +1,9 @@
 // backend/server.ts
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import pool from "./config/pool"; // ✅ Import the pool instead of creating new one
+import pool from '../backend/config/pool';
 import { supabase } from "./config/Supabase"; // ✅ ADD THIS LINE
+
 
 // Routers
 import usersRouter from "./routes/users";
@@ -13,7 +14,8 @@ import messagesRouter from "./routes/messages";
 import businessOwnerProfileRouter from "./business-owners";
 import serviceCategoriesRouter from "./routes/serviceCategories";
 import servicePostsRouter from './routes/ServicePosts';
-
+import passwordResetRoutes from './routes/Passwordreset';
+import emailVerificationRoutes from './routes/EmailVerification';
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -74,6 +76,11 @@ app.use("/business_owners/crud", businessOwnersRouter);
 app.use("/business-owners", businessOwnerProfileRouter);
 app.use('/service-posts', servicePostsRouter);
 app.use("/messages", messagesRouter);
+app.use("/api/password-reset", passwordResetRoutes);
+console.log("✅ Password reset routes registered at /api/password-reset"); // ← ADD THIS LINE
+app.use('/api/email-verification', emailVerificationRoutes);
+
+ 
 
 // Debug routes logging
 console.log("=== REGISTERED ROUTES ===");
@@ -84,6 +91,8 @@ console.log("   GET  /api/users");
 console.log("   GET  /api/users/:userId/profile");
 console.log("   GET  /api/users/:userId/roles");
 console.log("   POST /api/service-posts");
+console.log('✅ Email verification routes registered at /api/email-verification');
+console.log("")
 console.log("");
 
 app._router.stack.forEach((middleware: any, index: number) => {
@@ -154,6 +163,7 @@ const server = app.listen(5000, "0.0.0.0", () => {
   console.log("  curl http://localhost:5000/api/health");
   console.log("  curl http://localhost:5000/api/service-categories");
   console.log("  curl http://localhost:5000/api/users/175/profile");
+  
 });
 
 server.on('error', (error: any) => {

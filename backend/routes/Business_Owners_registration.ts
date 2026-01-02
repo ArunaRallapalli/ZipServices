@@ -8,14 +8,34 @@
  * - New business owner registration
  * - User account creation
  * - Business profile creation
+ * - Email verification sending
  */
 
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/Supabase";
+import crypto from 'crypto';
+import { Resend } from 'resend';
+import dotenv from 'dotenv';
+import pool from '../config/pool';
+
+dotenv.config();
+// 🔍 ADD THIS DEBUG SECTION HERE
+// ========================================
+console.log('==========================================');
+console.log('🔑 RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
+console.log('🔑 API Key first 10 chars:', process.env.RESEND_API_KEY?.substring(0, 10));
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+console.log('🌐 FRONTEND_URL:', process.env.FRONTEND_URL);
+console.log('==========================================');
+// ========================================
 
 const router = Router();
+const resend = new Resend(process.env.RESEND_API_KEY);
+// Verify Resend instance was created
+console.log('📧 Resend instance created:', !!resend);
+
 
 // Helper function to generate JWT token
 const generateToken = (user_id: string, business_id: number): string => {
@@ -24,6 +44,141 @@ const generateToken = (user_id: string, business_id: number): string => {
     process.env.JWT_SECRET || "secret",
     { expiresIn: "1h" }
   );
+};
+
+// Helper function to send verification email
+const sendVerificationEmail = async (userId: number, email: string, fullName?: string) => {
+    // ✅ ADD THIS - Entry point logging
+  console.log('📧 ===== ENTERING sendVerificationEmail =====');
+  console.log('📧 User ID:', userId);
+  console.log('📧 Email:', email);
+  console.log('📧 Name:', fullName);
+  try {
+    console.log('🔐 Generating verification token...');
+    // Generate secure random token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+console.log('✅ Token generated and hashed');
+    // Token expires in 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Save verification token to database
+       console.log('💾 Attempting to save token to database...');  // ← ADD THIS LINE
+    await pool.query(
+      `INSERT INTO email_verifications (user_id, verification_token, expires_at, verified)
+       VALUES ($1, $2, $3, false)`,
+      [userId, hashedToken, expiresAt]
+    );
+    console.log('✅ Token saved to database successfully');
+
+    // Create verification link based on environment
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const frontendUrl = isDevelopment 
+      ? 'http://localhost:8081' 
+      : 'https://gozipmarket.com';
+
+    const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+    // ✅ ADD THIS - Show the link
+console.log('🔗 Verification link created:', verificationLink);
+console.log('📤 Calling Resend API to send email...');
+    // Send verification email
+   const emailResult = await resend.emails.send({
+      from: 'ZipService <noreply@gozipmarket.com>',
+      to: email,
+      subject: 'Verify Your ZipService Email',
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background-color: #4A90E2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+              .content { background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+              .button { display: inline-block; background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+              .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+              .info { background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 12px; margin: 20px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Welcome to ZipService! 🎉</h1>
+              </div>
+              <div class="content">
+                <p>Hi ${fullName || 'there'},</p>
+                
+                <p>Thank you for signing up for ZipService! We're excited to have you join our community.</p>
+                
+                <p>To complete your registration and start using all features, please verify your email address by clicking the button below:</p>
+                
+                <p style="text-align: center;">
+                  <a href="${verificationLink}" class="button">Verify Email Address</a>
+                </p>
+                
+                <p>Or copy and paste this link into your browser:</p>
+                <p style="word-break: break-all; background-color: #eee; padding: 10px; border-radius: 4px;">
+                  ${verificationLink}
+                </p>
+                
+                <div class="info">
+                  <strong>ℹ️ Important:</strong>
+                  <ul>
+                    <li>This link expires in 24 hours</li>
+                    <li>If you didn't create an account, please ignore this email</li>
+                  </ul>
+                </div>
+                
+                <p>Once verified, you'll be able to:</p>
+                <ul>
+                  <li>Post and manage your services</li>
+                  <li>Connect with customers in your area</li>
+                  <li>Send and receive messages</li>
+                  <li>Build your business profile</li>
+                </ul>
+                
+                <p>Welcome aboard!</p>
+                <p><strong>The ZipService Team</strong></p>
+              </div>
+              <div class="footer">
+                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>This is an automated email, please do not reply.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `
+    });
+
+// ✅ ADD THIS - After Resend API success
+   console.log('✅ Resend API responded successfully');
+console.log('📧 Email Result:', emailResult);
+console.log('📧 Email ID:', emailResult.data?.id || 'N/A');
+console.log('📧 ===== EMAIL SENT SUCCESSFULLY =====');
+    
+    return true;
+   } catch (error: any) {
+    console.error('==========================================');
+    console.error('❌ ERROR SENDING VERIFICATION EMAIL');
+    console.error('==========================================');
+    console.error('📧 Email:', email);
+    console.error('👤 Name:', fullName);
+    console.error('🆔 User ID:', userId);
+    console.error('🔑 API Key exists:', !!process.env.RESEND_API_KEY);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ Full error:', JSON.stringify(error, null, 2));
+    
+    // If it's a Resend-specific error
+    if (error.statusCode) {
+      console.error('📊 HTTP Status:', error.statusCode);
+    }
+    
+    console.error('==========================================');
+    
+    // Don't fail registration if email fails - just log it
+    return false;
+  }
 };
 
 // -----------------------------
@@ -79,13 +234,14 @@ router.post("/register", async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     console.log("🔒 Password hashed successfully");
 
-    // 3️⃣ Create user in users table
+    // 3️⃣ Create user in users table (email_verified defaults to FALSE)
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
         email: email,
         password: hashedPassword,
-        user_type: 'business_owner'
+        user_type: 'business_owner',
+        email_verified: false  // Explicitly set to false
       })
       .select()
       .single();
@@ -121,16 +277,22 @@ router.post("/register", async (req: Request, res: Response) => {
 
     console.log("✅ Business owner profile created with ID:", businessOwner.business_id);
 
-    // 5️⃣ Generate JWT token for automatic login
+    // 5️⃣ Send verification email
+    console.log("📧 Sending verification email...");
+    await sendVerificationEmail(newUser.user_id, email, name);
+
+    // 6️⃣ Generate JWT token for automatic login
     const token = generateToken(newUser.user_id, businessOwner.business_id);
 
-    // 6️⃣ Return success response with token
+    // 7️⃣ Return success response with token
     res.status(201).json({
-      message: 'Business owner registered successfully',
+      message: 'Business owner registered successfully. Please check your email to verify your account.',
       token: token,
+      emailVerificationSent: true,
       user: {
         user_id: newUser.user_id,
         email: newUser.email,
+        email_verified: false,
         business_id: businessOwner.business_id,
         business_name: businessOwner.business_name
       }

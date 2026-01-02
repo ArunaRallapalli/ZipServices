@@ -1,0 +1,72 @@
+/**
+ * Test Resend API Configuration - CLEAN VERSION
+ * 
+ * Usage:
+ * node test-resend.js your-email@example.com
+ */
+
+const { Resend } = require('resend');
+require('dotenv').config();
+
+// Get email from command line argument
+const testEmail = process.argv[2];
+
+if (!testEmail) {
+  console.error('❌ Please provide an email address!');
+  console.log('\n📖 Usage:');
+  console.log('   node test-resend.js your-email@example.com\n');
+  process.exit(1);
+}
+
+// Validate email format
+if (!testEmail.includes('@')) {
+  console.error('❌ Invalid email format!');
+  process.exit(1);
+}
+
+// Use API key from .env file
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+async function testResend() {
+  console.log('🧪 Testing Resend API...\n');
+  console.log('📧 Sending test email to:', testEmail);
+  console.log('📤 From: ZipService <noreply@gozipmarket.com>');
+  console.log('🔑 Using API key from .env file\n');
+  
+  try {
+    const result = await resend.emails.send({
+      from: 'ZipService <noreply@gozipmarket.com>',
+      to: testEmail,
+      subject: '🧪 Test Email from ZipService',
+      html: `
+        <h1>✅ Success!</h1>
+        <p>Your Resend API is working correctly!</p>
+        <p>This means your registration emails should work too.</p>
+        <hr>
+        <p><small>Test sent at: ${new Date().toISOString()}</small></p>
+      `
+    });
+    
+    console.log('✅ SUCCESS! Email sent!');
+    console.log('📧 Email ID:', result.id);
+    console.log('\n📋 Next Steps:');
+    console.log('1. ✅ Check your inbox (and spam folder)');
+    console.log('2. ✅ Resend API is working!');
+    console.log('3. ⚠️  If registration emails still fail, check app code');
+    console.log('\n🔗 Check delivery status:');
+    console.log('   https://resend.com/emails');
+    
+  } catch (error) {
+    console.error('❌ ERROR:', error.message);
+    console.error('\n📋 Common Issues:');
+    console.error('1. Invalid API key');
+    console.error('2. Domain not verified in Resend');
+    console.error('3. API key permissions');
+    console.error('4. Rate limit exceeded');
+    console.error('\n🔗 Check Resend Dashboard:');
+    console.error('   https://resend.com/domains');
+    console.error('\nFull error:', error);
+  }
+}
+
+testResend();

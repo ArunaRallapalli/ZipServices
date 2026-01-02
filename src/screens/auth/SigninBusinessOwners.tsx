@@ -1,49 +1,29 @@
 /**
- * SignInBusinessOwnersScreen
+ * SignInBusinessOwnersScreen - WITH PASSWORD RESET AND EMAIL VERIFICATION
  * 
- * Authentication screen specifically for business owners to sign in to the application.
+ * Authentication screen for business owners with complete password reset flow.
  * 
  * FEATURES:
- * - Email and password authentication
- * - JWT token handling with manual decoding
- * - Flexible API response parsing (handles multiple response formats)
- * - Success overlay with animated feedback
- * - Global authentication state management via AuthContext
- * - Secure session storage (token saved to AsyncStorage via signIn)
- * - Keyboard-aware UI for better mobile experience
- * - Loading states and error handling
+ * - Password reset request (forgot password)
+ * - Password reset verification (set new password)
+ * - Email verification requirement
+ * - Three modes: 'login', 'forgot', 'reset'
+ * - Deep linking support for email reset links
  * 
- * FLOW:
- * 1. User enters email and password
- * 2. On submit, validates inputs
- * 3. Makes POST request to /business_owners/login endpoint
- * 4. Extracts and decodes JWT token from response
- * 5. Saves token and user info to AsyncStorage via AuthContext
- * 6. Shows success overlay
- * 7. Displays welcome alert with app features
- * 8. Navigates to TabWrapperScreen (main app)
+ * MODES:
+ * - LOGIN MODE: Normal email/password sign-in
+ * - FORGOT MODE: User enters email to receive reset link
+ * - RESET MODE: User enters new password (triggered by email link)
  * 
- * AUTHENTICATION:
- * - Uses JWT tokens for authentication
- * - Token stored securely in AsyncStorage
- * - User type: 'business_owner'
- * - Supports multiple API response formats for flexibility
- * 
- * ERROR HANDLING:
- * - Input validation
- * - Network error handling
- * - Invalid JSON response handling
- * - JWT decoding fallback (uses response data if JWT decode fails)
- * - User-friendly error messages via Alert
- * 
- * NAVIGATION:
- * - On success: Resets navigation stack to TabWrapperScreen
- * - Cancel button: Returns to previous screen
- * 
+ * PASSWORD RESET FLOW:
+ * 1. User clicks "Forgot Password?"
+ * 2. Enters email → Backend sends reset email
+ * 3. User clicks link in email → Opens app in reset mode
+ * 4. User enters new password → Password updated
+ * 5. User can now log in with new password
  */
 
-// Import necessary React and React Native components
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -55,27 +35,28 @@ import {
   Platform,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { Alert } from "../../Utils/Alert";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import API_URL from "../../config/apiConfig"; // Backend API URL configuration
-import { useAuth } from "../../contexts/AuthContext"; // Auth context for global authentication state
-import { createResponsiveStyles } from "../../Utils/globalStyles"
-// Navigation prop type definition for type safety
-type NavProp = NativeStackNavigationProp<RootStackParamList, "SigninBusinessOwners">;
+import { RouteProp, useRoute } from "@react-navigation/native";
+import API_URL from "../../config/apiConfig";
+import { useAuth } from "../../contexts/AuthContext";
+import { createResponsiveStyles } from "../../Utils/globalStyles";
 
-// Interface for decoded JWT token payload
+type NavProp = NativeStackNavigationProp<RootStackParamList, "SigninBusinessOwners">;
+type ScreenRouteProp = RouteProp<RootStackParamList, "SigninBusinessOwners">;
+
 interface JWTPayload {
   user_id: number;
   business_name?: string;
   email: string;
-  iat?: number; // Issued at timestamp
-  exp?: number; // Expiration timestamp
-  [key: string]: any; // Allow additional properties
+  iat?: number;
+  exp?: number;
+  [key: string]: any;
 }
 
-// Interface for login API response - handles multiple possible response formats
 interface LoginResponse {
   token?: string;
   access_token?: string;
@@ -84,6 +65,7 @@ interface LoginResponse {
     user_id?: number;
     id?: number;
     email: string;
+    email_verified?: boolean;
     business_name?: string;
     phone_number?: string;
     zip_code?: string;
@@ -97,26 +79,15 @@ interface LoginResponse {
   };
 }
 
-/**
- * Manual JWT decoder utility
- * Decodes a JWT token without requiring external libraries
- * 
- * @param token - The JWT token string to decode
- * @returns Decoded JWT payload containing user information
- * @throws Error if token format is invalid or decoding fails
- */
-// Manual JWT decode function - decodes base64 encoded JWT without external library
+// Screen mode type
+type ScreenMode = 'login' | 'forgot' | 'reset';
+
 const decodeJwtManually = (token: string): JWTPayload => {
   try {
-    // Split JWT into its three parts (header.payload.signature)
     const parts = token.split(".");
     if (parts.length !== 3) throw new Error("Invalid JWT format");
-
-    // Extract and decode the payload (middle part)
     const payload = parts[1];
-    // Add padding if necessary for base64 decoding
     const paddedPayload = payload + "=".repeat((4 - payload.length % 4) % 4);
-    // Decode from base64 and parse JSON
     const decodedPayload = atob(paddedPayload);
     return JSON.parse(decodedPayload);
   } catch (error) {
@@ -124,16 +95,7 @@ const decodeJwtManually = (token: string): JWTPayload => {
   }
 };
 
-/**
- * Success Overlay Component
- * Displays a centered modal-style success message after successful login
- * 
- * @param visible - Controls overlay visibility
- * @param message - Success message to display to user
- */
-// Success overlay component - displays a success message after login
 const SuccessOverlay: React.FC<{ visible: boolean; message: string }> = ({ visible, message }) => {
-  // Don't render anything if not visible
   if (!visible) return null;
   
   return (
@@ -147,45 +109,50 @@ const SuccessOverlay: React.FC<{ visible: boolean; message: string }> = ({ visib
   );
 };
 
-/**
- * Main Screen Component
- * Handles the complete business owner sign-in flow
- */
 export default function SignInBusinessOwnersScreen({ navigation }: { navigation: NavProp }) {
-  // Get signIn function from auth context to handle global authentication
   const { signIn } = useAuth();
+  const route = useRoute<ScreenRouteProp>();
   
-  // Local state for form inputs and UI state
-  const [email, setEmail] = useState(""); // User's email input
-  const [password, setPassword] = useState(""); // User's password input
-  const [loading, setLoading] = useState(false); // Loading state during login
-  const [showSuccess, setShowSuccess] = useState(false); // Success overlay visibility
+  // Check if user came from password reset email link
+  const resetToken = (route.params as any)?.token;
+  const resetEmail = (route.params as any)?.email;
+  
+  // Screen mode state
+  const [mode, setMode] = useState<ScreenMode>(resetToken ? 'reset' : 'login');
+  
+  // Login form state
+  const [email, setEmail] = useState(resetEmail || "");
+  const [password, setPassword] = useState("");
+  
+  // Password reset state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  // Update mode if reset token is provided via navigation
+  useEffect(() => {
+    if (resetToken && resetEmail) {
+      setMode('reset');
+      setEmail(resetEmail);
+    }
+  }, [resetToken, resetEmail]);
 
   /**
-   * Main login handler
-   * Handles the complete authentication flow:
-   * 1. Validates inputs
-   * 2. Makes API request
-   * 3. Processes response
-   * 4. Decodes JWT
-   * 5. Saves authentication state
-   * 6. Shows success feedback
-   * 7. Navigates to main app
+   * Handle normal login
    */
-  // Main login handler - called when user taps Sign In button
   const handleLogin = async () => {
-    // Validate that both fields are filled
     if (!email.trim() || !password.trim()) {
       Alert.alert("Validation", "Please enter both email and password");
       return;
     }
 
     try {
-      setLoading(true); // Show loading state
+      setLoading(true);
       
-      console.log("Making business owner login request to:", `${API_URL}/business_owners/login`);
-
-      // Make POST request to backend login endpoint
       const response = await fetch(`${API_URL}/business_owners/login`, {
         method: "POST",
         headers: { 
@@ -198,68 +165,58 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         }),
       });
 
-      // Get raw response text first to handle parsing errors
       const rawText = await response.text();
-      console.log("Response status:", response.status);
-
-      // Parse JSON response safely
+      
       let data: LoginResponse;
       try {
         data = JSON.parse(rawText);
       } catch (err) {
-        console.error("Invalid JSON from server:", rawText);
         throw new Error("Server returned invalid response");
       }
 
-      // Check if response was successful
       if (!response.ok) {
         throw new Error(data.message || `Server error: ${response.status}`);
       }
 
-      // Try to extract token from different possible locations in response
-      // This handles multiple API response formats for flexibility
+      // ✅ Check if email is verified
+      if (data.user && data.user.email_verified === false) {
+        Alert.alert(
+          "Email Not Verified",
+          "Please verify your email address before signing in. Check your inbox for the verification link.",
+          [
+            { text: "OK" }
+          ]
+        );
+        return; // Stop login process
+      }
+
       const token = data.token || data.access_token || data.data?.token;
       
-      // Ensure we got a token
       if (!token) {
-        console.error("No token found in response:", data);
         throw new Error("No authentication token received from server");
       }
 
-      console.log("Token received, decoding...");
-
-      // Initialize variables for user information
       let userInfo;
       let userId = 0;
       let businessName = "Business Owner";
 
       try {
-        // Try to decode JWT to extract user information
         const decoded = decodeJwtManually(token);
-        console.log("Decoded JWT:", decoded);
-        
-        // Extract user ID and business name from JWT
         userId = decoded.user_id || 0;
         businessName = decoded.business_name || decoded.email || "Business Owner";
         
-        // Build user info object from JWT data
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
           email: email.trim(),
           business_name: businessName,
-          full_name: businessName, // Use business name as display name
+          full_name: businessName,
         };
       } catch (jwtError) {
-        console.warn("JWT decode failed, using response data:", jwtError);
-        
-        // Fallback: Use user data from API response if JWT decode fails
-        // This ensures authentication still works even if JWT decoding fails
         const userFromResponse = data.user || data.data?.user;
         userId = userFromResponse?.user_id || userFromResponse?.id || 0;
         businessName = userFromResponse?.business_name || userFromResponse?.email || "Business Owner";
         
-        // Build user info object from response data
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
@@ -273,25 +230,13 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         };
       }
 
-      console.log("Business owner login successful, saving token and user info...");
+      await signIn(token, 'business_owner', userId, email.trim(), userInfo);
 
-      // Use the auth context to sign in - this will handle token storage in AsyncStorage
-      // and update the global authentication state throughout the app
-      await signIn(
-        token,
-        'business_owner',
-        userId,
-        email.trim(),
-        userInfo
-      );
-
-      // Show success overlay to user
+      setSuccessMessage("Business session saved securely!");
       setShowSuccess(true);
       
-      // After 1.5 seconds, hide overlay and show detailed welcome message
       setTimeout(() => {
         setShowSuccess(false);
-        // Show comprehensive welcome message with app features
         Alert.alert(
           'Welcome Back! 🎉',
           `Hi \n\nYour session has been saved securely. You can now:\n• Search, Post,Request and manage your services\n• Chat with customers\n• Access your dashboard\n• Track your bookings`,
@@ -299,8 +244,6 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
             {
               text: 'Get Started',
               onPress: () => {
-                // Navigate to main app screen after successful login
-                // Reset navigation stack to prevent going back to login screen
                 navigation.reset({
                   index: 0,
                   routes: [{ name: 'TabWrapperScreen' }],
@@ -309,107 +252,342 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
             }
           ]
         );
-      }, 1500); // Show success overlay for 1.5 seconds
+      }, 1500);
 
     } catch (err: any) {
-      // Handle any errors during login process
-      console.error("Business owner login error:", err.message);
-      // Show user-friendly error message
+      console.error("Login error:", err.message);
       Alert.alert("Login Failed", err.message || "Something went wrong");
     } finally {
-      // Always reset loading state regardless of success or failure
       setLoading(false);
+    }
+  };
+
+  /**
+   * Handle password reset request (forgot password)
+   */
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert("Email Required", "Please enter your email address");
+      return;
+    }
+
+    // Basic email validation
+    if (!email.includes('@')) {
+      Alert.alert("Invalid Email", "Please enter a valid email address");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`${API_URL}/api/password-reset/request`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to send reset email");
+      }
+
+      // Show success message
+      Alert.alert(
+        "Check Your Email! 📧",
+        "If an account exists with that email, we've sent you a password reset link. Please check your inbox and spam folder.",
+        [
+          {
+            text: "OK",
+            onPress: () => setMode('login') // Return to login mode
+          }
+        ]
+      );
+
+    } catch (err: any) {
+      console.error("Password reset request error:", err.message);
+      Alert.alert("Error", err.message || "Failed to send reset email");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Handle password reset verification (set new password)
+   */
+  const handleResetPassword = async () => {
+    // Validate inputs
+    if (!newPassword.trim() || !confirmPassword.trim()) {
+      Alert.alert("Validation", "Please fill in both password fields");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Passwords Don't Match", "Please make sure both passwords are the same");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      Alert.alert("Password Too Short", "Password must be at least 8 characters long");
+      return;
+    }
+
+    // Check password complexity
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*]/.test(newPassword);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+      Alert.alert(
+        "Weak Password",
+        "Password must include:\n• Uppercase letter\n• Lowercase letter\n• Number\n• Special character (!@#$%^&*)"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`${API_URL}/api/password-reset/verify`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ 
+          email: email.trim(),
+          token: resetToken,
+          newPassword: newPassword 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to reset password");
+      }
+
+      // Show success message
+      setSuccessMessage("Password reset successfully!");
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        Alert.alert(
+          "Password Reset Complete! ✅",
+          "Your password has been updated successfully. You can now log in with your new password.",
+          [
+            {
+              text: "Log In",
+              onPress: () => {
+                // Clear fields and return to login mode
+                setMode('login');
+                setNewPassword("");
+                setConfirmPassword("");
+                setPassword("");
+              }
+            }
+          ]
+        );
+      }, 1500);
+
+    } catch (err: any) {
+      console.error("Password reset error:", err.message);
+      Alert.alert("Reset Failed", err.message || "Failed to reset password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Render content based on current mode
+   */
+  const renderContent = () => {
+    switch (mode) {
+      case 'forgot':
+        return (
+          <>
+            <Text style={styles.title}>Reset Password</Text>
+            <Text style={styles.subtitle}>
+              Enter your email address and we'll send you a link to reset your password.
+            </Text>
+
+            <Text style={styles.label}>Email:</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="Enter your email"
+              editable={!loading}
+            />
+
+            <View style={styles.buttonContainer}>
+              <Button
+                title={loading ? "Sending..." : "Send Reset Link"}
+                onPress={handleForgotPassword}
+                disabled={loading}
+                color="#4CAF50"
+              />
+            </View>
+
+            <TouchableOpacity 
+              onPress={() => setMode('login')}
+              disabled={loading}
+              style={styles.linkButton}
+            >
+              <Text style={styles.linkText}>← Back to Login</Text>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 'reset':
+        return (
+          <>
+            <Text style={styles.title}>Set New Password</Text>
+            <Text style={styles.subtitle}>
+              Create a strong password for your account.
+            </Text>
+
+            <Text style={styles.label}>Email:</Text>
+            <TextInput
+              style={[styles.input, styles.disabledInput]}
+              value={email}
+              editable={false}
+            />
+
+            <Text style={styles.label}>New Password:</Text>
+            <TextInput
+              style={styles.input}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              placeholder="Enter new password"
+              editable={!loading}
+            />
+
+            <Text style={styles.label}>Confirm Password:</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              placeholder="Re-enter new password"
+              editable={!loading}
+            />
+
+            <Text style={styles.helperText}>
+              Password must be 8+ characters with uppercase, lowercase, number, and special character
+            </Text>
+
+            <View style={styles.buttonContainer}>
+              <Button
+                title={loading ? "Resetting..." : "Reset Password"}
+                onPress={handleResetPassword}
+                disabled={loading}
+                color="#4CAF50"
+              />
+            </View>
+          </>
+        );
+
+      default: // 'login'
+        return (
+          <>
+            <Text style={styles.title}>Sign In</Text>
+
+            <Text style={styles.label}>Email:</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="Enter your email"
+              editable={!loading}
+            />
+
+            <Text style={styles.label}>Password:</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="password"
+              placeholder="Enter your password"
+              editable={!loading}
+            />
+
+            <TouchableOpacity 
+              onPress={() => setMode('forgot')}
+              disabled={loading}
+              style={styles.forgotPasswordButton}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+
+            <View style={styles.buttonContainer}>
+              <Button
+                title={loading ? "Signing in..." : "Sign In"}
+                onPress={handleLogin}
+                disabled={loading}
+                color="#4CAF50"
+              />
+            </View>
+          </>
+        );
     }
   };
 
   return (
     <>
-      {/* Main screen container with safe area handling */}
       <SafeAreaView style={styles.safeArea}>
-        {/* Top bar with cancel button */}
         <View style={styles.topBar}>
-          {/* Spacer to push cancel button to right */}
           <View style={{ flex: 1 }} />
           <TouchableOpacity
-            onPress={() => navigation.goBack()} // Navigate back to previous screen
-            disabled={loading} // Disable during login
+            onPress={() => navigation.goBack()}
+            disabled={loading}
             style={styles.cancelButton}
           >
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Keyboard avoiding view for better UX when keyboard is open */}
-        {/* Adjusts content position when keyboard appears on iOS */}
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled" // Allow taps on buttons when keyboard is open
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.container}>
-              {/* Screen title */}
-              <Text style={styles.title}>Sign In</Text>
-
-              {/* Email input field */}
-              <Text style={styles.label}>Email:</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address" // Show email keyboard layout
-                autoCapitalize="none" // Don't auto-capitalize email
-                autoComplete="email" // Enable email autofill
-                placeholder="Enter your email"
-                editable={!loading} // Disable input during login
-              />
-
-              {/* Password input field */}
-              <Text style={styles.label}>Password:</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry // Hide password characters
-                autoComplete="password" // Enable password autofill
-                placeholder="Enter your password"
-                editable={!loading} // Disable input during login
-              />
-
-              {/* Sign in button */}
-              <View style={styles.buttonContainer}>
-                <Button
-                  title={loading ? "Signing in..." : "Sign In"}
-                  onPress={handleLogin}
-                  disabled={loading} // Disable button during login to prevent multiple submissions
-                  color="#4CAF50"
-                />
-              </View>
+              {renderContent()}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Success Overlay - shown after successful login */}
-      {/* Renders on top of all other content with semi-transparent background */}
       <SuccessOverlay 
         visible={showSuccess} 
-        message="Business session saved securely!" 
+        message={successMessage} 
       />
     </>
   );
 }
 
-// Stylesheet for component styling
 const styles = createResponsiveStyles({
-  // Safe area container - respects device notches and system UI
   safeArea: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  // Top navigation bar styling
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -418,43 +596,43 @@ const styles = createResponsiveStyles({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  // Cancel button styling
   cancelButton: {
     padding: 8,
   },
-  // Cancel button text styling
   cancelText: {
     color: '#EF4444',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // ScrollView content container - centers content vertically
   scrollContainer: {
     flexGrow: 1,
     justifyContent: "center",
   },
-  // Main form container
   container: {
     flex: 1,
     justifyContent: "center",
     padding: 20,
   },
-  // Screen title styling
   title: {
     fontSize: 24,
     fontWeight: "600",
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 10,
     color: "#333",
   },
-  // Input label styling
+  subtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 30,
+    color: "#666",
+    paddingHorizontal: 10,
+  },
   label: {
     fontSize: 16,
     marginBottom: 8,
     fontWeight: "500",
     color: "#333",
   },
-  // Text input field styling
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -464,24 +642,51 @@ const styles = createResponsiveStyles({
     fontSize: 16,
     backgroundColor: "#fff",
   },
-  // Button container styling
+  disabledInput: {
+    backgroundColor: "#f5f5f5",
+    color: "#999",
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 16,
+    marginTop: -8,
+  },
   buttonContainer: {
     marginTop: 10,
   },
-  // Success overlay styles
-  // Full-screen overlay with semi-transparent background
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    marginBottom: 8,
+    padding: 4,
+  },
+  forgotPasswordText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  linkButton: {
+    marginTop: 20,
+    alignItems: 'center',
+    padding: 8,
+  },
+  linkText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: '500',
+  },
   overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // 50% transparent black
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000, // Ensure it appears on top of all other content
+    zIndex: 1000,
   },
-  // Success card container styling
   successCard: {
     backgroundColor: 'white',
     padding: 30,
@@ -495,21 +700,18 @@ const styles = createResponsiveStyles({
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8, // Android shadow
+    elevation: 8,
   },
-  // Success checkmark icon styling
   successIcon: {
     fontSize: 48,
     marginBottom: 16,
   },
-  // Success title text styling
   successTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#4CAF50',
     marginBottom: 8,
   },
-  // Success message text styling
   successMessage: {
     fontSize: 16,
     color: '#666',
