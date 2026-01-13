@@ -339,5 +339,68 @@ async function updateProviderRating(providerId: number) {
     // Don't throw - this is a helper function, main operation already succeeded
   }
 }
+/**
+ * GET /api/reviews/can-review/:providerId
+ * 
+ * Check if authenticated user can review this provider
+ * Requirements: Must have at least one COMPLETED booking with this provider
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ Only checks current user's bookings (not all bookings)
+ * 
+ * Returns:
+ * - canReview: boolean
+ * - completedBooking: booking details if exists
+ * 
+ * Use case: Frontend checks if "Leave Review" button should be enabled
+ */
+router.get('/can-review/:providerId', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { providerId } = req.params;
+    const customerId = req.user?.user_id;
 
+    console.log(`🔍 [Reviews] Checking review eligibility:`, { 
+      customer: customerId, 
+      provider: providerId 
+    });
+
+    // Check if this customer has ANY completed booking with this provider
+    const { data: completedBooking, error } = await supabase
+      .from('bookings')
+      .select('booking_id, booking_date, status')
+      .eq('provider_user_id', providerId)
+      .eq('customer_user_id', customerId)
+      .eq('status', 'completed')
+      .order('booking_date', { ascending: false })
+      .limit(1)
+      .maybeSingle(); // Use maybeSingle instead of single to avoid error when no results
+
+    if (error) {
+      console.error('❌ [Reviews] Error checking eligibility:', error);
+      throw error;
+    }
+
+    const canReview = !!completedBooking;
+
+    console.log(`✅ [Reviews] Eligibility result: ${canReview ? 'CAN review' : 'CANNOT review'}`);
+
+    res.json({
+      success: true,
+      canReview: canReview,
+      completedBooking: completedBooking ? {
+        bookingId: parseInt(completedBooking.booking_id, 10),
+        bookingDate: completedBooking.booking_date,
+        status: completedBooking.status
+      } : null
+    });
+
+  } catch (error) {
+    console.error('❌ [Reviews] Error checking review eligibility:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check review eligibility'
+    });
+  }
+});
 export default router;
