@@ -2,6 +2,9 @@
 /**
  * Business Owner Authentication & Profile Routes
  *
+ * Last Updated: January 9, 2026
+ * Changes: Fixed user_id type consistency in JWT generation
+ * 
  * Responsibilities:
  * - Login with email/password (from `users` table)
  * - JWT generation containing `user_id` and `business_id`
@@ -64,17 +67,19 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     // 2️⃣ Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
-// ✅ CHECK IF EMAIL IS VERIFIED
-if (!user.email_verified) {
-  console.log('❌ Login blocked - email not verified:', email);
-  return res.status(403).json({
-    message: 'Please verify your email address before signing in. Check your inbox for the verification link.',
-    user: {
-      email: user.email,
-      email_verified: false
+
+    // ✅ CHECK IF EMAIL IS VERIFIED
+    if (!user.email_verified) {
+      console.log('❌ Login blocked - email not verified:', email);
+      return res.status(403).json({
+        message: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+        user: {
+          email: user.email,
+          email_verified: false
+        }
+      });
     }
-  });
-}
+
     // 3️⃣ Fetch business owner profile
     const { data: owner, error: ownerError } = await supabase
       .from('business_owners')
@@ -87,18 +92,22 @@ if (!user.email_verified) {
     }
 
     // 4️⃣ Generate JWT
-    const token = generateToken(user.user_id, owner.business_id);
+    // FIXED: January 9, 2026 - Convert user_id to string for consistency
+    const token = generateToken(String(user.user_id), owner.business_id);
+    
+    console.log('✅ Login successful for user:', user.user_id);
+    console.log('   Token generated with user_id:', String(user.user_id), typeof String(user.user_id));
 
     // 5️⃣ Return token + business owner profile
-   res.json({ 
-  token, 
-  user: {
-    ...owner,
-    email: user.email,
-    email_verified: user.email_verified,
-    user_type: user.user_type
-  }
-});
+    res.json({ 
+      token, 
+      user: {
+        ...owner,
+        email: user.email,
+        email_verified: user.email_verified,
+        user_type: user.user_type
+      }
+    });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Server error", error: (err as Error).message });

@@ -2,10 +2,16 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import pool from '../backend/config/pool';
-import { supabase } from "./config/Supabase"; // ✅ ADD THIS LINE
+import { supabase } from "./config/Supabase";
 
+// ✅ ADDED: Debugging and logging infrastructure
+import logger from './utils/logger';
+import { requestTracking, errorLogger, performanceMonitor } from './middleware/requestTracking';
+import { debugEnv } from './utils/debug';
 
 // Routers
+import reviewsRoutes from './routes/reviews';
+import availabilityRoutes from './routes/availability';
 import usersRouter from "./routes/users";
 import businessOwnerAuthRouter from "./routes/business_owner_auth";
 import businessOwnersRouter from "./routes/Business_Owners_registration";
@@ -16,8 +22,13 @@ import serviceCategoriesRouter from "./routes/serviceCategories";
 import servicePostsRouter from './routes/ServicePosts';
 import passwordResetRoutes from './routes/Passwordreset';
 import emailVerificationRoutes from './routes/EmailVerification';
+
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
+
+// ✅ ADDED: Startup logging and environment check
+logger.info('Starting ZipServices server...');
+debugEnv();
 
 // Make pool accessible in all routes
 app.use((req, _res, next) => {
@@ -32,6 +43,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization']
 }));
 app.use(express.json());
+
+// ✅ ADDED: Request tracking and performance monitoring
+app.use(requestTracking);
+app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
 
 // Health check
 app.get("/ping", (_req: Request, res: Response) => {
@@ -77,10 +92,19 @@ app.use("/business-owners", businessOwnerProfileRouter);
 app.use('/service-posts', servicePostsRouter);
 app.use("/messages", messagesRouter);
 app.use("/api/password-reset", passwordResetRoutes);
-console.log("✅ Password reset routes registered at /api/password-reset"); // ← ADD THIS LINE
+console.log("✅ Password reset routes registered at /api/password-reset");
 app.use('/api/email-verification', emailVerificationRoutes);
 
- 
+// Availability routes
+app.use('/api/availability', availabilityRoutes);
+console.log('✅ Availability routes registered at /api/availability');
+
+//Review routes
+app.use('/api/reviews', reviewsRoutes);
+console.log('✅ Review routes registered at /api/reviews');
+
+// ✅ ADDED: Error logger (must be AFTER all routes)
+app.use(errorLogger);
 
 // Debug routes logging
 console.log("=== REGISTERED ROUTES ===");
@@ -155,18 +179,30 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 console.log("🔄 Attempting to start server on port 5000...");
 
 const server = app.listen(5000, "0.0.0.0", () => {
-  console.log("✅ Server running at:");
-  console.log("  - Local: http://localhost:5000");
-  console.log("  - Network: http://0.0.0.0:5000");
-  console.log("  - LAN: http://192.168.4.48:5000");
-  console.log("\n🔗 Test these endpoints:");
-  console.log("  curl http://localhost:5000/api/health");
-  console.log("  curl http://localhost:5000/api/service-categories");
-  console.log("  curl http://localhost:5000/api/users/175/profile");
+  // ✅ UPDATED: Use logger instead of console.log
+  logger.info('Server running', {
+    port: 5000,
+    environment: process.env.NODE_ENV || 'development',
+    urls: {
+      local: 'http://localhost:5000',
+      network: 'http://0.0.0.0:5000',
+      lan: 'http://192.168.4.48:5000'
+    }
+  });
   
+  logger.info('Available endpoints', {
+    health: 'GET /api/health',
+    categories: 'GET /api/service-categories',
+    profile: 'GET /api/users/:userId/profile',
+    availability: 'GET /api/availability/:userId'
+  });
 });
 
 server.on('error', (error: any) => {
-  console.error("❌ Server failed to start:", error);
+  logger.error('Server failed to start', {
+    error: error.message,
+    code: error.code,
+    port: 5000
+  });
   process.exit(1);
 });

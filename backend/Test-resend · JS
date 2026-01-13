@@ -5,6 +5,52 @@
  * node test-resend.js your-email@example.com
  */
 
+/**
+ * ============================================================================
+ * TEST-RESEND.JS - Resend Email API Configuration Test Script
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Quick testing script to verify that your Resend email service is properly
+ * configured and working. This helps diagnose email delivery issues before
+ * testing the full application.
+ * 
+ * WHAT IT DOES:
+ * 1. Validates command-line email argument
+ * 2. Loads RESEND_API_KEY from .env file
+ * 3. Sends a test email via Resend API
+ * 4. Reports success/failure with helpful debugging info
+ * 
+ * WHEN TO USE:
+ * - Setting up Resend for the first time
+ * - Troubleshooting email delivery issues
+ * - Verifying API key is valid
+ * - Testing after domain DNS changes
+ * - Confirming email service is working before deploying
+ * 
+ * USAGE:
+ * node test-resend.js your-email@example.com
+ * 
+ * REQUIREMENTS:
+ * - .env file with RESEND_API_KEY
+ * - resend package installed (npm install resend)
+ * - dotenv package installed (npm install dotenv)
+ * - Valid Resend account with verified domain
+ * 
+ * EXAMPLE OUTPUT (Success):
+ * ✅ SUCCESS! Email sent!
+ * 📧 Email ID: abc123...
+ * Check your inbox!
+ * 
+ * EXAMPLE OUTPUT (Failure):
+ * ❌ ERROR: Invalid API key
+ * Check Resend Dashboard for API key configuration
+ * 
+ * ============================================================================
+ */
+
+// ... rest of your code
+
 const { Resend } = require('resend');
 require('dotenv').config();
 

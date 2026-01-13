@@ -1,15 +1,47 @@
-// backend/routes/messages.ts
+/**
+ * ============================================================================
+ * MESSAGES ROUTES
+ * ============================================================================
+ * 
+ * Last Updated: January 9, 2026
+ * Changes: Added JWT authentication to protect private conversations
+ * Reason: CRITICAL - Messages contain private conversations and must only be 
+ *         accessible to the participants
+ * 
+ * This module handles all messaging functionality including:
+ * - Fetching conversations between users
+ * - Sending messages
+ * - Marking messages as read
+ * - Listing conversation participants
+ * 
+ * SECURITY:
+ * - ✅ Users can only view their own messages and conversations
+ * - ✅ Users can only send messages as themselves
+ * - ✅ Users can only mark their own received messages as read
+ * - ⚠️  Business owner list is public (needed for user selection in UI)
+ * 
+ * BASE PATH: /messages
+ * ============================================================================
+ */
+
 import { Router, Request, Response } from "express";
 import { supabase } from "../config/Supabase";
+// ADDED: January 5, 2026 - Import authentication middleware
+import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 /**
- * Health check endpoint for debugging
+ * GET /messages/health
+ * 
+ * Purpose: Health check endpoint for debugging
+ * 
+ * Security: PUBLIC - No authentication required
+ * 
+ * UNCHANGED: January 5, 2026 - Kept public for monitoring
  */
 router.get("/health", async (_req: Request, res: Response) => {
   try {
-    // Test database connection by querying a simple table
     const { data, error } = await supabase
       .from('users')
       .select('user_id')
@@ -33,7 +65,15 @@ router.get("/health", async (_req: Request, res: Response) => {
 });
 
 /**
- * GET all business owners (renamed from customers since everyone is business_owner now)
+ * GET /messages/business-owners/all
+ * 
+ * Purpose: Get list of all business owners for message recipient selection
+ * 
+ * Security: PUBLIC (for now) - Needed for UI user selection
+ * Note: Only returns business_name and basic info, no sensitive data
+ * 
+ * CHANGED: January 5, 2026 - Removed phone_number and zip_code from response
+ * Reason: Reduce exposure of sensitive contact information
  */
 router.get("/business-owners/all", async (_req: Request, res: Response) => {
   try {
@@ -42,20 +82,17 @@ router.get("/business-owners/all", async (_req: Request, res: Response) => {
       .select(`
         business_id,
         user_id,
-        phone_number,
-        zip_code,
         business_name,
         service_category,
         users!business_owners_user_id_fkey(email, user_type)
       `)
       .eq('users.user_type', 'business_owner')
       .order('business_name', { ascending: true });
-    // Convert bigint IDs to numbers and flatten structure
+
+    // CHANGED: January 5, 2026 - Removed phone_number and zip_code
     const businessOwners = (data || []).map((row: any) => ({
       business_id: parseInt(row.business_id, 10),
       user_id: parseInt(row.user_id, 10),
-      phone_number: row.phone_number,
-      zip_code: row.zip_code,
       business_name: row.business_name,
       service_category: row.service_category,
       email: Array.isArray(row.users) ? row.users[0]?.email : row.users?.email
@@ -69,8 +106,14 @@ router.get("/business-owners/all", async (_req: Request, res: Response) => {
 });
 
 /**
- * GET business owner info
- * Using /business-owner/info/:userId to avoid route conflicts
+ * GET /messages/business-owner/info/:userId
+ * 
+ * Purpose: Get business owner info for displaying in chat UI
+ * 
+ * Security: PUBLIC (for now) - Needed to show recipient info in chat
+ * 
+ * UNCHANGED: January 5, 2026 - Kept public for chat UI
+ * TODO: Consider adding authentication if this becomes a privacy concern
  */
 router.get("/business-owner/info/:userId", async (req: Request, res: Response) => {
   const { userId } = req.params;
@@ -98,7 +141,6 @@ router.get("/business-owner/info/:userId", async (req: Request, res: Response) =
       throw error;
     }
 
-    // Convert bigint IDs to numbers
     const businessOwner = {
       ...data,
       user_id: parseInt(data.user_id, 10),
@@ -114,13 +156,24 @@ router.get("/business-owner/info/:userId", async (req: Request, res: Response) =
 });
 
 /**
- * GET all messages for a business owner
- * Returns messages with business_name for both sender and receiver
+ * GET /messages/business-owner/:userId
+ * 
+ * Purpose: Get all messages for a business owner
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ User can only access their own messages
+ * 
+ * CHANGED: January 5, 2026 - Added authenticateToken and authorizeUser middleware
+ * Reason: Prevent unauthorized access to private messages
  */
-router.get("/business-owner/:userId", async (req: Request, res: Response) => {
+router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (req: AuthRequest, res: Response) => {
   const { userId } = req.params;
   const id = parseInt(userId, 10);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid user IDs" });
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid user IDs" });
+    return;
+  }
 
   try {
     const { data, error } = await supabase
@@ -143,7 +196,7 @@ router.get("/business-owner/:userId", async (req: Request, res: Response) => {
       `)
       .or(`receiver_id.eq.${id},sender_id.eq.${id}`)
       .order('created_at', { ascending: true });
-    // Convert bigint IDs to numbers and flatten structure
+
     const messages = (data || []).map((row: any) => ({
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
@@ -165,10 +218,20 @@ router.get("/business-owner/:userId", async (req: Request, res: Response) => {
 });
 
 /**
- * GET conversations for a user (works for all users now)
- * Returns all other users they have chatted with
+ * GET /messages/conversations/:userId
+ * 
+ * Purpose: Get list of conversations for a user
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ User can only view their own conversations
+ * 
+ * Returns: List of users the authenticated user has chatted with
+ * 
+ * CHANGED: January 5, 2026 - Added authenticateToken and authorizeUser middleware
+ * Reason: Prevent unauthorized access to user's conversation list
  */
-router.get("/conversations/:userId", async (req: Request, res: Response) => {
+router.get("/conversations/:userId", authenticateToken, authorizeUser, async (req: AuthRequest, res: Response) => {
   const { userId } = req.params;
   const id = parseInt(userId, 10);
   
@@ -176,13 +239,13 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
   
   if (isNaN(id)) {
     console.error(`[API] Invalid user ID: ${userId}`);
-    return res.status(400).json({ error: "Invalid user ID" });
+    res.status(400).json({ error: "Invalid user ID" });
+    return;
   }
 
   try {
     console.log(`[API] Fetching conversations for user ${id}`);
     
-    // Get all messages for this user
     const { data: allMessages, error: messagesError } = await supabase
       .from('messages')
       .select('sender_id, receiver_id, message_text, created_at')
@@ -191,7 +254,6 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
     
     if (messagesError) throw messagesError;
 
-    // Get unique conversation partners
     const conversationUserIds = new Set<number>();
     (allMessages || []).forEach((msg: any) => {
       const otherId = msg.sender_id === id ? msg.receiver_id : msg.sender_id;
@@ -199,10 +261,10 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
     });
 
     if (conversationUserIds.size === 0) {
-      return res.json([]);
+      res.json([]);
+      return;
     }
 
-    // Fetch user and business owner details for all conversation partners
     const { data: users, error: usersError } = await supabase
       .from('users')
       .select(`
@@ -215,7 +277,6 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
     
     if (usersError) throw usersError;
 
-    // Get unread counts for each conversation
     const { data: unreadMessages, error: unreadError } = await supabase
       .from('messages')
       .select('sender_id')
@@ -229,14 +290,13 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
       unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
     });
 
-    // Build conversations array
     const conversations = (users || []).map((user: any) => {
       const userMessages = (allMessages || []).filter((msg: any) => 
         (msg.sender_id === id && msg.receiver_id === user.user_id) ||
         (msg.receiver_id === id && msg.sender_id === user.user_id)
       );
       
-      const lastMessage = userMessages[0]; // Already sorted DESC
+      const lastMessage = userMessages[0];
 
       return {
         other_user_id: parseInt(user.user_id, 10),
@@ -276,22 +336,50 @@ router.get("/conversations/:userId", async (req: Request, res: Response) => {
 });
 
 /**
- * GET messages between two users
- * Auto-marks received messages as read
+ * GET /messages/:currentUserId/:otherUserId
+ * 
+ * Purpose: Get messages between two users and mark received messages as read
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ currentUserId must match authenticated user
+ * 
+ * Side Effect: Auto-marks received messages as read
+ * 
+ * CHANGED: January 5, 2026 - Added authenticateToken middleware
+ * CHANGED: January 5, 2026 - Added validation that currentUserId matches authenticated user
+ * Reason: Prevent users from viewing conversations they're not part of
  */
-router.get("/:currentUserId/:otherUserId", async (req: Request, res: Response) => {
+router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRequest, res: Response) => {
   const { currentUserId, otherUserId } = req.params;
   const currentId = parseInt(currentUserId, 10);
   const otherId = parseInt(otherUserId, 10);
 
   if (isNaN(currentId) || isNaN(otherId)) {
-    return res.status(400).json({ error: "Invalid user IDs" });
+    res.status(400).json({ error: "Invalid user IDs" });
+    return;
   }
+
+  // FIXED: January 9, 2026 - Convert both to strings for proper comparison
+  console.log('🔒 Chat authorization check:');
+  console.log('  currentUserId (from URL):', currentUserId, `(type: ${typeof currentUserId})`);
+  console.log('  req.user.user_id (from token):', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
+  console.log('  Match?', String(currentUserId) === String(req.user?.user_id));
+  
+  if (String(currentUserId) !== String(req.user?.user_id)) {  // ✅ FIXED
+    console.log('❌ Authorization failed - user IDs do not match');
+    res.status(403).json({
+      success: false,
+      error: 'You can only view your own conversations'
+    });
+    return;
+  }
+  
+  console.log('✅ Chat authorization passed');
 
   console.log(`Fetching messages between currentUser: ${currentId} and otherUser: ${otherId}`);
 
   try {
-    // First, fetch all messages between the two users
     const { data, error } = await supabase
       .from('messages')
       .select(`
@@ -307,7 +395,6 @@ router.get("/:currentUserId/:otherUserId", async (req: Request, res: Response) =
 
     console.log(`Found ${data?.length || 0} messages`);
 
-    // Then mark messages as read (messages sent TO the current user FROM the other user)
     const { data: markedMessages, error: markError } = await supabase
       .from('messages')
       .update({ is_read: true })
@@ -320,7 +407,6 @@ router.get("/:currentUserId/:otherUserId", async (req: Request, res: Response) =
 
     console.log(`Marked ${markedMessages?.length || 0} messages as read`);
 
-    // Convert bigint IDs to numbers and add sender_name
     const messages = (data || []).map((row: any) => ({
       ...row,
       id: parseInt(row.id, 10),
@@ -337,12 +423,38 @@ router.get("/:currentUserId/:otherUserId", async (req: Request, res: Response) =
 });
 
 /**
- * POST a new message
+ * POST /messages/
+ * 
+ * Purpose: Send a new message
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ sender_id must match authenticated user
+ * 
+ * Body:
+ * - sender_id: ID of sender (must match authenticated user)
+ * - receiver_id: ID of recipient
+ * - message_text: Message content
+ * 
+ * CHANGED: January 5, 2026 - Added authenticateToken middleware
+ * CHANGED: January 5, 2026 - Added validation that sender_id matches authenticated user
+ * Reason: Prevent users from impersonating others when sending messages
  */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", authenticateToken, async (req: AuthRequest, res: Response) => {
   const { sender_id, receiver_id, message_text } = req.body;
+  
   if (!sender_id || !receiver_id || !message_text) {
-    return res.status(400).json({ error: "Missing required fields" });
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  // ADDED: January 5, 2026 - Security check to prevent message spoofing
+if (String(sender_id) !== String(req.user?.user_id)) {
+    res.status(403).json({
+      success: false,
+      error: 'You can only send messages as yourself'
+    });
+    return;
   }
 
   try {
@@ -360,7 +472,6 @@ router.post("/", async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    // Convert bigint IDs to numbers
     const message = {
       ...data,
       id: parseInt(data.id, 10),
@@ -376,19 +487,44 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 /**
- * PUT mark messages as read
- * NEW ENDPOINT - Marks specific messages as read for a user
+ * PUT /messages/mark-read
+ * 
+ * Purpose: Mark specific messages as read
+ * 
+ * Security:
+ * - ✅ Requires authentication
+ * - ✅ user_id must match authenticated user
+ * - ✅ Can only mark messages where user is the receiver
+ * 
+ * Body:
+ * - message_ids: Array of message IDs to mark as read
+ * - user_id: User ID (must match authenticated user)
+ * 
+ * CHANGED: January 5, 2026 - Added authenticateToken middleware
+ * CHANGED: January 5, 2026 - Added validation that user_id matches authenticated user
+ * Reason: Prevent users from marking other users' messages as read
  */
-router.put("/mark-read", async (req: Request, res: Response) => {
+router.put("/mark-read", authenticateToken, async (req: AuthRequest, res: Response) => {
   const { message_ids, user_id } = req.body;
   
   if (!message_ids || !Array.isArray(message_ids) || !user_id) {
-    return res.status(400).json({ error: "Missing required fields: message_ids (array) and user_id" });
+    res.status(400).json({ error: "Missing required fields: message_ids (array) and user_id" });
+    return;
   }
 
   const userId = parseInt(user_id, 10);
   if (isNaN(userId)) {
-    return res.status(400).json({ error: "Invalid user_id" });
+    res.status(400).json({ error: "Invalid user_id" });
+    return;
+  }
+
+  // ADDED: January 5, 2026 - Security check to ensure user can only mark their own messages
+  if (String(user_id) !== String(req.user?.user_id)) {
+    res.status(403).json({
+      success: false,
+      error: 'You can only mark your own messages as read'
+    });
+    return;
   }
 
   console.log(`[mark-read] Marking ${message_ids.length} messages as read for user ${userId}`);

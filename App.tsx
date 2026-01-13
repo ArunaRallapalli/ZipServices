@@ -5,6 +5,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainStackNavigator from "./src/navigation/MainStackNavigator";
 
 // Linking configuration for deep linking and web URLs
+//Deep linking means instead of just launching the app, it “navigates” 
+// directly to a particular screen with specific data.
 const linking = {
   prefixes: ['http://localhost:8081', 'https://gozipmarket.com'],
   config: {

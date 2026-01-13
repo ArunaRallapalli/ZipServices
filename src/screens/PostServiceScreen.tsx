@@ -1,6 +1,9 @@
 /**
  * PostServiceScreen Component - SIMPLIFIED VERSION
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling
+ * 
  * Purpose: Allows users to OFFER their services only
  * 
  * Key Features:
@@ -21,8 +24,8 @@
  * - Banner click → RequestServiceCategoryScreen (for category requests)
  */
 
-import API_URL from "../config/apiConfig";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../api"; // ADDED: January 5, 2026
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -103,18 +106,17 @@ const PostServiceScreen: React.FC = () => {
     setLoadingUser(false);
   };
 
+  /**
+   * Load service categories from backend
+   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
+   */
   const loadServiceCategories = async () => {
     try {
       setLoadingCategories(true);
       console.log('📦 Loading service categories');
       
-      const response = await fetch(`${API_URL}/api/service-categories`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get('/api/service-categories');
 
       if (data.success && Array.isArray(data.categories)) {
         setServiceCategories(data.categories);
@@ -135,32 +137,16 @@ const PostServiceScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Load user profile data to auto-populate fields
+   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
+   */
   const loadUserProfile = async () => {
     try {
-      const profileUrl = `${API_URL}/api/users/${userId}/profile`;
-      console.log('👤 Loading profile from:', profileUrl);
+      console.log('👤 Loading profile for user:', userId);
 
-      const response = await fetch(profileUrl);
-      
-      if (!response.ok) {
-        console.error('❌ Profile API returned error status:', response.status);
-        return;
-      }
-      
-      const responseText = await response.text();
-
-      if (responseText.trim().startsWith('<')) {
-        console.error('❌ Received HTML instead of JSON');
-        return;
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ JSON parse error:', parseError);
-        return;
-      }
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get(`/api/users/${userId}/profile`);
 
       if (data.success && data.profile) {
         const profile = data.profile;
@@ -206,6 +192,10 @@ const PostServiceScreen: React.FC = () => {
     return true;
   };
 
+  /**
+   * Handle form submission
+   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
+   */
   const handleSubmit = async () => {
     if (!isAuthenticated || !userId) {
       Alert.alert(
@@ -245,46 +235,32 @@ const PostServiceScreen: React.FC = () => {
 
       console.log('📤 Submitting service offer:', servicePostData);
 
-      const response = await fetch(`${API_URL}/api/service-posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(servicePostData),
-      });
+      // UPDATED: Using api client instead of fetch
+      const data = await api.post('/api/service-posts', servicePostData);
 
-      const data = await response.json();
-//change this section to work on both mobile and web 
-   if (response.ok) {
-  clearForm();
-  
-  Alert.alert(
-    'Success!',
-    'Your service offer has been posted successfully!',
-    [
-      {
-        text: 'View My Listings',
-        onPress: () => {
-          navigation.navigate('ListingsScreen' as never);
-        },
-      },
-      {
-        text: 'Post Another',
-        onPress: () => {
-          // Form already cleared, just stay here
-        },
-      },
-    ]
-  );
-}
-  
-        else {
-        console.error('❌ Failed to create post:', data);
-        Alert.alert('Error', data.error || 'Failed to create service post');
-      }
-    } catch (error) {
+      clearForm();
+      
+      Alert.alert(
+        'Success!',
+        'Your service offer has been posted successfully!',
+        [
+          {
+            text: 'View My Listings',
+            onPress: () => {
+              navigation.navigate('ListingsScreen' as never);
+            },
+          },
+          {
+            text: 'Post Another',
+            onPress: () => {
+              // Form already cleared, just stay here
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
       console.error('❌ Error creating service post:', error);
-      Alert.alert('Error', 'Network error occurred. Please check your connection.');
+      Alert.alert('Error', error.message || 'Failed to create service post. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -362,35 +338,36 @@ const PostServiceScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.form}>
-         <View style={styles.inputGroup}>
-  <Text style={styles.label}>Service Title *</Text>
-  <TextInput
-    style={styles.input}
-    value={title}
-    onChangeText={setTitle}
-    placeholder="e.g., Professional House Cleaning Service"
-    maxLength={200}
-  />
-  <Text style={styles.characterCount}>
-    {title.length}/200 characters
-  </Text>
-</View>
-<View style={styles.inputGroup}>
-  <Text style={styles.label}>Description *</Text>
-  <TextInput
-    style={[styles.input, styles.textArea]}
-    value={description}
-    onChangeText={setDescription}
-    placeholder="Describe your service, experience, what's included..."
-    multiline
-    numberOfLines={9}
-    maxLength={5000}
-    textAlignVertical="top"
-  />
-  <Text style={styles.characterCount}>
-    {description.length}/5000 characters
-  </Text>
-</View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Service Title *</Text>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Professional House Cleaning Service"
+              maxLength={200}
+            />
+            <Text style={styles.characterCount}>
+              {title.length}/200 characters
+            </Text>
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Description *</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Describe your service, experience, what's included..."
+              multiline
+              numberOfLines={9}
+              maxLength={5000}
+              textAlignVertical="top"
+            />
+            <Text style={styles.characterCount}>
+              {description.length}/5000 characters
+            </Text>
+          </View>
           
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Category *</Text>

@@ -492,7 +492,19 @@ const handleChatPress = async (item: ServicePost) => {
     setShowResults(false);
     setHasSearched(false);
   };
-
+/**
+ * EFFECT: Refresh search results when screen gains focus
+ * This ensures results are updated if user inactivated a listing
+ */
+useFocusEffect(
+  useCallback(() => {
+    // If user has searched and results are showing, refresh them
+    if (hasSearched && showResults && serviceNeeded && zipCode && isZipValid) {
+      console.log("🔄 [SearchResultsScreen] Refreshing search results on focus");
+      performSearch(true); // Silent refresh
+    }
+  }, [hasSearched, showResults, serviceNeeded, zipCode, isZipValid])
+);
   // --------------------------------------------------------------------------
   // EFFECTS AND LIFECYCLE
   // --------------------------------------------------------------------------

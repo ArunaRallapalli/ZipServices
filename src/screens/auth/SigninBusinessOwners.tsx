@@ -1,6 +1,9 @@
 /**
  * SignInBusinessOwnersScreen - WITH PASSWORD RESET AND EMAIL VERIFICATION
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling
+ * 
  * Authentication screen for business owners with complete password reset flow.
  * 
  * FEATURES:
@@ -41,9 +44,10 @@ import { Alert } from "../../Utils/Alert";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import { RouteProp, useRoute } from "@react-navigation/native";
-import API_URL from "../../config/apiConfig";
 import { useAuth } from "../../contexts/AuthContext";
 import { createResponsiveStyles } from "../../Utils/globalStyles";
+import api from '../../api'; // ADDED: January 5, 2026
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, "SigninBusinessOwners">;
 type ScreenRouteProp = RouteProp<RootStackParamList, "SigninBusinessOwners">;
@@ -120,7 +124,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
   // Screen mode state
   const [mode, setMode] = useState<ScreenMode>(resetToken ? 'reset' : 'login');
   
-  // Login form state
+  // Login form state for UI and inputs
   const [email, setEmail] = useState(resetEmail || "");
   const [password, setPassword] = useState("");
   
@@ -143,6 +147,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
   /**
    * Handle normal login
+   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
    */
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -153,30 +158,11 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
     try {
       setLoading(true);
       
-      const response = await fetch(`${API_URL}/business_owners/login`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ 
-          email: email.trim(), 
-          password: password.trim() 
-        }),
+      // UPDATED: Using api client instead of fetch
+      const data: LoginResponse = await api.post('/business_owners/login', { 
+        email: email.trim(), 
+        password: password.trim() 
       });
-
-      const rawText = await response.text();
-      
-      let data: LoginResponse;
-      try {
-        data = JSON.parse(rawText);
-      } catch (err) {
-        throw new Error("Server returned invalid response");
-      }
-
-      if (!response.ok) {
-        throw new Error(data.message || `Server error: ${response.status}`);
-      }
 
       // ✅ Check if email is verified
       if (data.user && data.user.email_verified === false) {
@@ -189,9 +175,20 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         );
         return; // Stop login process
       }
+//The code snippet const token = data.token || data.access_token || data.data?.token;
+//  is a JavaScript expression that demonstrates a robust way to extract a token 
+// from an API response object (data) by checking 
+// //  multiple possible property names in order of preference. 
 
       const token = data.token || data.access_token || data.data?.token;
-      
+      console.log('💾 Stored token:', token);
+// Store token for API client
+await AsyncStorage.setItem('access_token', token);
+
+// DEBUG
+const storedToken = await AsyncStorage.getItem('access_token');
+console.log('💾 Stored access_token:', storedToken);
+
       if (!token) {
         throw new Error("No authentication token received from server");
       }
@@ -241,6 +238,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
           'Welcome Back! 🎉',
           `Hi \n\nYour session has been saved securely. You can now:\n• Search, Post,Request and manage your services\n• Chat with customers\n• Access your dashboard\n• Track your bookings`,
           [
+            
             {
               text: 'Get Started',
               onPress: () => {
@@ -264,6 +262,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
   /**
    * Handle password reset request (forgot password)
+   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
    */
   const handleForgotPassword = async () => {
     if (!email.trim()) {
@@ -280,20 +279,10 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
     try {
       setLoading(true);
       
-      const response = await fetch(`${API_URL}/api/password-reset/request`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ email: email.trim() }),
+      // UPDATED: Using api client instead of fetch
+      const data = await api.post('/api/password-reset/request', { 
+        email: email.trim() 
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to send reset email");
-      }
 
       // Show success message
       Alert.alert(
@@ -317,6 +306,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
 
   /**
    * Handle password reset verification (set new password)
+   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
    */
   const handleResetPassword = async () => {
     // Validate inputs
@@ -352,24 +342,12 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
     try {
       setLoading(true);
       
-      const response = await fetch(`${API_URL}/api/password-reset/verify`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ 
-          email: email.trim(),
-          token: resetToken,
-          newPassword: newPassword 
-        }),
+      // UPDATED: Using api client instead of fetch
+      const data = await api.post('/api/password-reset/verify', { 
+        email: email.trim(),
+        token: resetToken,
+        newPassword: newPassword 
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to reset password");
-      }
 
       // Show success message
       setSuccessMessage("Password reset successfully!");

@@ -1,6 +1,9 @@
 /**
  * searchUtils.ts
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling (internal APIs only)
+ * 
  * OVERVIEW:
  * This utility module provides core functionality for the service search feature.
  * It handles:
@@ -21,8 +24,8 @@
  * - Integrates with zippopotam.us API for ZIP code to location conversion
  */
 
-import API_URL from "../config/apiConfig";
 import { Alert } from "./Alert";
+import api from "../api"; // ADDED: January 5, 2026
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -137,6 +140,7 @@ export const isValidZipCode = (zip: string): boolean => {
 /**
  * Fetches available service categories from the backend API
  * Falls back to a hardcoded list if the API call fails
+ * UPDATED: January 5, 2026 - Using api.get() instead of fetch
  * 
  * @returns Promise resolving to an array of category names
  * 
@@ -157,28 +161,9 @@ export const fetchCategories = async (): Promise<string[]> => {
   ];
 
   try {
-    // Construct API endpoint URL
-    const apiUrl = `${API_URL}/api/service-categories`;
-    console.log("📍 [searchUtils] API URL:", apiUrl);
+    // UPDATED: Using api client instead of fetch
+    const data = await api.get('/api/service-categories');
     
-    // Make GET request to fetch categories
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    });
-
-    console.log("📥 [searchUtils] Response status:", response.status);
-    
-    // Check if request was successful
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    // Parse JSON response
-    const data = await response.json();
     console.log("✅ [searchUtils] Categories data received:", data);
 
     // Validate data structure and return categories
@@ -205,6 +190,7 @@ export const fetchCategories = async (): Promise<string[]> => {
 /**
  * Fetches city and state information for a given ZIP code
  * Queries external API for real-time ZIP code data
+ * NOTE: This uses an EXTERNAL API (zippopotam.us), not our backend
  * 
  * @param zipCode - The 5-digit ZIP code to lookup
  * @returns Promise resolving to LocationData or null if not found
@@ -218,6 +204,7 @@ export const fetchLocationFromZip = async (zipCode: string): Promise<LocationDat
     console.log(`🔍 [searchUtils] Fetching location for ZIP: ${zipCode}`);
     
     // Query zippopotam.us API for ZIP code data
+    // NOTE: This is an EXTERNAL API, not our backend, so we use native fetch
     const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`);
 
     // If ZIP code not found, return null
@@ -248,6 +235,7 @@ export const fetchLocationFromZip = async (zipCode: string): Promise<LocationDat
 
 /**
  * Searches for service posts using RADIUS-BASED search
+ * UPDATED: January 5, 2026 - Using api.get() instead of fetch
  * 
  * NEW BACKEND INTEGRATION:
  * - Uses /api/service-posts/search endpoint with radius parameter
@@ -304,73 +292,47 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
         radius: radius.toString(),
       });
 
-      const searchUrl = `${API_URL}/api/service-posts/search?${searchParams.toString()}`;
+      const searchUrl = `/api/service-posts/search?${searchParams.toString()}`;
       console.log("📍 [searchUtils] Search URL:", searchUrl);
 
-      // Execute radius search
-      const response = await fetch(searchUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      });
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get(searchUrl);
       
-      console.log("📥 [searchUtils] Response status:", response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("📥 [searchUtils] Search response:", data);
+      console.log("📥 [searchUtils] Search response:", data);
+      
+      // ====================================================================
+      // PARSE NEW BACKEND RESPONSE FORMAT
+      // ====================================================================
+      // Expected structure:
+      // {
+      //   success: true,
+      //   posts: [...],           // Array of posts with distance field
+      //   searchCenter: {...},    // Center point info
+      //   radius: 25,             // Search radius used
+      //   count: 2                // Number of results
+      // }
+      
+      if (data.success && Array.isArray(data.posts)) {
+        allPosts = data.posts;
         
-        // ====================================================================
-        // PARSE NEW BACKEND RESPONSE FORMAT
-        // ====================================================================
-        // Expected structure:
-        // {
-        //   success: true,
-        //   posts: [...],           // Array of posts with distance field
-        //   searchCenter: {...},    // Center point info
-        //   radius: 25,             // Search radius used
-        //   count: 2                // Number of results
-        // }
+        console.log(`✅ [searchUtils] Found ${data.count} posts within ${data.radius} miles`);
         
-        if (data.success && Array.isArray(data.posts)) {
-          allPosts = data.posts;
-          
-          console.log(`✅ [searchUtils] Found ${data.count} posts within ${data.radius} miles`);
-          
-          // Log search center info for debugging
-          if (data.searchCenter) {
-            console.log(`📍 [searchUtils] Search center: ${data.searchCenter.zipCode} at (${data.searchCenter.lat}, ${data.searchCenter.lon})`);
-          }
-          
-          // Log distance for each result
-          if (allPosts.length > 0) {
-            console.log("📏 [searchUtils] Results by distance:");
-            allPosts.forEach((post, index) => {
-              console.log(`   ${index + 1}. ${post.title} - ${post.distance} miles (${post.city}, ${post.state})`);
-            });
-          } else {
-            console.log(`ℹ️ [searchUtils] No services found within ${radius} miles of ${zipCode}`);
-          }
+        // Log search center info for debugging
+        if (data.searchCenter) {
+          console.log(`📍 [searchUtils] Search center: ${data.searchCenter.zipCode} at (${data.searchCenter.lat}, ${data.searchCenter.lon})`);
+        }
+        
+        // Log distance for each result
+        if (allPosts.length > 0) {
+          console.log("📏 [searchUtils] Results by distance:");
+          allPosts.forEach((post, index) => {
+            console.log(`   ${index + 1}. ${post.title} - ${post.distance} miles (${post.city}, ${post.state})`);
+          });
         } else {
-          console.warn("⚠️ [searchUtils] Invalid response structure:", data);
+          console.log(`ℹ️ [searchUtils] No services found within ${radius} miles of ${zipCode}`);
         }
       } else {
-        // Handle HTTP errors
-        const errorText = await response.text();
-        console.error(`❌ [searchUtils] Search failed with status ${response.status}:`, errorText);
-        
-        // Try to parse error message
-        try {
-          const errorData = JSON.parse(errorText);
-          if (errorData.error) {
-            console.error(`❌ [searchUtils] Backend error: ${errorData.error}`);
-          }
-        } catch (e) {
-          // Error response wasn't JSON
-          console.error("❌ [searchUtils] Non-JSON error response");
-        }
+        console.warn("⚠️ [searchUtils] Invalid response structure:", data);
       }
     } else {
       console.warn("⚠️ [searchUtils] No ZIP code provided for radius search");
@@ -402,7 +364,7 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
 
     return results;
     
-  } catch (error) {
+  } catch (error: any) {
     // ========================================================================
     // ERROR HANDLING
     // ========================================================================

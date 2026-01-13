@@ -87,7 +87,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem('@zipservice_user');
+      // 3. Clear user state
       setUserState(null);
     } catch (error) {
       console.error('Error during logout:', error);

@@ -44,6 +44,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { Platform } from "react-native";
 import { WebAlert } from "../components/WebAlert"
 import { setWebAlertHandler } from "../Utils/Alert";
+import CalendarScreen from '../screens/CalendarScreen';
 
 // Screen imports - All navigable screens in the app
 import ListingsScreen from "../screens/ListingsScreen";
@@ -147,7 +148,8 @@ export type RootStackParamList = {
   };
   
   // Listings & Posts - Service management
-  ListingsScreen: undefined;                        // View all user's posted services
+  ListingsScreen: undefined;  // View all user's posted services
+   CalendarScreen: undefined;                      
   EditListing: { postId: number };                  // Edit existing service post
   PostServiceScreen: undefined;                     // Create new service post
   RequestServiceCategoryScreen: undefined;          // Request new service category
@@ -349,6 +351,11 @@ const NavigationStack: React.FC = () => {
             component={ListingsScreen}
             options={{ headerTitle: 'My Listings' }}
           />
+          <RootStack.Screen 
+  name="CalendarScreen" 
+  component={CalendarScreen}
+  options={{ headerShown: false }}
+/>
           <RootStack.Screen 
             name="EditListing" 
             component={EditListing}

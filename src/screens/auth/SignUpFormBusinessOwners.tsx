@@ -1,6 +1,9 @@
 /**
  * SignUpFormBusinessOwners Component - SIMPLIFIED VERSION
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for backend requests
+ * 
  * IMPROVEMENTS:
  * 1. Fixed width issue - Added maxWidth constraint for better display on large screens
  * 2. Simplified to 4 required fields only: Name, Email, Password, Zip Code
@@ -24,7 +27,7 @@ import { createResponsiveStyles } from "../../Utils/globalStyles"
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import API_URL from "../../config/apiConfig";
+import api from '../../api'; // ADDED: January 5, 2026
 
 type SignUpBusinessNavProp = StackNavigationProp<
   RootStackParamList,
@@ -52,6 +55,7 @@ const SignUpFormBusinessOwners = () => {
     setFormData({ ...formData, [field]: value });
 
   // Auto-populate city and state from zip code
+  // NOTE: This uses external ZIP API, not our backend, so keeping native fetch
   const fetchCityStateFromZip = async (zipCode: string) => {
     if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
       return;
@@ -61,6 +65,7 @@ const SignUpFormBusinessOwners = () => {
       setIsLoadingZipData(true);
       console.log("📍 Fetching city/state for zip code:", zipCode);
 
+      // External API - keep using native fetch
       const response = await fetch(`http://api.zippopotam.us/us/${zipCode}`);
       
       if (response.ok) {
@@ -101,6 +106,10 @@ const SignUpFormBusinessOwners = () => {
     navigation.goBack();
   };
 
+  /**
+   * Handle user registration
+   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
+   */
   const handleRegister = async () => {
     // Validate required fields
     const requiredFields = ["name", "email", "password", "zipCode"];
@@ -144,71 +153,59 @@ const SignUpFormBusinessOwners = () => {
     try {
       console.log("📤 Sending registration request...");
       
-      const response = await fetch(
-        `${API_URL}/business_owners/crud/register`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            city: formData.city,
-            state: formData.state,
-            zip_code: formData.zipCode,
-            // Optional fields sent as empty/default values
-            description: "",
-            phone_number: "",
-            street: "",
-            service_radius_miles: undefined,
-          }),
-        }
+      // UPDATED: Using api client instead of fetch
+      const data = await api.post('/business_owners/crud/register', {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        city: formData.city,
+        state: formData.state,
+        zip_code: formData.zipCode,
+        // Optional fields sent as empty/default values
+        description: "",
+        phone_number: "",
+        street: "",
+        service_radius_miles: undefined,
+      });
+
+      console.log("📥 Registration response:", data);
+      console.log("✅ Registration successful!");
+      
+      // Show email verification alert
+      Alert.alert(
+        "Account Created! 📧", 
+        "Please check your email to verify your account. You must verify your email before you can sign in.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Navigate to sign-in screen
+              navigation.navigate('SigninBusinessOwners');
+            }
+          }
+        ]
       );
 
-      const data = await response.json();
-      console.log("📥 Registration response:", data);
-      
-      if (response.ok) {
-        console.log("✅ Registration successful!");
-        
-        // Show email verification alert
+    } catch (err: any) {
+      console.error("❌ Registration error:", err);
+      const errorMessage = err.message || "";
+      const isEmailExistsError = 
+        errorMessage.toLowerCase().includes("email") && 
+        (errorMessage.toLowerCase().includes("exist") || 
+         errorMessage.toLowerCase().includes("already") ||
+         errorMessage.toLowerCase().includes("duplicate") ||
+         errorMessage.toLowerCase().includes("taken"));
+
+      if (isEmailExistsError) {
+        console.error("❌ Email already exists");
         Alert.alert(
-          "Account Created! 📧", 
-          "Please check your email to verify your account. You must verify your email before you can sign in.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                // Navigate to sign-in screen
-                navigation.navigate('SigninBusinessOwners');
-              }
-            }
-          ]
+          "Email Already Registered",
+          "This email is already associated with an account. Please use a different email address or try logging in.",
+          [{ text: "OK" }]
         );
       } else {
-        const errorMessage = data.message || "";
-        const isEmailExistsError = 
-          errorMessage.toLowerCase().includes("email") && 
-          (errorMessage.toLowerCase().includes("exist") || 
-           errorMessage.toLowerCase().includes("already") ||
-           errorMessage.toLowerCase().includes("duplicate") ||
-           errorMessage.toLowerCase().includes("taken"));
-
-        if (isEmailExistsError) {
-          console.error("❌ Email already exists");
-          Alert.alert(
-            "Email Already Registered",
-            "This email is already associated with an account. Please use a different email address or try logging in.",
-            [{ text: "OK" }]
-          );
-        } else {
-          console.error("❌ Registration failed:", data);
-          Alert.alert("Error", errorMessage || "Registration failed");
-        }
+        Alert.alert("Error", errorMessage || "Registration failed");
       }
-    } catch (err) {
-      console.error("❌ Frontend registration error:", err);
-      Alert.alert("Error", "Failed to register user");
     }
   };
 

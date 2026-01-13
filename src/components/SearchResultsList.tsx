@@ -1,38 +1,25 @@
 /**
  * SearchResultsList.tsx
  * 
- * @updated 2025-12-23
- * @version 2.0.0 - Radius-based search with distance display
+ * @updated 2026-01-04
+ * @version 2.1.0 - Added star ratings display
  * 
  * OVERVIEW:
  * Component that displays search results for service providers using radius-based search.
- * Shows results sorted by distance with visual distance indicators.
+ * Shows results sorted by distance with visual distance indicators and star ratings.
  * 
- * UPDATED FOR RADIUS-BASED SEARCH:
- * - Displays distance in miles for each service
- * - Shows results sorted by proximity (closest first)
- * - Header indicates search radius instead of exact ZIP match
- * - All results are treated as radius-based (no exact/nearby/state separation)
+ * UPDATED FOR RATINGS:
+ * - Displays star ratings on each service card
+ * - Shows review counts for providers with reviews
+ * - ServicePost interface includes average_rating and review_count
  * 
  * KEY FEATURES:
  * - Distance-based result display (e.g., "7.3 miles away")
+ * - Star ratings for service providers (e.g., ⭐ 4.8 (24 reviews))
  * - Visual indicators for proximity
  * - Handles empty state with helpful messaging
  * - Back navigation to search form
  * - Contact/chat functionality for each service
- * 
- * RESULT DISPLAY LOGIC:
- * - All services sorted by distance (closest first)
- * - Each card shows distance in miles
- * - Header shows total count and search radius
- * - Empty state for no results within radius
- * 
- * PROPS:
- * - searchResults: Object containing posts with distance information
- * - isOwnPost: Function to check if post belongs to current user
- * - onChatPress: Handler for initiating chat with service provider
- * - onBackPress: Handler for returning to search form
- * - zipCode, city, state: Location context for display messages
  */
 
 import React from "react";
@@ -54,6 +41,7 @@ import { createResponsiveStyles } from "../Utils/globalStyles"
 /**
  * Service post data structure returned from radius-based search
  * NOW INCLUDES: distance field (in miles from search center)
+ * NOW INCLUDES: average_rating and review_count for star ratings
  */
 interface ServicePost {
   post_id: number;                    // Unique identifier for the post
@@ -71,7 +59,10 @@ interface ServicePost {
   state?: string;                     // Service provider's state
   poster_name?: string;               // Name of the person who posted
   business_name?: string;             // Business name (if applicable)
-  distance?: number;                  // NEW: Distance in miles from search center
+  distance?: number;                  // Distance in miles from search center
+  is_active?: boolean;                // Whether the post is active
+  average_rating?: number;            // ← NEW: Average star rating (0-5)
+  review_count?: number;              // ← NEW: Number of reviews received
 }
 
 /**
@@ -122,17 +113,9 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
    * With radius-based search, all results are in zipCodeMatches
    * They're already sorted by distance (closest first)
    */
-  const allResults = searchResults.zipCodeMatches || [];
-  // ADD THIS DEBUG CODE HERE 👇
-  console.log('=== DEBUG: All Results ===');
-  console.log('Total results:', allResults.length);
-  console.log('Results with distances:', allResults.map(r => ({
-    title: r.title,
-    distance: r.distance,
-    post_id: r.post_id,
-    hasDistance: r.distance !== undefined
-  })));
-  console.log('Raw searchResults object:', searchResults);
+  const allResults = (searchResults.zipCodeMatches || [])
+    .filter(item => item.is_active !== false);
+  
   /**
    * Check if any results exist
    */
@@ -225,7 +208,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 
         {/* --------------------------------------------------------------------
             SERVICE CARDS
-            Each card displays service info with distance
+            Each card displays service info with distance and star rating
         -------------------------------------------------------------------- */}
         {allResults.map((item) => (
           <View key={item.post_id} style={styles.serviceCardContainer}>

@@ -9,6 +9,7 @@
  * Features:
  * - Visual distinction between OFFER and REQUEST posts with colored badges
  * - "Your Post" banner for posts created by the current user
+ * - Star rating display showing provider's average rating
  * - Comprehensive post information display (title, description, price, location)
  * - "Contact Provider" button that triggers chat navigation
  * - Disabled state for user's own posts (can't contact yourself)
@@ -17,9 +18,11 @@
  * @component
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import StarRating from "./StarRating";
+import ReviewsModal from "./Reviewsmodal";  // ← NEW IMPORT
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -46,6 +49,8 @@ interface ServicePost {
   state?: string;            // Optional state abbreviation
   poster_name?: string;      // Optional full name of poster
   business_name?: string;    // Optional business name (for business owners)
+  average_rating?: number;   // ← NEW: Average star rating (0-5)
+  review_count?: number;     // ← NEW: Number of reviews received
 }
 
 /**
@@ -67,6 +72,9 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
   isOwnPost,
   onChatPress,
 }) => {
+  // State for showing reviews modal
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+
   return (
     <View style={styles.card}>
       {/* 
@@ -117,6 +125,32 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
       {item.business_name && (
         <Text style={styles.posterName}>by {item.business_name}</Text>
       )}
+
+      {/* 
+        ========================================================================
+        STAR RATING DISPLAY - TAPPABLE!
+        ========================================================================
+        - Shows provider's average rating and review count
+        - Only displayed if provider has reviews (review_count > 0)
+        - Format: ⭐⭐⭐⭐☆ 4.5 (24 reviews)
+        - Tappable: Opens ReviewsModal to see all reviews
+      */}
+      {/* Always show rating section if review data exists (even if 0 reviews) */}
+{item.review_count !== undefined && (
+  <TouchableOpacity 
+    style={styles.ratingContainer}
+    onPress={() => setShowReviewsModal(true)}
+    activeOpacity={0.7}
+  >
+    <StarRating
+      rating={item.average_rating || 0}
+      size={16}
+      showCount={true}
+      reviewCount={item.review_count}
+    />
+    <Ionicons name="chevron-forward" size={16} color="#999" style={{ marginLeft: 4 }} />
+  </TouchableOpacity>
+)}
 
       {/* 
         Service Category
@@ -203,6 +237,14 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
           </Text>
         </View>
       )}
+
+      {/* Reviews Modal */}
+      <ReviewsModal
+        visible={showReviewsModal}
+        providerId={item.user_id}
+        providerName={item.business_name || item.poster_name || 'Provider'}
+        onClose={() => setShowReviewsModal(false)}
+      />
     </View>
   );
 };
@@ -269,6 +311,19 @@ const styles = StyleSheet.create({
     color: "#666",
     marginBottom: 4,
     fontStyle: "italic",
+  },
+  
+  // ========================================================================
+  // RATING CONTAINER - TAPPABLE
+  // ========================================================================
+  // Container for star rating display
+  // Shows between business name and category
+  // Now tappable to open reviews modal
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: 2,
   },
   
   // Category text - blue to indicate it's a tag/category
@@ -384,6 +439,8 @@ export default ServiceCard;
  *     city: "Phoenix",
  *     state: "AZ",
  *     zip_code: "85001",
+ *     average_rating: 4.8,        // ← NEW
+ *     review_count: 24,            // ← NEW
  *     // ... other fields
  *   }}
  *   isOwnPost={false}
@@ -405,6 +462,7 @@ export default ServiceCard;
  *   └─> Passes results to SearchResultsList
  *       └─> Maps over results array
  *           └─> Renders ServiceCard for each result
+ *               └─> Displays star rating if reviews exist
  *               └─> User clicks "Contact Provider"
  *                   └─> onChatPress callback
  *                       └─> Bubbles up to SearchResultsScreen

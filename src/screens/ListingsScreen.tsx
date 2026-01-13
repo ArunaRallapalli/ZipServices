@@ -1,6 +1,9 @@
 /**
  * ListingsScreen Component
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling
+ * 
  * This screen displays all service listings (posts) created by the currently logged-in user.
  * It serves as a management dashboard where users can view, search, edit, and inactivate their listings.
  * 
@@ -23,7 +26,7 @@ import {
   Text,
   FlatList,
   ActivityIndicator,
-    StyleSheet,
+  StyleSheet,
   TouchableOpacity,
   SafeAreaView,
   RefreshControl,
@@ -36,9 +39,9 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { useAuth } from "../contexts/AuthContext";
-import API_URL from "../config/apiConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BackButton } from '../components/BackButton';
+import api from '../api'; // ADDED: January 5, 2026
 
 // Navigation type definition for type safety
 type AllListingsNavProp = NativeStackNavigationProp<RootStackParamList, "ListingsScreen">;
@@ -79,7 +82,6 @@ interface CustomerInfo {
 const ListingsScreen: React.FC = () => {
   const navigation = useNavigation<AllListingsNavProp>();
   const { isAuthenticated } = useAuth();
-  
   
   // State: All listings fetched from the backend
   const [listings, setListings] = useState<ServicePost[]>([]);
@@ -163,6 +165,7 @@ const ListingsScreen: React.FC = () => {
   /**
    * Fetch all listings created by the current user from the backend
    * Called on mount, when screen focuses, and on manual refresh
+   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
    */
   const fetchUserListings = async () => {
     // Don't fetch if no user ID available
@@ -173,16 +176,11 @@ const ListingsScreen: React.FC = () => {
 
     try {
       setLoading(true);
-      console.log("Fetching user listings from:", `${API_URL}/api/service-posts/user/${userInfo.user_id}`);
+      console.log("Fetching user listings for user:", userInfo.user_id);
 
-      // API call to get user's listings
-      const response = await fetch(`${API_URL}/api/service-posts/user/${userInfo.user_id}`);
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get(`/api/service-posts/user/${userInfo.user_id}`);
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
       console.log("Received user listings:", data);
 
       // Update state if response is valid
@@ -218,9 +216,10 @@ const ListingsScreen: React.FC = () => {
    * Searches through title, category, description, city, and state
    */
   useEffect(() => {
-    let filtered = listings;
+    // ✅ ALWAYS filter out inactive listings FIRST
+    let filtered = listings.filter(item => item.is_active !== false);
 
-    // Filter by search query if present
+    // Then apply search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(item =>
@@ -259,63 +258,50 @@ const ListingsScreen: React.FC = () => {
    * Shows confirmation dialog before inactivating the listing
    */
   const handleInactivatePress = async (item: ServicePost) => {
-  console.log('🔴 handleInactivatePress called for item:', item.id, item.title);
-  
-  Alert.alert(
-    "Inactivate Listing",
-    `Are you sure you want to inactivate "${item.title}"? This will hide it from other users.`,
-    [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Inactivate", 
-        style: "destructive",
-        onPress: () => inactivateListing(item.id)
-      }
-    ]
-  );
-};
+    console.log('🔴 handleInactivatePress called for item:', item.id, item.title);
+    
+    Alert.alert(
+      "Inactivate Listing",
+      `Are you sure you want to inactivate "${item.title}"? This will hide it from other users.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Inactivate", 
+          style: "destructive",
+          onPress: () => inactivateListing(item.id)
+        }
+      ]
+    );
+  };
+
   /**
    * Inactivate a listing by ID
    * Makes API call to mark the listing as inactive
    * Refreshes the listing after successful inactivation
+   * UPDATED: January 5, 2026 - Using api.patch() instead of fetch
    */
   const inactivateListing = async (postId: number) => {
-  try {
-    console.log('Attempting to inactivate post:', postId);
-    console.log('API URL:', `${API_URL}/api/service-posts/${postId}/inactivate`);
-    
-    // API call to inactivate the listing
-    const response = await fetch(`${API_URL}/api/service-posts/${postId}/inactivate`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    try {
+      console.log('Attempting to inactivate post:', postId);
+      
+      // UPDATED: Using api client instead of fetch
+      const data = await api.patch(`/api/service-posts/${postId}/inactivate`, {});
 
-    console.log('Response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Response error:', errorText);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      console.log('Response data:', data);
+      
+      // Show success message and refresh listings
+      if (data.success) {
+        Alert.alert("Success", "Listing has been inactivated successfully.");
+        // Refresh the listings to show updated status
+        await fetchUserListings();
+      } else {
+        throw new Error(data.error || "Failed to inactivate listing");
+      }
+    } catch (error: any) {
+      console.error("Error inactivating listing:", error);
+      Alert.alert("Error", error.message || "Failed to inactivate listing. Please try again.");
     }
-
-    const data = await response.json();
-    console.log('Response data:', data);
-    
-    // Show success message and refresh listings
-    if (data.success) {
-      Alert.alert("Success", "Listing has been inactivated successfully.");
-      // Refresh the listings to show updated status
-      await fetchUserListings();
-    } else {
-      throw new Error(data.error || "Failed to inactivate listing");
-    }
-  } catch (error) {
-    console.error("Error inactivating listing:", error);
-    Alert.alert("Error", "Failed to inactivate listing. Please try again.");
-  }
-};
+  };
 
   /**
    * Navigate to Home tab to browse services
@@ -459,8 +445,7 @@ const ListingsScreen: React.FC = () => {
 
   // Early return: Show sign-in required screen if user is not authenticated
   if (!isAuthenticated) {
-        return (
-     
+    return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="log-in-outline" size={64} color="#ccc" />
@@ -468,11 +453,11 @@ const ListingsScreen: React.FC = () => {
           <Text style={styles.emptySubtext}>
             You need to be signed in to access your listings
           </Text>
-        {/* Sign In button - navigates to BusinessOwnerHomeScreen */}
-        <TouchableOpacity
-  style={styles.signInButton}
-  onPress={() => navigation.navigate("BusinessOwnerHomeScreen")}
-  activeOpacity={0.7}
+          {/* Sign In button - navigates to BusinessOwnerHomeScreen */}
+          <TouchableOpacity
+            style={styles.signInButton}
+            onPress={() => navigation.navigate("BusinessOwnerHomeScreen")}
+            activeOpacity={0.7}
           >
             <Ionicons name="log-in-outline" size={20} color="#ffffff" style={styles.buttonIcon} />
             <Text style={styles.signInButtonText}>Sign In / Sign Up</Text>
@@ -509,20 +494,26 @@ const ListingsScreen: React.FC = () => {
   // Main render: Show header, search bar, and listings
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with title, listing count, and Cancel button */}
+      {/* Header with title, listing count, and Calendar button */}
       <View style={styles.header}>
-       <BackButton 
-  iconColor="#fff"
-  textColor="#fff"
-  backgroundColor="transparent"
-/>
+        <BackButton 
+          iconColor="#fff"
+          textColor="#fff"
+          backgroundColor="transparent"
+        />
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>My Listings</Text>
           <Text style={styles.headerSubtitle}>
- {String(filteredListings.length)} {filteredListings.length === 1 ? 'listing' : 'listings'}
-</Text>
+            {String(filteredListings.length)} {filteredListings.length === 1 ? 'listing' : 'listings'}
+          </Text>
         </View>
-        <View style={styles.headerSpacer} />
+        {/* ✅ NEW: Calendar button */}
+        <TouchableOpacity 
+          style={styles.calendarIconButton}
+          onPress={() => navigation.navigate('CalendarScreen')}
+        >
+          <Ionicons name="calendar" size={24} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       {/* Search Bar with icon and clear button */}
@@ -604,12 +595,12 @@ const styles = createResponsiveStyles({
   searchInput: { flex: 1, fontSize: 16, color: "#333" },
   listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
   card: { backgroundColor: "#fff", borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: "#e0e0e0", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 3 },
-  inactiveCard: { opacity: 0.6, borderColor: "#ccc" }, // Dimmed style for inactive listings
+  inactiveCard: { opacity: 0.6, borderColor: "#ccc" },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
   serviceTitle: { flex: 1, fontSize: 18, fontWeight: "bold", color: "#333", marginRight: 10 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  offerBadge: { backgroundColor: "#4CAF50" }, // Green for "OFFERING"
-  requestBadge: { backgroundColor: "#2196F3" }, // Blue for "REQUESTING"
+  offerBadge: { backgroundColor: "#4CAF50" },
+  requestBadge: { backgroundColor: "#2196F3" },
   badgeText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
   inactiveNotice: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#f5f5f5", padding: 8, borderRadius: 6, marginBottom: 10 },
   inactiveText: { fontSize: 13, color: "#999", fontStyle: "italic" },
@@ -678,6 +669,11 @@ const styles = createResponsiveStyles({
     textAlign: "center",
     marginTop: 20,
     fontStyle: "italic",
+  },
+  calendarIconButton: {
+    padding: 8,
+    width: 40,
+    alignItems: 'center',
   },
 });
 

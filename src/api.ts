@@ -1,63 +1,336 @@
-// frontend/src/api.ts
-import { Alert } from "react-native";
+/**
+ * ============================================================================
+ * API Client - Centralized API Request Handler
+ * ============================================================================
+ * 
+ * Last Updated: January 9, 2026
+ * Changes: 
+ * - Added automatic JWT token inclusion in all requests
+ * 
+ * - Added automatic token cleanup on 401 errors (expired tokens)
+ * - Improved error handling for expired sessions
+ * 
+ * FEATURES:
+ * - Automatic token injection from AsyncStorage
+ * - Auto-logout on expired tokens (401 errors)
+ * - Centralized error handling
+ * - Support for GET, POST, PUT, DELETE, PATCH requests
+ * - Proper TypeScript types
+ * - Response parsing and validation
+ * - Console logging for debugging
+ * the server generates the JWT upon successful authentication (login/signup).
+ * This token contains a header, a payload of claims (user information and permissions), and a signature.
+ * USAGE:
+ * import api from './api';
+ * const data = await api.get('/api/users/175/profile');
+ * const result = await api.post('/api/reviews', { rating: 5, ... });
+ * ============================================================================
+ */
 
-const API_URL = "http://10.0.2.2:5000"; // Use your backend URL for Android Emulator
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import API_URL from './config/apiConfig';
 
+/**
+ * Generic API response type
+ */
+export type ApiResponse<T = any> = {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  data?: T;
+  [key: string]: any;
+};
+
+/**
+ * Base fetch wrapper with automatic token injection
+ * 
+ * @param endpoint - API endpoint (e.g., '/api/users/175/profile')
+ * @param options - Standard fetch options (method, headers, body, etc.)
+ * @returns Parsed JSON response
+ */
+async function request<T = any>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  try {
+    // Get token from AsyncStorage
+    const token = await AsyncStorage.getItem('userToken');
+    console.log('🔐 Token from AsyncStorage:', token ? 'exists' : 'missing');
+    
+    // Build headers with Content-Type
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Merge with any custom headers from options
+    if (options.headers) {
+      Object.assign(headers, options.headers);
+    }
+
+    // Add Authorization header if token exists
+ //The Bearer keyword is followed by a space and the token string (e.g., a JWT).
+//Purpose: It acts as a digital key, granting access to APIs or services.
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Build full URL
+    const url = `${API_URL}${endpoint}`;
+
+    // Log request (helpful for debugging)
+    console.log(`🌐 API Request: ${options.method || 'GET'} ${endpoint}`, {
+      hasToken: !!token,
+      hasBody: !!options.body
+    });
+
+    // Make request
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    // Parse response text first
+    const text = await response.text();
+    let data: any;
+
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (parseError) {
+      console.warn('⚠️ Failed to parse JSON response:', text.substring(0, 100));
+      data = { message: text };
+    }
+
+    // Handle non-OK responses (4xx, 5xx)
+    if (!response.ok) {
+      const errorMessage = data.error || data.message || `Request failed with status ${response.status}`;
+      
+      console.error(`❌ API Error [${response.status}]:`, {
+        endpoint,
+        status: response.status,
+        statusText: response.statusText,
+        error: errorMessage,
+        hasToken: !!token
+      });
+
+      // ✅ FIXED: Special handling for auth errors (expired/invalid token)
+      if (response.status === 401) {
+        console.warn('🔐 Unauthorized - Token expired or invalid. Clearing auth data...');
+        
+        // Clear ALL auth data from AsyncStorage
+        try {
+          await AsyncStorage.multiRemove([
+            'userToken',
+            'userType',
+            'userId',
+            'userEmail',
+            'userInfo'
+          ]);
+          console.log('✅ Expired auth data cleared from storage');
+          
+          // Create a more user-friendly error for expired tokens
+          const tokenError = new Error('Your session has expired. Please sign in again.');
+          (tokenError as any).status = 401;
+          (tokenError as any).response = data;
+          (tokenError as any).isAuthError = true;
+          throw tokenError;
+        } catch (clearError) {
+          console.error('❌ Failed to clear auth data:', clearError);
+        }
+      }
+      
+      const error = new Error(errorMessage);
+      (error as any).status = response.status;
+      (error as any).response = data;
+      throw error;
+    }
+
+    // Success logging
+    console.log(`✅ API Success: ${options.method || 'GET'} ${endpoint}`, {
+      status: response.status,
+      hasData: !!data
+    });
+
+    return data as T;
+
+  } catch (error: any) {
+    // Network or other errors
+    console.error(`❌ API Request Failed:`, {
+      endpoint,
+      error: error.message,
+      type: error.name
+    });
+    throw error;
+  }
+}
+
+/**
+ * API Client Object with convenience methods
+ */
+const api = {
+  /**
+   * GET request
+   * 
+   * @param endpoint - API endpoint path
+   * @param options - Optional fetch options
+   * @returns Parsed response data
+   * 
+   * @example
+   * const profile = await api.get('/api/users/175/profile');
+   * const bookings = await api.get('/api/availability/bookings/175');
+   */
+  get: <T = any>(endpoint: string, options: RequestInit = {}) => {
+    return request<T>(endpoint, { ...options, method: 'GET' });
+  },
+
+  /**
+   * POST request
+   * 
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be JSON stringified)
+   * @param options - Optional fetch options
+   * @returns Parsed response data
+   * 
+   * @example
+   * const result = await api.post('/api/reviews', {
+   *   bookingId: 1,
+   *   providerId: 175,
+   *   customerId: 176,
+   *   rating: 5,
+   *   reviewText: 'Great service!'
+   * });
+   */
+  post: <T = any>(endpoint: string, data?: any, options: RequestInit = {}) => {
+    return request<T>(endpoint, {
+      ...options,
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+
+  /**
+   * PUT request
+   * 
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be JSON stringified)
+   * @param options - Optional fetch options
+   * @returns Parsed response data
+   * 
+   * @example
+   * const updated = await api.put('/api/users/175', {
+   *   email: 'newemail@example.com'
+   * });
+   */
+  put: <T = any>(endpoint: string, data?: any, options: RequestInit = {}) => {
+    return request<T>(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+
+  /**
+   * PATCH request
+   * 
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be JSON stringified)
+   * @param options - Optional fetch options
+   * @returns Parsed response data
+   * 
+   * @example
+   * const result = await api.patch('/api/availability/bookings/123', {
+   *   status: 'completed'
+   * });
+   */
+  patch: <T = any>(endpoint: string, data?: any, options: RequestInit = {}) => {
+    return request<T>(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+
+  /**
+   * DELETE request
+   * 
+   * @param endpoint - API endpoint path
+   * @param options - Optional fetch options
+   * @returns Parsed response data
+   * 
+   * @example
+   * await api.delete('/api/service-posts/123');
+   */
+  delete: <T = any>(endpoint: string, options: RequestInit = {}) => {
+    return request<T>(endpoint, { ...options, method: 'DELETE' });
+  },
+};
+
+/**
+ * Quick backend health check
+ * Tests connectivity to the backend server
+ * 
+ * @throws Error if backend is unreachable
+ */
+export async function pingBackend(): Promise<void> {
+  try {
+    const data = await api.get('/ping');
+    console.log('✅ Backend reachable:', data);
+  } catch (error) {
+    console.error('❌ Backend unreachable:', error);
+    throw new Error('Cannot connect to backend server');
+  }
+}
+
+/**
+ * Check backend health with full diagnostics
+ * 
+ * @returns Health status object
+ */
+export async function checkBackendHealth(): Promise<any> {
+  try {
+    const data = await api.get('/api/health');
+    console.log('✅ Backend health check passed:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Backend health check failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Type definitions for common payloads
+ */
 export type SignUpPayload = {
   name: string;
   email: string;
   password: string;
+  user_type?: 'customer' | 'business_owner';
+  phone_number?: string;
+  zip_code?: string;
 };
 
-export type ApiResponse<T> = {
-  message: string;
-  user?: T;
+export type LoginPayload = {
+  email: string;
+  password: string;
 };
 
-// Generic function to handle POST requests
-async function post<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+export type ReviewPayload = {
+  bookingId: number;
+  providerId: number;
+  customerId: number;
+  rating: number;
+  reviewText?: string;
+};
 
-    const rawText = await response.text();
+export type BookingPayload = {
+  provider_user_id: number;
+  customer_user_id: number;
+  booking_date: string;
+  time_slot: string;
+  service_description?: string;
+  estimated_price?: number;
+};
 
-    let json: ApiResponse<T>;
-    try {
-      json = JSON.parse(rawText);
-    } catch {
-      json = { message: rawText };
-    }
-
-    if (!response.ok) {
-      throw new Error(json.message || `Request failed with status ${response.status}`);
-    }
-
-    return json;
-  } catch (err: any) {
-    console.error(`API ${endpoint} error:`, err);
-    throw err;
-  }
-}
-
-// Quick ping test
-export async function pingBackend() {
-  try {
-    const res = await fetch(`${API_URL}/ping`);
-    const data = await res.json();
-    console.log("✅ Backend reachable:", data);
-  } catch (err) {
-    console.error("❌ Backend unreachable:", err);
-    Alert.alert("Backend Test Failed", "Cannot reach backend. Check server and network.");
-  }
-}
-
-// Sign up
-export async function registerUser(payload: SignUpPayload) {
-  return post("/auth/register", payload);
-}
-
-export default API_URL;
+/**
+ * Export the API client as default
+ */
+export default api;

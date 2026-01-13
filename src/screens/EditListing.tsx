@@ -1,6 +1,9 @@
 /**
  * EditListing Component
  * 
+ * Last Updated: January 5, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling
+ * 
  * This screen allows users to edit their existing service listings/posts.
  * It loads the current post data, displays it in editable form fields, validates inputs,
  * and saves changes back to the backend.
@@ -32,7 +35,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-    ActivityIndicator,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -42,8 +45,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
-import API_URL from "../config/apiConfig";
 import { Picker } from "@react-native-picker/picker";
+import api from '../api'; // ADDED: January 5, 2026
 
 // Navigation type definitions for type safety
 type EditListingNavProp = NativeStackNavigationProp<RootStackParamList, "EditListing">;
@@ -117,17 +120,15 @@ const EditListing: React.FC = () => {
 
   /**
    * Fetch available service categories from the API
+   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
    */
   const fetchServiceCategories = async () => {
     try {
       console.log("Fetching service categories from API...");
-      const response = await fetch(`${API_URL}/api/service-categories`);
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch categories: ${response.status}`);
-      }
-
-      const data = await response.json();
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get('/api/service-categories');
+      
       console.log("Received categories:", data);
       
       if (data.success && Array.isArray(data.categories)) {
@@ -178,25 +179,16 @@ const EditListing: React.FC = () => {
   /**
    * Fetch the existing post data from the backend by postId
    * Populates all form fields with the current post data
+   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
    */
   const fetchPostData = async () => {
     try {
       console.log("Fetching post data for ID:", postId);
       setLoading(true);
       
-      // API call to get post data by ID
-      const apiUrl = `${API_URL}/api/service-posts/${postId}`;
-      console.log("Fetching from URL:", apiUrl);
+      // UPDATED: Using api client instead of fetch
+      const data = await api.get(`/api/service-posts/${postId}`);
       
-      const response = await fetch(apiUrl);
-      
-      console.log("Response status:", response.status);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch post data: ${response.status}`);
-      }
-
-      const data = await response.json();
       console.log("Received data:", data);
       
       // Populate form fields if data is successfully retrieved
@@ -215,11 +207,11 @@ const EditListing: React.FC = () => {
       } else {
         throw new Error("Invalid data format received from server");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching post data:", error);
       Alert.alert(
         "Error", 
-        `Failed to load post data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to load post data: ${error.message || 'Unknown error'}`,
         [
           { text: "OK", onPress: () => navigation.goBack() }
         ]
@@ -271,6 +263,7 @@ const EditListing: React.FC = () => {
   /**
    * Handle save button press
    * Validates form, then sends PUT request to update the post
+   * UPDATED: January 5, 2026 - Using api.put() instead of fetch
    */
   const handleSave = async () => {
     console.log("Save button pressed");
@@ -299,24 +292,9 @@ const EditListing: React.FC = () => {
 
       console.log("Update data:", updateData);
 
-      // API call to update the post
-      const response = await fetch(`${API_URL}/api/service-posts/${postId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updateData),
-      });
+      // UPDATED: Using api client instead of fetch
+      const data = await api.put(`/api/service-posts/${postId}`, updateData);
 
-      console.log("Update response status:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Update error response:", errorText);
-        throw new Error(`Failed to update post: ${response.status}`);
-      }
-
-      const data = await response.json();
       console.log("Update response data:", data);
 
       // Show success message and navigate back if update successful
@@ -330,11 +308,11 @@ const EditListing: React.FC = () => {
       } else {
         throw new Error(data.error || "Failed to update post");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating post:", error);
       Alert.alert(
         "Error", 
-        `Failed to update listing: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to update listing: ${error.message || 'Unknown error'}`
       );
     } finally {
       setSaving(false);

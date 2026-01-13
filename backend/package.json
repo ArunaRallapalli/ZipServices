@@ -8,7 +8,12 @@
     "build": "tsc --project tsconfig.backend.json",
     "start": "cross-env NODE_ENV=production node dist/server.js",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "debug": "cross-env NODE_ENV=development node --inspect -r ts-node/register server.ts",
+    "debug:brk": "cross-env NODE_ENV=development node --inspect-brk -r ts-node/register server.ts",
+    "logs:error": "tail -f logs/error.log",
+    "logs:all": "tail -f logs/combined.log",
+    "logs:clear": "rm -rf logs/*.log"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.2",
@@ -21,10 +26,13 @@
     "expo": "~53.0.22",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
     "pg": "^8.11.3",
     "react": "19.0.0",
     "react-native": "0.79.6",
-    "resend": "^6.6.0"
+    "resend": "^6.6.0",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -32,8 +40,11 @@
     "@types/dotenv": "^6.1.1",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.9",
     "@types/node": "^20.19.11",
+    "@types/uuid": "^9.0.7",
     "cross-env": "^7.0.3",
+    "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }

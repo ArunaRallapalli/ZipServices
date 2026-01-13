@@ -7,7 +7,8 @@
  * after a business owner successfully logs in. It serves as the main navigation hub for the app.
  * 
  * Features:
- * - 5 Tab Screens: Home, Post, Listings, Messages, Profile
+ * -changed on jan 7th 2026 
+ * 5 Tab Screens: Home, Post, Listings, Messages, Profile
  * - Real-time unread message badge on Messages tab (polls every 30 seconds)
  * - Dynamic screen rendering based on user authentication status (business_owner vs guest)
  * - Initial navigation support via route params
@@ -30,7 +31,9 @@ import { View, Text, StyleSheet } from "react-native";
 import { RootStackParamList, TabParamList } from "../navigation/MainStackNavigator";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Ionicons, AntDesign } from '@expo/vector-icons';
-import API_URL from "../config/apiConfig";
+//import API_URL from "../config/apiConfig";
+import api from '../api' // ADDED: January 5, 2026
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 // Import screen components for each tab
 import ListingsScreen from "./ListingsScreen";
@@ -112,7 +115,14 @@ const PostStackNavigator: React.FC = () => {
 const BottomTabs: React.FC = () => {
   // Get user information from auth context
   const { userType, userInfo } = useAuth();
-  
+  // DEBUG: Log stored access token
+  useEffect(() => {
+    const logStoredToken = async () => {
+      const storedToken = await AsyncStorage.getItem('access_token');
+      console.log('💾 Stored access_token in Tabwrapper:', storedToken);
+    };
+    logStoredToken();
+  }, []);
   // Local state for unread message count (displayed as badge)
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -150,36 +160,32 @@ const BottomTabs: React.FC = () => {
     }
     
     const fetchUnreadCount = async () => {
-      try {
-        const endpoint = `${API_URL}/messages/business-owner/${userInfo.user_id}`;
-        console.log('[BottomTabs] Fetching unread count from:', endpoint);
-        
-        const response = await fetch(endpoint);
-        if (!response.ok) {
-          console.log('[BottomTabs] Response not OK:', response.status);
-          return;
-        }
-        
-        const data = await response.json();
-        console.log('[BottomTabs] Raw messages data:', data);
-        
-        // Filter messages to count only unread messages where current user is the receiver
-        const unreadMessages = Array.isArray(data) 
-          ? data.filter((msg: any) => {
-              const isReceiver = Number(msg.receiver_id) === Number(userInfo.user_id);
-              const isUnread = msg.is_read === false;
-              return isReceiver && isUnread;
-            })
-          : [];
-        
-        const count = unreadMessages.length;
-        console.log(`[BottomTabs] ✅ Unread message count: ${count}`);
-        
-        setUnreadCount(count);
-      } catch (error) {
-        console.error('[BottomTabs] Error fetching unread count:', error);
-      }
-    };
+  try {
+    if (!userInfo?.user_id) return;
+
+    // Use api.get() — no need for AsyncStorage or manual token
+    const endpoint = `/messages/business-owner/${userInfo.user_id}`;
+    const res = await api.get(endpoint); // ✅ api adds Authorization header automatically
+
+    console.log('[BottomTabs] Unread messages raw data:', res.data);
+
+    // Count only unread messages for this user
+    const unreadMessages = Array.isArray(res.data)
+      ? res.data.filter(
+          (msg: any) =>
+            Number(msg.receiver_id) === Number(userInfo.user_id) &&
+            msg.is_read === false
+        )
+      : [];
+
+    const count = unreadMessages.length;
+    console.log('[BottomTabs] ✅ Unread message count:', count);
+    setUnreadCount(count);
+  } catch (error: any) {
+    console.error('[BottomTabs] Error fetching unread count:', error.response?.status || error.message);
+  }
+};
+
     
     console.log('[BottomTabs] Setting up unread count polling for user:', userInfo.user_id);
     fetchUnreadCount(); // Initial fetch
@@ -278,23 +284,27 @@ const BottomTabs: React.FC = () => {
         headerShown: false,
       })}
       screenListeners={{
-        tabPress: () => {
-          // Refresh unread count when user taps on any tab (if signed in)
-          if (userInfo?.user_id) {
-            fetch(`${API_URL}/messages/business-owner/${userInfo.user_id}`)
-              .then(res => res.json())
-              .then((data: any[]) => {
-                const count = Array.isArray(data) 
-                  ? data.filter((msg: any) => 
-                      msg.receiver_id === userInfo.user_id && msg.is_read === false
-                    ).length
-                  : 0;
-                setUnreadCount(count);
-              })
-              .catch(err => console.error('[BottomTabs] Error refreshing unread count:', err));
-          }
-        },
-      }}
+  tabPress: async () => {
+    if (!userInfo?.user_id) return;
+
+    try {
+      // Use api.get() instead of fetch
+      const endpoint = `/messages/business-owner/${userInfo.user_id}`;
+      const res = await api.get(endpoint); // token handled internally by api client
+
+      const data = res.data;
+      const count = Array.isArray(data)
+        ? data.filter(msg => msg.receiver_id === userInfo.user_id && msg.is_read === false).length
+        : 0;
+
+      setUnreadCount(count);
+      console.log('[BottomTabs] ✅ Refreshed unread count on tabPress:', count);
+    } catch (err: any) {
+      console.error('[BottomTabs] Error refreshing unread count:', err.response?.status || err.message);
+    }
+  },
+}}
+
     >
       {/* Home Tab - ✅ Added explicit tabBarLabel */}
       <Tab.Screen 

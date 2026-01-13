@@ -1,6 +1,9 @@
 /**
  * RequestServiceCategoryScreen Component
  * 
+ * Last Updated: January 9, 2026
+ * Changes: Migrated from fetch to api client for automatic token handling
+ * 
  * Allows users to request new service categories using the EXISTING service_posts table.
  * 
  * STORAGE STRATEGY:
@@ -13,6 +16,7 @@
 
 import API_URL from "../config/apiConfig";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../api"; // ✅ ADDED: Import API client for automatic token handling
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -22,7 +26,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-    ActivityIndicator,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -91,30 +95,10 @@ const RequestServiceCategoryScreen: React.FC = () => {
 
   const loadUserProfile = async () => {
     try {
-      const profileUrl = `${API_URL}/api/users/${userId}/profile`;
-      console.log('👤 Loading profile from:', profileUrl);
+      console.log('👤 Loading profile for user:', userId);
 
-      const response = await fetch(profileUrl);
-      
-      if (!response.ok) {
-        console.error('❌ Profile API returned error status:', response.status);
-        return;
-      }
-      
-      const responseText = await response.text();
-
-      if (responseText.trim().startsWith('<')) {
-        console.error('❌ Received HTML instead of JSON');
-        return;
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ JSON parse error:', parseError);
-        return;
-      }
+      // ✅ CHANGED: Use api client instead of fetch
+      const data = await api.get(`/api/users/${userId}/profile`);
 
       if (data.success && data.profile) {
         const profile = data.profile;
@@ -192,18 +176,12 @@ const RequestServiceCategoryScreen: React.FC = () => {
 
       console.log('📤 Submitting category request:', categoryRequestData);
 
-      const response = await fetch(`${API_URL}/api/service-posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(categoryRequestData),
-      });
+      // ✅ FIXED: Use api client instead of fetch for automatic token handling
+      const data = await api.post('/api/service-posts', categoryRequestData);
 
-      const data = await response.json();
       console.log('📥 Response:', data);
 
-      if (response.ok && data.success) {
+      if (data.success) {
         Alert.alert(
           'Request Submitted!',
           'Your category request has been submitted for admin review. You\'ll be notified once it\'s reviewed.',
@@ -221,9 +199,9 @@ const RequestServiceCategoryScreen: React.FC = () => {
         console.error('❌ Failed to submit request:', data);
         Alert.alert('Error', data.error || 'Failed to submit category request');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error submitting category request:', error);
-      Alert.alert('Error', 'Network error occurred. Please check your connection.');
+      Alert.alert('Error', error.message || 'Network error occurred. Please check your connection.');
     } finally {
       setLoading(false);
     }

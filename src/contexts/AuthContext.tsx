@@ -9,13 +9,24 @@
  *     • signIn / signOut: handle login/logout flows with storage updates and alerts.
  *     • refreshAuth / checkAuthWithPrompt: refresh on demand or prompt user to sign in.
  * - `useAuthFocus` helper refreshes auth each time a screen gains focus.
+ * - Restores auth state on app launch
+ * - Exposes helper methods for login, logout, refresh, and auth checks
+ * AuthContext is a shared place that stores login details (who the user is, whether they’re logged in,
+ *  and their token) so every screen can access them. 
+ * AuthProvider is the manager that handles login and logout updates 
+ * and shares this information with all screens.
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from "../Utils/Alert";
 import { useFocusEffect } from '@react-navigation/native';
-
+/* ------------------------------------------------------------------
+ * USER INFO TYPE
+ * ------------------------------------------------------------------
+ * Represents additional user profile data stored locally.
+ * Some fields are optional because they may not be available at login.
+ */
 interface UserInfo {
   user_id: number;
   user_type?: 'customer' | 'business_owner';
@@ -26,7 +37,11 @@ interface UserInfo {
   state?: string;
   email?: string;
 }
-
+/* ------------------------------------------------------------------
+ * AUTH STATE TYPE
+ * ------------------------------------------------------------------
+ * Represents the full authentication state of the app.
+ */
 interface AuthState {
   isAuthenticated: boolean;
   userToken: string | null;
@@ -36,7 +51,11 @@ interface AuthState {
   loading: boolean;
   initialized: boolean; // New flag to track if auth has been initialized
 }
-
+/* ------------------------------------------------------------------
+ * AUTH CONTEXT TYPE
+ * ------------------------------------------------------------------
+ * Extends AuthState with functions exposed to the app.
+ */
 interface AuthContextType extends AuthState {
   checkAuthStatus: (showDebug?: boolean) => Promise<{ isAuthenticated: boolean; userInfo: UserInfo | null }>;
   signIn: (token: string, userType: string, userId: number, email?: string, userInfo?: UserInfo) => Promise<void>;
@@ -44,8 +63,21 @@ interface AuthContextType extends AuthState {
   refreshAuth: () => Promise<void>;
   checkAuthWithPrompt: (navigation?: any) => Promise<boolean>;
 }
+/* ------------------------------------------------------------------
+ * CREATE CONTEXT
+ * ------------------------------------------------------------------
+ * Initialized with null so we can enforce provider usage.
+ */
+
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+/* ------------------------------------------------------------------
+ * useAuth HOOK
+ * ------------------------------------------------------------------
+ * Custom hook to safely access AuthContext.
+ * Throws an error if used outside AuthProvider.
+ */
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -54,12 +86,25 @@ export const useAuth = () => {
   }
   return context;
 };
+/* ------------------------------------------------------------------
+ * PROVIDER PROPS
+ * ------------------------------------------------------------------
+ */
 
 interface AuthProviderProps {
   children: React.ReactNode;
 }
-
+/* ------------------------------------------------------------------
+ * AUTH PROVIDER COMPONENT
+ * ------------------------------------------------------------------
+ * Wraps the app and provides authentication state + helpers.
+ */
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+/* --------------------------------------------------------------
+   * AUTH STATE INITIALIZATION
+   * --------------------------------------------------------------
+   */
+
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     userToken: null,
@@ -69,6 +114,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading: true,
     initialized: false
   });
+   /* --------------------------------------------------------------
+   * checkAuthStatus
+   * --------------------------------------------------------------
+   * Reads auth data from AsyncStorage and reconstructs auth state.
+   * Used:
+   * - On app launch
+   * - On screen focus
+   * - Before protected actions
+   */
 
   const checkAuthStatus = useCallback(async (showDebug = false) => {
     try {
@@ -79,7 +133,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         AsyncStorage.getItem("userEmail"),
         AsyncStorage.getItem("userInfo")
       ]);
-
+       console.log('🔐 Aruna added this - Token from AsyncStorage:', token); // ← Add this here
       if (showDebug) {
         console.log("🔍 Auth Context Check:", {
           hasToken: !!token,
@@ -89,11 +143,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           timestamp: new Date().toISOString()
         });
       }
-
+ // User is authenticated only if all required values exist
       const isAuthenticated = !!(token && userType && userId);
       let userInfo: UserInfo | null = null;
 
       if (isAuthenticated) {
+          // Attempt to restore stored userInfo
         if (storedUserInfo) {
           try {
             userInfo = JSON.parse(storedUserInfo);
@@ -105,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.error("Error parsing stored user info:", parseError);
           }
         }
-        
+        // Fallback: create minimal userInfo if none exists
         // Always ensure we have at least basic user info if authenticated
         if (!userInfo && userId) {
           userInfo = {
@@ -115,7 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           };
         }
       }
-
+      // Build new auth state
       const newAuthState = {
         isAuthenticated,
         userToken: token,
@@ -125,7 +180,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         loading: false,
         initialized: true
       };
-
+// Update context state
       setAuthState(newAuthState);
 
       if (showDebug) {
@@ -139,6 +194,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       return { isAuthenticated, userInfo };
     } catch (error) {
+      // Fallback to logged-out state on error
       console.error("Error checking auth status:", error);
       const errorState = {
         isAuthenticated: false,
@@ -152,7 +208,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthState(errorState);
       return { isAuthenticated: false, userInfo: null };
     }
-  }, []); // Empty dependency array - this function reads fresh data from AsyncStorage
+  }, []); 
+  /* --------------------------------------------------------------
+   * signIn
+   * --------------------------------------------------------------
+   * Saves auth data to AsyncStorage and updates context state.
+   */
 
   const signIn = useCallback(async (
     token: string,
@@ -177,7 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
 
       authData.push(['userInfo', JSON.stringify(finalUserInfo)]);
-
+// Persist to storage
       await AsyncStorage.multiSet(authData);
 
       const newAuthState = {
@@ -214,6 +275,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw error;
     }
   }, []);
+  /* --------------------------------------------------------------
+   * signOut
+   * --------------------------------------------------------------
+   * Clears all auth data from storage and resets state.
+   */
 
   const signOut = useCallback(async () => {
     try {
@@ -251,12 +317,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       );
     }
   }, []);
+  /* --------------------------------------------------------------
+   * refreshAuth
+   * --------------------------------------------------------------
+   * Re-checks auth state (used on screen focus).
+   */
 
   const refreshAuth = useCallback(async () => {
     console.log('🔄 Screen focused, refreshing auth status');
     await checkAuthStatus(true);
   }, [checkAuthStatus]);
 
+/* --------------------------------------------------------------
+   * checkAuthWithPrompt
+   * --------------------------------------------------------------
+   * Checks auth and prompts user to sign in if not authenticated.
+   */
   const checkAuthWithPrompt = useCallback(async (navigation?: any): Promise<boolean> => {
     const { isAuthenticated } = await checkAuthStatus();
     
@@ -288,7 +364,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return true;
   }, [checkAuthStatus]);
 
-  // Check auth status on mount - ONLY ONCE
+ /* --------------------------------------------------------------
+   * INITIAL AUTH CHECK (ONCE)
+   * --------------------------------------------------------------
+   */
   useEffect(() => {
     let mounted = true;
     
@@ -304,9 +383,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       mounted = false;
     };
-  }, []); // Empty dependency array to run only on mount
-
-  // Memoize the context value to prevent unnecessary re-renders
+  }, []); 
+  /* --------------------------------------------------------------
+   * MEMOIZED CONTEXT VALUE
+   * --------------------------------------------------------------
+   * Prevents unnecessary re-renders across the app.
+   */
   const contextValue = useMemo<AuthContextType>(() => ({
     ...authState,
     checkAuthStatus,
@@ -322,6 +404,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshAuth,
     checkAuthWithPrompt
   ]);
+  /* --------------------------------------------------------------
+   * PROVIDER RENDER
+   * --------------------------------------------------------------
+   */
 
   return (
     <AuthContext.Provider value={contextValue}>
@@ -330,7 +416,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-// Hook for screens that need to refresh auth on focus
+/* ------------------------------------------------------------------
+ * useAuthFocus HOOK
+ * ------------------------------------------------------------------
+ * Automatically refreshes auth state whenever a screen gains focus.
+ */
 export const useAuthFocus = () => {
   const auth = useAuth();
   
