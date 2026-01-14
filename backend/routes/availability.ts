@@ -387,6 +387,26 @@ if (String(customerId) !== String(req.user?.user_id)) {
     };
 
     console.log(`✅ [Booking] Booking created successfully:`, booking);
+    // ✅ NEW: Send system message to provider's chat
+try {
+  const { error: messageError } = await supabase
+    .from('messages')
+    .insert({
+      sender_id: customerId,
+      receiver_id: serviceProviderId,
+      message_text: `🔔 New booking request for ${bookingDate}. Check your calendar to confirm!`,
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+
+  if (messageError) {
+    console.error('⚠️ [Booking] Could not send chat notification:', messageError);
+  } else {
+    console.log('✅ [Booking] Chat notification sent to provider');
+  }
+} catch (msgError) {
+  console.error('⚠️ [Booking] Error sending chat message:', msgError);
+}
     res.json({
       success: true,
       booking,
@@ -530,7 +550,40 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
       .single();
 
     if (error) throw error;
+   // ✅ NEW: Send system message to customer when status changes
+try {
+  let chatMessage = '';
+  
+  if (status === 'confirmed') {
+    const bookingDate = data.booking_date.split('T')[0];
+    chatMessage = `✅ Your booking for ${bookingDate} has been confirmed! See you then!`;
+  } else if (status === 'completed') {
+    chatMessage = `🎉 Your service has been completed! Please leave a review on the search page. Thank you!`;
+  } else if (status === 'cancelled') {
+    const bookingDate = data.booking_date.split('T')[0];
+    chatMessage = `❌ Your booking for ${bookingDate} has been cancelled by the provider.`;
+  }
 
+  if (chatMessage) {
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: data.provider_user_id,
+        receiver_id: data.customer_user_id,
+        message_text: chatMessage,
+        is_read: false,
+        created_at: new Date().toISOString()
+      });
+
+    if (messageError) {
+      console.error('⚠️ [Booking] Could not send chat notification:', messageError);
+    } else {
+      console.log(`✅ [Booking] Chat notification sent to customer (status: ${status})`);
+    }
+  }
+} catch (msgError) {
+  console.error('⚠️ [Booking] Error sending chat message:', msgError);
+}
     // If cancelled, mark the date as available again
     if (status === 'cancelled' && data) {
       const bookingDate = data.booking_date.split('T')[0];

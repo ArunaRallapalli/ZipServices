@@ -146,7 +146,7 @@ const [searchResults, setSearchResults] = useState<SearchResults>({
    * Used to prevent users from contacting themselves
    */
   const isOwnPost = (postUserId: number): boolean => {
-    return auth.userInfo?.user_id === postUserId;
+    return String(auth.userInfo?.user_id) === String(postUserId);
   };
 
   // --------------------------------------------------------------------------

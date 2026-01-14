@@ -3,8 +3,8 @@
  * AvailabilityCalendarWidget.tsx - ULTRA COMPACT Customer Booking Calendar
  * ============================================================================
  * 
- * Last Updated: January 5, 2026
- * Changes: Migrated from fetch to api client for automatic token handling
+ * Last Updated: January 12, 2026
+ * Changes: Improved legend positioning and added booking note
  */
 
 import React, { useState, useEffect } from 'react';
@@ -13,7 +13,7 @@ import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from '../Utils/Alert';
-import api from '../api'; // ADDED: January 5, 2026
+import api from '../api';
 
 interface AvailabilityCalendarWidgetProps {
   otherUserId: number;
@@ -57,11 +57,9 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
 
   /**
    * Fetch provider's availability
-   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
    */
   const fetchAvailability = async () => {
     try {
-      // UPDATED: Using api client instead of fetch
       const data = await api.get(`/api/availability/${otherUserId}`);
 
       if (data.success) {
@@ -123,7 +121,7 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
   };
 
   const handleDayPress = async (day: any) => {
-    const dateStr = day.dateString; // e.g., "2026-01-09"
+    const dateStr = day.dateString;
     
     console.log(`📅 Date pressed: ${dateStr}`);
     
@@ -142,9 +140,8 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
       return;
     }
 
-    // ✅ FIX: Parse date correctly to avoid timezone issues
     const [year, month, dayNum] = dateStr.split('-').map(Number);
-    const selectedDate = new Date(year, month - 1, dayNum); // month is 0-indexed
+    const selectedDate = new Date(year, month - 1, dayNum);
 
     Alert.alert(
       'Book This Date?',
@@ -166,11 +163,9 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
 
   /**
    * Create a new booking
-   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
    */
   const createBooking = async (bookingDate: string) => {
     try {
-      // UPDATED: Using api client instead of fetch
       const data = await api.post('/api/availability/book', {
         serviceProviderId: otherUserId,
         customerId: currentUserId,
@@ -178,7 +173,6 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
       });
 
       if (data.success) {
-        // ✅ Updated message based on email status
         Alert.alert(
           'Booking Confirmed!', 
           data.emailSent 
@@ -251,15 +245,25 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
                 }}
                 style={styles.calendar}
               />
-              <View style={styles.legend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.dot, { backgroundColor: '#4CAF50' }]} />
-                  <Text style={styles.legendTxt}>Available</Text>
+              
+              {/* UPDATED: Legend with better spacing */}
+              <View style={styles.legendContainer}>
+                <View style={styles.legend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.dot, { backgroundColor: '#4CAF50' }]} />
+                    <Text style={styles.legendTxt}>Available</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.dot, { backgroundColor: '#FF6B6B' }]} />
+                    <Text style={styles.legendTxt}>Booked</Text>
+                  </View>
                 </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.dot, { backgroundColor: '#FF6B6B' }]} />
-                  <Text style={styles.legendTxt}>Booked</Text>
-                </View>
+                
+                {/* ADDED: Note on separate line */}
+               <Text style={[styles.noteText, { fontWeight: 'bold' }]}>
+  Note: For booking specific time, please chat with Service Provider
+</Text>
+
               </View>
             </>
           )}
@@ -287,7 +291,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: '#fafafa',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
@@ -311,8 +316,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 6,
-    paddingBottom: 8,
-    maxHeight: 320,
+    paddingBottom: 12,
+    maxHeight: 380, // Increased to accommodate legend and note
   },
   loading: {
     paddingVertical: 20,
@@ -321,14 +326,22 @@ const styles = StyleSheet.create({
   calendar: {
     borderRadius: 6,
   },
+  // UPDATED: New container for legend section
+  legendContainer: {
+    marginTop: 10, // Moved higher from bottom
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    backgroundColor: '#fafafa',
+    borderRadius: 6,
+  },
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    gap: 16,
+    marginBottom: 8, // Space between legend and note
   },
   legendItem: {
     flexDirection: 'row',
@@ -336,13 +349,22 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   legendTxt: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#666',
+    fontWeight: '500',
+  },
+  // ADDED: Style for the note text
+  noteText: {
+    fontSize: 10,
+    color: '#888',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: 14,
   },
 });
 

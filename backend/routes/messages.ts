@@ -39,7 +39,9 @@ const router = Router();
  * Security: PUBLIC - No authentication required
  * 
  * UNCHANGED: January 5, 2026 - Kept public for monitoring
- */
+ * Healthe check is to check if the Server is running ✅
+Supabase client is configured correctly ✅
+Database is reachable ✅*/
 router.get("/health", async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabase

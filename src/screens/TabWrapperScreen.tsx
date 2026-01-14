@@ -17,6 +17,7 @@
  *   1. PostLandingScreen (default) - Shows 2 button options
  *   2. PostServiceForm - For posting service offers
  *   3. RequestServiceCategory - For requesting new categories
+ * 4. shows the unread message count on the messages icon badge (jan 2026)
  * 
  * Backend APIs Used:
  * - GET /messages/business-owner/:user_id - Fetches unread message count
@@ -163,15 +164,14 @@ const BottomTabs: React.FC = () => {
   try {
     if (!userInfo?.user_id) return;
 
-    // Use api.get() — no need for AsyncStorage or manual token
     const endpoint = `/messages/business-owner/${userInfo.user_id}`;
-    const res = await api.get(endpoint); // ✅ api adds Authorization header automatically
+    const messages = await api.get(endpoint); // ✅ Data returned directly
 
-    console.log('[BottomTabs] Unread messages raw data:', res.data);
+    console.log('[BottomTabs] Unread messages raw data:', MessageScreenComponent);  // ✅
 
     // Count only unread messages for this user
-    const unreadMessages = Array.isArray(res.data)
-      ? res.data.filter(
+    const unreadMessages = Array.isArray(messages)  // ✅
+      ? messages.filter(  // ✅
           (msg: any) =>
             Number(msg.receiver_id) === Number(userInfo.user_id) &&
             msg.is_read === false
@@ -288,13 +288,11 @@ const BottomTabs: React.FC = () => {
     if (!userInfo?.user_id) return;
 
     try {
-      // Use api.get() instead of fetch
       const endpoint = `/messages/business-owner/${userInfo.user_id}`;
-      const res = await api.get(endpoint); // token handled internally by api client
+      const messages = await api.get(endpoint);  // ✅ Data returned directly
 
-      const data = res.data;
-      const count = Array.isArray(data)
-        ? data.filter(msg => msg.receiver_id === userInfo.user_id && msg.is_read === false).length
+      const count = Array.isArray(messages)
+        ? messages.filter(msg => Number(msg.receiver_id) === Number(userInfo.user_id) && msg.is_read === false).length
         : 0;
 
       setUnreadCount(count);

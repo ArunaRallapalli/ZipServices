@@ -14,6 +14,11 @@
  * - Loading state while categories are fetched
  * - Visual feedback for input validation
  * 
+ * UPDATES (January 2026):
+ * - Replaced native Picker with react-native-picker-select
+ * - Dropdown now dismisses on outside tap (all platforms)
+ * - More compact and consistent UI across platforms
+ * 
  * VALIDATION:
  * - ZIP code must be 5 digits and valid (verified via API)
  * - Service category must be selected
@@ -34,8 +39,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-    } from "react-native";
-import { Picker } from "@react-native-picker/picker";
+} from "react-native";
+import RNPickerSelect from 'react-native-picker-select'; // ✅ NEW
 import { Ionicons } from "@expo/vector-icons";
 import { Alert } from "../Utils/Alert";
 
@@ -105,9 +110,8 @@ const SearchForm: React.FC<SearchFormProps> = ({
    * Logs the change for debugging purposes
    * 
    * @param itemValue - The selected category value
-      */
-
-      const handleCategoryChange = useCallback((itemValue: string) => {
+   */
+  const handleCategoryChange = useCallback((itemValue: string) => {
     console.log("🔄 [SearchForm] Category changed to:", itemValue);
     setServiceNeeded(itemValue);
   }, [setServiceNeeded]);
@@ -162,12 +166,22 @@ const SearchForm: React.FC<SearchFormProps> = ({
   }, [zipCode, isZipValid, serviceNeeded, handleSearch]);
 
   // --------------------------------------------------------------------------
+  // PREPARE PICKER DATA
+  // --------------------------------------------------------------------------
+  
+  // Convert categories array to picker items format: [{label, value}]
+  const pickerItems = categories.map(category => ({
+    label: category,
+    value: category,
+  }));
+
+  // --------------------------------------------------------------------------
   // RENDER
   // --------------------------------------------------------------------------
   
   return (
     <View style={styles.searchSection}>
-           {/* Subtitle text */}
+      {/* Subtitle text */}
       <Text style={styles.subtitleText}>
         Connect with service providers in your Area
       </Text>
@@ -187,23 +201,29 @@ const SearchForm: React.FC<SearchFormProps> = ({
           </View>
         </View>
       ) : (
-        // Render dropdown picker with available categories
+        // ✅ NEW: Render RNPickerSelect with categories
         <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={serviceNeeded}
+          <RNPickerSelect
+            value={serviceNeeded}
             onValueChange={handleCategoryChange}
-            style={styles.picker}
-            enabled={categories.length > 0}  // Disable if no categories loaded
-          >
-            {/* Map through categories to create picker items */}
-            {categories.map((category) => (
-              <Picker.Item 
-                key={category} 
-                label={category} 
-                value={category} 
+            items={pickerItems}
+            placeholder={{
+              label: "Select a service category",
+              value: null,
+              color: '#999',
+            }}
+            style={pickerSelectStyles}
+            disabled={categories.length === 0}
+            useNativeAndroidPickerStyle={false}
+            Icon={() => (
+              <Ionicons 
+                name="chevron-down" 
+                size={20} 
+                color="#666" 
+                style={{ marginRight: 12, marginTop: 15 }}
               />
-            ))}
-          </Picker>
+            )}
+          />
         </View>
       )}
 
@@ -332,12 +352,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "normal",
   },
+  
   subtitleText: {
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
     marginBottom: 15,
-     fontWeight: "bold",
+    fontWeight: "bold",
     fontStyle: 'italic',
   },
   
@@ -369,11 +390,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginLeft: 8,
-  },
-  
-  // Actual picker component
-  picker: {
-    height: 50,
   },
   
   // ============================================================================
@@ -479,6 +495,64 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
     fontWeight: "bold",
     letterSpacing: 0.8,
+  },
+});
+
+// ============================================================================
+// ✅ NEW: REACT-NATIVE-PICKER-SELECT CUSTOM STYLES
+// ============================================================================
+
+const pickerSelectStyles = StyleSheet.create({
+  // iOS-specific input styling
+  inputIOS: {
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    color: '#333',
+    paddingRight: 30, // to ensure the text is never behind the icon
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    height: 50,
+     },
+  
+  // Android-specific input styling
+  inputAndroid: {
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: '#333',
+    paddingRight: 30, // to ensure the text is never behind the icon
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    height: 50,
+  },
+  
+  // Web-specific input styling
+  inputWeb: {
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    color: '#333',
+    paddingRight: 30,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    height: 50,
+    // Hide native browser dropdown arrow
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    MozAppearance: 'none',
+  } as any, // ✅ Cast to any to allow web-specific properties
+  
+  // Placeholder text styling
+  placeholder: {
+    color: '#999',
+    fontSize: 16,
+  },
+  
+  // Icon container (the dropdown arrow)
+  iconContainer: {
+    top: 15,
+    right: 12,
   },
 });
 

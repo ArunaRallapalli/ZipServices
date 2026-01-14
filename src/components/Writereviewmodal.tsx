@@ -166,6 +166,7 @@ const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
             )}
 
             <ScrollView style={styles.scrollView}>
+              <Text style={styles.label}>Star rating is mandatory for review submission</Text>
               {/* Star Rating Input */}
               <StarRatingInput
                 value={rating}

@@ -337,8 +337,12 @@ async function updateProviderRating(providerId: number) {
   } catch (error) {
     console.error('❌ [Reviews] Error updating provider rating:', error);
     // Don't throw - this is a helper function, main operation already succeeded
+   
   }
 }
+
+  
+  
 /**
  * GET /api/reviews/can-review/:providerId
  * 
