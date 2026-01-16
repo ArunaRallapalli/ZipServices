@@ -3,8 +3,8 @@
  * AvailabilityCalendarWidget.tsx - ULTRA COMPACT Customer Booking Calendar
  * ============================================================================
  * 
- * Last Updated: January 12, 2026
- * Changes: Improved legend positioning and added booking note
+ * Last Updated: January 15, 2026
+ * Changes: Added auto-refresh polling to keep calendar updated
  */
 
 import React, { useState, useEffect } from 'react';
@@ -42,6 +42,18 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
   useEffect(() => {
     loadCurrentUser();
     fetchAvailability();
+
+    // ✅ AUTO-REFRESH: Poll every 20 seconds to catch booking changes
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 Auto-refreshing calendar availability...');
+      fetchAvailability();
+    }, 20000); // 20 seconds
+
+    // Cleanup on unmount
+    return () => {
+      console.log('🧹 Cleaning up calendar refresh interval');
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   const loadCurrentUser = async () => {
@@ -174,9 +186,9 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
 
       if (data.success) {
         Alert.alert(
-          'Booking Confirmed!', 
+          'Booking Pending!', 
           data.emailSent 
-            ? 'The service provider has been notified by email.' 
+            ? 'Thank you! The service provider has been notified for confirmation. Please use this chat to coordinate timing and other details.' 
             : 'Booking created. The provider can view it in their calendar.',
           [{ text: 'OK', onPress: fetchAvailability }]
         );

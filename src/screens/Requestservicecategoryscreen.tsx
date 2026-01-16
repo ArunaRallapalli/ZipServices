@@ -166,7 +166,7 @@ const RequestServiceCategoryScreen: React.FC = () => {
         poster_type: userType || 'business_owner',
         post_type: 'request',
         title: `[CATEGORY REQUEST] ${categoryName.trim()}`,
-        description: `📧 Contact: ${contactEmail.trim()}\n\n${justification.trim()}`,
+       description: justification.trim(),  // ✅ Don't include email in description
         service_category: 'Other',
         zip_code: zipCode.trim(),
         contact_email: contactEmail.trim(),

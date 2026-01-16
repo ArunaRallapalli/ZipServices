@@ -9,7 +9,7 @@
  * Features:
  * -changed on jan 7th 2026 
  * 5 Tab Screens: Home, Post, Listings, Messages, Profile
- * - Real-time unread message badge on Messages tab (polls every 30 seconds)
+ * - Real-time unread message badge on Messages tab (polls every 15 seconds)
  * - Dynamic screen rendering based on user authentication status (business_owner vs guest)
  * - Initial navigation support via route params
  * - Custom styled icons with active/inactive states
@@ -177,7 +177,47 @@ const BottomTabs: React.FC = () => {
             msg.is_read === false
         )
       : [];
+/**
+ * ============================================================================
+ * ADD THIS TO BottomTabs.tsx
+ * ============================================================================
+ * 
+ * Location: Around line 101, right after your existing useEffect hooks
+ * Place it BEFORE the fetchUnreadCount useEffect (the one with unread message polling)
+ * 
+ * This code checks if a session has expired and redirects to Home tab
+ */
 
+// ✅ NEW: Handle session expiration gracefully
+useEffect(() => {
+  const checkSessionExpired = async () => {
+    try {
+      const expired = await AsyncStorage.getItem('sessionExpired');
+      if (expired === 'true') {
+        console.log('🔐 Session expired detected - redirecting to Home');
+        
+        // Clear the flag
+        await AsyncStorage.removeItem('sessionExpired');
+        
+        // Navigate to Home tab (which will show Sign In for unauthenticated users)
+        const tabNav = navigation as any;
+        if (tabNav && typeof tabNav.navigate === 'function') {
+          tabNav.navigate('Home');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking session expiration:', error);
+    }
+  };
+  
+  checkSessionExpired();
+}, []); // Empty dependency array - only runs on mount
+
+/**
+ * ============================================================================
+ * THAT'S IT! No other changes needed to BottomTabs.tsx
+ * ============================================================================
+ */
     const count = unreadMessages.length;
     console.log('[BottomTabs] ✅ Unread message count:', count);
     setUnreadCount(count);
@@ -190,11 +230,11 @@ const BottomTabs: React.FC = () => {
     console.log('[BottomTabs] Setting up unread count polling for user:', userInfo.user_id);
     fetchUnreadCount(); // Initial fetch
     
-    // Poll every 30 seconds
+    // Poll every 15 seconds
     const interval = setInterval(() => {
       console.log('[BottomTabs] Polling unread count...');
       fetchUnreadCount();
-    }, 30000);
+    }, 15000);
     
     return () => {
       console.log('[BottomTabs] Cleanup - clearing interval');

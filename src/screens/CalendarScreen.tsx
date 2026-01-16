@@ -3,8 +3,8 @@
  * CalendarScreen.tsx - Service Provider Booking Calendar
  * ============================================================================
  * 
- * Last Updated: January 9, 2026
- * Changes: Fixed api client response handling - api methods return data directly
+ * Last Updated: January 15, 2026
+ * Changes: Filter bookings to only show ACTIVE bookings (not cancelled/completed)
  * 
  * IMPORTANT NOTE ABOUT 403 ERRORS:
  * If you see "You can only set your own availability" error, it's because:
@@ -21,7 +21,7 @@
  * 
  * FEATURES:
  * - Green dots: Available for booking (default for all future dates)
- * - Red dots: Already booked by customers
+ * - Red dots: Already booked by customers (ONLY pending/confirmed bookings)
  * - Click red dot: View full booking details (customer name, email, phone, etc.)
  * - Click green dot: Option to mark date as unavailable (vacation, personal time)
  * - Auto-refresh on focus
@@ -155,15 +155,13 @@ const CalendarScreen: React.FC = () => {
   /**
    * Fetch both availability settings and bookings for the provider
    * Combines data to build the calendar view
-   * FIXED: January 9, 2026 - Proper handling of api client responses
+   * FIXED: January 15, 2026 - Only show ACTIVE bookings (pending/confirmed)
    */
   const fetchCalendarData = async (uid: number) => {
     try {
       console.log(`🔍 Fetching calendar data for provider ${uid}`);
       setError(null);
 
-      // FIXED: api.get() returns the response data directly (not a Response object)
-      // No need to call .json() - the api client handles that
       const [availabilityResponse, bookingsResponse] = await Promise.all([
         api.get(`/api/availability/${uid}`).catch(err => {
           console.error('❌ Availability fetch error:', err);
@@ -186,10 +184,14 @@ const CalendarScreen: React.FC = () => {
       const availabilityData = availabilityResponse;
       const bookingsData = bookingsResponse;
 
-      // Store bookings for later use (clicking on dates)
+      // ✅ FIXED: Filter out cancelled and completed bookings
+      // Only store ACTIVE bookings (pending/confirmed)
       if (bookingsData.success && Array.isArray(bookingsData.bookings)) {
-        console.log('✅ Setting bookings:', bookingsData.bookings.length);
-        setBookings(bookingsData.bookings);
+        const activeBookings = bookingsData.bookings.filter(
+          (booking: Booking) => booking.status === 'pending' || booking.status === 'confirmed'
+        );
+        console.log(`✅ Total bookings: ${bookingsData.bookings.length}, Active: ${activeBookings.length}`);
+        setBookings(activeBookings);
       } else {
         console.log('⚠️ No bookings data or invalid format');
         setBookings([]);
@@ -203,10 +205,8 @@ const CalendarScreen: React.FC = () => {
       // ====================================================================
       // STEP 1: Mark all future dates as GREEN (available by default)
       // ====================================================================
-      // This creates the default "all dates are bookable" behavior
-      // Providers can override specific dates by marking them unavailable
       
-      for (let i = 0; i < 90; i++) {  // Show next 90 days
+      for (let i = 0; i < 90; i++) {
         const date = new Date();
         date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
@@ -223,9 +223,6 @@ const CalendarScreen: React.FC = () => {
       // ====================================================================
       // STEP 2: Override with explicit availability settings
       // ====================================================================
-      // If provider manually marked dates as unavailable (vacation, etc.)
-      // those dates will show as red without a booking
-      // IMPORTANT: Keep them clickable so provider can unblock them!
       
       if (availabilityData.success && Array.isArray(availabilityData.availability)) {
         console.log('📝 Processing availability settings:', availabilityData.availability.length);
@@ -234,7 +231,7 @@ const CalendarScreen: React.FC = () => {
             marked[avail.date] = {
               marked: true,
               dotColor: avail.is_available ? '#4CAF50' : '#FF6B6B',
-              disabled: false,  // Always clickable - provider can unblock
+              disabled: false,
               disableTouchEvent: false,
             };
           }
@@ -242,20 +239,23 @@ const CalendarScreen: React.FC = () => {
       }
 
       // ====================================================================
-      // STEP 3: Override with booked dates as RED
+      // STEP 3: Override with ACTIVE booked dates as RED
       // ====================================================================
-      // Dates with actual customer bookings always show red
-      // Provider can click these to see booking details
+      // ✅ FIXED: Only mark ACTIVE bookings (already filtered above)
       
       if (bookingsData.success && Array.isArray(bookingsData.bookings)) {
-        console.log('📝 Processing bookings:', bookingsData.bookings.length);
-        bookingsData.bookings.forEach((booking: Booking) => {
+        const activeBookings = bookingsData.bookings.filter(
+          (booking: Booking) => booking.status === 'pending' || booking.status === 'confirmed'
+        );
+        
+        console.log('📝 Processing active bookings:', activeBookings.length);
+        activeBookings.forEach((booking: Booking) => {
           const bookingDate = booking.booking_date.split('T')[0];
           if (bookingDate >= today) {
             marked[bookingDate] = {
               marked: true,
               dotColor: '#FF6B6B', // Red = Booked
-              disabled: false,  // Allow clicking to see details
+              disabled: false,
               disableTouchEvent: false,
             };
           }
@@ -299,19 +299,20 @@ const CalendarScreen: React.FC = () => {
   /**
    * Handle date press in calendar
    * Shows different actions based on whether date is booked or available
+   * ✅ FIXED: Now only finds ACTIVE bookings since we filtered them earlier
    */
   const handleDayPress = (day: DateData) => {
     const dateStr = day.dateString;
     console.log(`📅 Date pressed: ${dateStr}`);
 
-    // Check if this date has a booking
+    // Check if this date has an ACTIVE booking (bookings array is already filtered)
     const booking = bookings.find(b => b.booking_date.split('T')[0] === dateStr);
     
     if (booking) {
       // ================================================================
       // BOOKED DATE (RED DOT) - Show booking details
       // ================================================================
-      console.log('📌 Found booking:', booking);
+      console.log('📌 Found active booking:', booking);
       setSelectedBooking(booking);
       setShowBookingModal(true);
     } else {
@@ -325,11 +326,9 @@ const CalendarScreen: React.FC = () => {
         day: 'numeric' 
       });
 
-      // Check current state of the date
       const isCurrentlyBlocked = markedDates[dateStr]?.dotColor === '#FF6B6B';
 
       if (isCurrentlyBlocked) {
-        // RED DOT (blocked by provider) - Show unblock option
         Alert.alert(
           'Date Blocked',
           `${formattedDate} is currently blocked. Would you like to unblock it?`,
@@ -342,7 +341,6 @@ const CalendarScreen: React.FC = () => {
           ]
         );
       } else {
-        // GREEN DOT (available) - Show block option
         Alert.alert(
           'Date Available',
           `${formattedDate} is currently available. Would you like to block it?`,
@@ -361,8 +359,6 @@ const CalendarScreen: React.FC = () => {
 
   /**
    * Mark a date as available or unavailable
-   * Used for blocking personal time (vacation, maintenance, etc.)
-   * FIXED: January 9, 2026 - Backend requires userId for validation against token
    */
   const toggleAvailability = async (date: string, isAvailable: boolean) => {
     if (!userId) return;
@@ -370,10 +366,8 @@ const CalendarScreen: React.FC = () => {
     try {
       console.log(`🔄 Setting ${date} as ${isAvailable ? 'available' : 'unavailable'}`);
       
-      // Backend REQUIRES userId in body to validate against auth token
-      // The 403 error was from EXPIRED TOKEN, not from sending userId
       const data = await api.post('/api/availability', {
-        userId: userId,  // ✅ REQUIRED by backend for validation
+        userId: userId,
         dates: [date],
         isAvailable: isAvailable,
         notes: isAvailable ? 'Available' : 'Blocked by provider'
@@ -384,7 +378,7 @@ const CalendarScreen: React.FC = () => {
       if (data && data.success) {
         const action = isAvailable ? 'unblocked' : 'blocked';
         Alert.alert('Success', `Date ${action} successfully`);
-        await fetchCalendarData(userId); // Refresh calendar
+        await fetchCalendarData(userId);
       } else {
         Alert.alert('Error', 'Failed to update availability');
       }
@@ -398,9 +392,6 @@ const CalendarScreen: React.FC = () => {
   // UTILITY FUNCTIONS
   // ========================================================================
 
-  /**
-   * Format date string for display
-   */
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
@@ -414,10 +405,6 @@ const CalendarScreen: React.FC = () => {
   // BOOKING DETAILS MODAL
   // ========================================================================
 
-  /**
-   * Modal component showing full booking details
-   * Only visible to the service provider (owner of the calendar)
-   */
   const BookingDetailsModal = () => {
     if (!selectedBooking) return null;
 
@@ -430,7 +417,6 @@ const CalendarScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Booking Details</Text>
               <TouchableOpacity onPress={() => setShowBookingModal(false)}>
@@ -438,9 +424,7 @@ const CalendarScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Booking Information */}
             <ScrollView style={styles.modalBody}>
-              {/* Date */}
               <View style={styles.detailRow}>
                 <Ionicons name="calendar" size={20} color="#4A90E2" />
                 <View style={styles.detailText}>
@@ -451,7 +435,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Customer Name */}
               <View style={styles.detailRow}>
                 <Ionicons name="person" size={20} color="#4A90E2" />
                 <View style={styles.detailText}>
@@ -460,7 +443,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Customer Email */}
               <View style={styles.detailRow}>
                 <Ionicons name="mail" size={20} color="#4A90E2" />
                 <View style={styles.detailText}>
@@ -469,7 +451,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Customer Phone (if available) */}
               {selectedBooking.customer_phone && (
                 <View style={styles.detailRow}>
                   <Ionicons name="call" size={20} color="#4A90E2" />
@@ -480,7 +461,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Booking Status */}
               <View style={styles.detailRow}>
                 <Ionicons name="information-circle" size={20} color="#4A90E2" />
                 <View style={styles.detailText}>
@@ -491,7 +471,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Notes (if any) */}
               {selectedBooking.notes && (
                 <View style={styles.detailRow}>
                   <Ionicons name="document-text" size={20} color="#4A90E2" />
@@ -503,9 +482,7 @@ const CalendarScreen: React.FC = () => {
               )}
             </ScrollView>
 
-            {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              {/* Show Confirm/Cancel only for pending bookings */}
               {selectedBooking.status === 'pending' && (
                 <>
                   <TouchableOpacity
@@ -526,7 +503,6 @@ const CalendarScreen: React.FC = () => {
                 </>
               )}
               
-              {/* Show Complete button for confirmed bookings */}
               {selectedBooking.status === 'confirmed' && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.completeButton]}
@@ -538,7 +514,6 @@ const CalendarScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Close Button */}
             <TouchableOpacity
               style={styles.closeModalButton}
               onPress={() => setShowBookingModal(false)}
@@ -553,7 +528,6 @@ const CalendarScreen: React.FC = () => {
 
   /**
    * Handle booking status change (confirm, cancel, complete)
-   * FIXED: January 9, 2026 - Proper handling of api client response
    */
   const handleBookingAction = async (newStatus: 'confirmed' | 'cancelled' | 'completed') => {
     if (!selectedBooking || !userId) return;
@@ -575,7 +549,6 @@ const CalendarScreen: React.FC = () => {
             try {
               console.log(`🔄 Updating booking ${selectedBooking.booking_id} to ${newStatus}`);
               
-              // FIXED: api.patch() returns the response data directly
               const data = await api.patch(
                 `/api/availability/bookings/${selectedBooking.booking_id}`,
                 { status: newStatus }
@@ -586,7 +559,7 @@ const CalendarScreen: React.FC = () => {
               if (data && data.success) {
                 Alert.alert('Success', `Booking ${actions[newStatus]}ed successfully`);
                 setShowBookingModal(false);
-                await fetchCalendarData(userId); // Refresh calendar
+                await fetchCalendarData(userId);
               } else {
                 Alert.alert('Error', 'Failed to update booking');
               }
@@ -604,7 +577,6 @@ const CalendarScreen: React.FC = () => {
   // RENDER - Main screen UI
   // ========================================================================
 
-  // Show loading spinner while fetching data
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -616,7 +588,6 @@ const CalendarScreen: React.FC = () => {
     );
   }
 
-  // Show error state if something went wrong
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
@@ -638,10 +609,8 @@ const CalendarScreen: React.FC = () => {
     );
   }
 
-  // Main calendar view
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with back button and refresh */}
       <View style={styles.header}>
         <BackButton iconColor="#fff" textColor="#fff" backgroundColor="transparent" />
         <View style={styles.headerTextContainer}>
@@ -661,7 +630,6 @@ const CalendarScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Instructions banner */}
         <View style={styles.instructionsContainer}>
           <Ionicons name="information-circle-outline" size={24} color="#4A90E2" />
           <Text style={styles.instructionsText}>
@@ -669,7 +637,6 @@ const CalendarScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Calendar widget */}
         <View style={styles.calendarContainer}>
           <Calendar
             markedDates={markedDates}
@@ -682,7 +649,6 @@ const CalendarScreen: React.FC = () => {
           />
         </View>
 
-        {/* Legend explaining dot colors */}
         <View style={styles.legendContainer}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
@@ -694,22 +660,19 @@ const CalendarScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Hint text */}
         <Text style={styles.hintText}>
           Tap any red date to see booking details
         </Text>
 
-        {/* Bookings summary */}
         {bookings.length > 0 && (
           <View style={styles.summaryContainer}>
             <Text style={styles.summaryText}>
-              📊 Total Bookings: {bookings.length}
+              📊 Active Bookings: {bookings.length}
             </Text>
           </View>
         )}
       </ScrollView>
 
-      {/* Booking details modal (shown when red date is clicked) */}
       <BookingDetailsModal />
     </SafeAreaView>
   );
@@ -789,23 +752,23 @@ const styles = createResponsiveStyles({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E3F2FD',
-    padding: 12,  // Slightly smaller padding
+    padding: 12,
     marginRight: 15,
     marginLeft: 15,
     marginTop: 15,
-    marginBottom: 10,  // Reduced bottom margin
+    marginBottom: 10,
     borderRadius: 8,
     gap: 10,
   },
   instructionsText: { 
     flex: 1, 
-    fontSize: 13,  // Slightly smaller
+    fontSize: 13,
     color: '#333' 
   },
   calendarContainer: { 
     backgroundColor: '#fff', 
-    alignSelf: 'flex-end',  // Align to right
-    width: '85%',  // Smaller width - 85% instead of full width
+    alignSelf: 'flex-end',
+    width: '85%',
     marginRight: 15,
     marginLeft: 0,
     borderRadius: 12, 
@@ -818,9 +781,9 @@ const styles = createResponsiveStyles({
   },
   legendContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',  // Align to right
-    gap: 20,  // Slightly smaller gap
-    marginTop: 15,  // Reduced margin
+    justifyContent: 'flex-end',
+    gap: 20,
+    marginTop: 15,
     marginRight: 15,
     paddingRight: 10,
   },
@@ -835,30 +798,30 @@ const styles = createResponsiveStyles({
     borderRadius: 6 
   },
   legendText: { 
-    fontSize: 12,  // Smaller font
+    fontSize: 12,
     color: '#666' 
   },
   hintText: {
-    fontSize: 11,  // Slightly smaller
+    fontSize: 11,
     color: '#999',
-    textAlign: 'right',  // Align right
-    marginTop: 10,  // Reduced margin
+    textAlign: 'right',
+    marginTop: 10,
     marginRight: 25,
     fontStyle: 'italic',
   },
   summaryContainer: {
-    alignSelf: 'flex-end',  // Align to right
-    width: '85%',  // Match calendar width
+    alignSelf: 'flex-end',
+    width: '85%',
     marginRight: 15,
-    marginTop: 15,  // Reduced margin
-    marginBottom: 15,  // Reduced margin
-    padding: 12,  // Slightly smaller padding
+    marginTop: 15,
+    marginBottom: 15,
+    padding: 12,
     backgroundColor: '#F0F8FF',
     borderRadius: 8,
     alignItems: 'center',
   },
   summaryText: {
-    fontSize: 14,  // Smaller font
+    fontSize: 14,
     fontWeight: '600',
     color: '#333',
   },

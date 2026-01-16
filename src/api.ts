@@ -3,11 +3,11 @@
  * API Client - Centralized API Request Handler
  * ============================================================================
  * 
- * Last Updated: January 9, 2026
+ * Last Updated: January 15, 2026
  * Changes: 
- * - Added automatic JWT token inclusion in all requests
- * 
- * - Added automatic token cleanup on 401 errors (expired tokens)
+ * - Added session expiration flag for graceful logout
+ * - Automatic JWT token inclusion in all requests
+ * - Automatic token cleanup on 401 errors (expired tokens)
  * - Improved error handling for expired sessions
  * 
  * FEATURES:
@@ -18,12 +18,6 @@
  * - Proper TypeScript types
  * - Response parsing and validation
  * - Console logging for debugging
- * the server generates the JWT upon successful authentication (login/signup).
- * This token contains a header, a payload of claims (user information and permissions), and a signature.
- * USAGE:
- * import api from './api';
- * const data = await api.get('/api/users/175/profile');
- * const result = await api.post('/api/reviews', { rating: 5, ... });
  * ============================================================================
  */
 
@@ -68,8 +62,6 @@ async function request<T = any>(
     }
 
     // Add Authorization header if token exists
- //The Bearer keyword is followed by a space and the token string (e.g., a JWT).
-//Purpose: It acts as a digital key, granting access to APIs or services.
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -112,7 +104,7 @@ async function request<T = any>(
         hasToken: !!token
       });
 
-      // ✅ FIXED: Special handling for auth errors (expired/invalid token)
+      // ✅ UPDATED: Special handling for auth errors (expired/invalid token)
       if (response.status === 401) {
         console.warn('🔐 Unauthorized - Token expired or invalid. Clearing auth data...');
         
@@ -125,14 +117,15 @@ async function request<T = any>(
             'userEmail',
             'userInfo'
           ]);
+          
+          // ✅ NEW: Set flag for graceful session expiration handling
+          await AsyncStorage.setItem('sessionExpired', 'true');
+          
           console.log('✅ Expired auth data cleared from storage');
           
-          // Create a more user-friendly error for expired tokens
-          const tokenError = new Error('Your session has expired. Please sign in again.');
-          (tokenError as any).status = 401;
-          (tokenError as any).response = data;
-          (tokenError as any).isAuthError = true;
-          throw tokenError;
+          // Don't throw error - let the app handle navigation gracefully
+          return {} as T;
+          
         } catch (clearError) {
           console.error('❌ Failed to clear auth data:', clearError);
         }

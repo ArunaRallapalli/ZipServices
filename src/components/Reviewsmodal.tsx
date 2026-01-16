@@ -3,10 +3,11 @@
  * ReviewsModal.tsx - Provider Reviews & Write Review Modal
  * ============================================================================
  * 
- * Last Updated: January 12, 2026
- * Changes: Fixed review eligibility check to use new can-review endpoint
- * Reason: Previous endpoint caused 403 error when customers tried to check
- *         if they could review a provider
+ * Last Updated: January 15, 2026
+ * Changes: Fixed to handle multiple unreviewed bookings with same provider
+ * Reason: Users can have multiple completed bookings with the same provider
+ *         (e.g., accounting + dance class from Sai Services). The modal now
+ *         lets users select which booking to review if they have multiple.
  * 
  * OVERVIEW:
  * Full-screen modal that displays a provider's reviews and allows eligible
@@ -14,10 +15,11 @@
  * 
  * FEATURES:
  * - Displays all provider reviews using ReviewsList component
- * - Smart "Write Review" button (only shows if user has completed booking)
- * - Eligibility check: fetches user's completed bookings with this provider
+ * - Smart "Write Review" button (only shows if user has unreviewed bookings)
+ * - Handles multiple unreviewed bookings - lets user select which to review
+ * - Eligibility check: fetches user's unreviewed completed bookings
  * - Opens WriteReviewModal for review submission
- * - Prevents duplicate reviews (checks if booking already reviewed)
+ * - Prevents duplicate reviews
  * 
  * ELIGIBILITY RULES:
  * - User must be logged in
@@ -43,12 +45,13 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ReviewList from './ReviewList';
 import WriteReviewModal from './Writereviewmodal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../api'; // ADDED: January 5, 2026
+import api from '../api';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -61,12 +64,20 @@ interface ReviewsModalProps {
   onClose: () => void;
 }
 
-interface EligibleBooking {
+interface UnreviewedBooking {
+  bookingId: number;
+  bookingDate: string;
+  status: string;
+  serviceName: string;
+}
+
+interface BookingForReview {
   booking_id: number;
   booking_date: string;
   provider_user_id: number;
   customer_user_id: number;
-  hasReview: boolean;
+  provider_name: string;
+  service_name: string;
 }
 
 // ============================================================================
@@ -85,8 +96,10 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(true);
-  const [eligibleBooking, setEligibleBooking] = useState<EligibleBooking | null>(null);
+  const [unreviewedBookings, setUnreviewedBookings] = useState<UnreviewedBooking[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<BookingForReview | null>(null);
   const [showWriteReview, setShowWriteReview] = useState(false);
+  const [showBookingSelection, setShowBookingSelection] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // ========================================================================
@@ -96,6 +109,10 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   useEffect(() => {
     if (visible) {
       loadUserAndCheckEligibility();
+    } else {
+      // Reset state when modal closes
+      setSelectedBooking(null);
+      setShowBookingSelection(false);
     }
   }, [visible, providerId]);
 
@@ -110,7 +127,7 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
       const storedUserId = await AsyncStorage.getItem('userId');
       if (!storedUserId) {
         setCurrentUserId(null);
-        setEligibleBooking(null);
+        setUnreviewedBookings([]);
         setCheckingEligibility(false);
         return;
       }
@@ -118,70 +135,62 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
       const uid = parseInt(storedUserId);
       setCurrentUserId(uid);
 
-      // Check if user has completed bookings with this provider
+      // Check if user has unreviewed completed bookings with this provider
       await checkReviewEligibility(uid);
       
     } catch (error) {
       console.error('Error loading user:', error);
-      setEligibleBooking(null);
+      setUnreviewedBookings([]);
     } finally {
       setCheckingEligibility(false);
     }
   };
 
   /**
-   * Check if user has any completed bookings with this provider
-   * that haven't been reviewed yet
+   * Check if user has any unreviewed completed bookings with this provider
    * 
-   * UPDATED: January 12, 2026 - Changed to use /api/reviews/can-review endpoint
-   * Previous endpoint: /api/availability/bookings/:providerId (caused 403 error)
-   * New endpoint: /api/reviews/can-review/:providerId (checks only current user's eligibility)
+   * UPDATED: January 15, 2026 - Now handles multiple unreviewed bookings
+   * Backend returns ALL unreviewed bookings instead of just one
    */
   const checkReviewEligibility = async (userId: number) => {
     try {
+       console.log('='.repeat(80));
+    console.log('🔥 CHECKING ELIGIBILITY');
+    console.log('🔥 User ID:', userId);
+    console.log('🔥 Provider ID:', providerId);
+    console.log('='.repeat(80));
       console.log(`🔍 Checking review eligibility for user ${userId} with provider ${providerId}`);
 
-      // FIXED: January 12, 2026 - Use new eligibility endpoint instead of fetching all provider bookings
-      // This endpoint checks if current user has completed booking with provider
+      // Get all unreviewed completed bookings
       const eligibilityData = await api.get(`/api/reviews/can-review/${providerId}`);
-
+ console.log('🔥 API RESPONSE:', JSON.stringify(eligibilityData, null, 2));
+    console.log('🔥 canReview:', eligibilityData.canReview);
+    console.log('🔥 unreviewedBookings:', eligibilityData.unreviewedBookings);
+    console.log('='.repeat(80));
       if (!eligibilityData.success) {
         console.log('📋 Failed to check eligibility');
-        setEligibleBooking(null);
+        setUnreviewedBookings([]);
         return;
       }
 
-      // Check if user can review (has completed booking)
-      if (!eligibilityData.canReview || !eligibilityData.completedBooking) {
-        console.log('📋 User is not eligible to review (no completed bookings)');
-        setEligibleBooking(null);
+      // Check if user can review (has unreviewed completed bookings)
+      if (!eligibilityData.canReview || !eligibilityData.unreviewedBookings || 
+          eligibilityData.unreviewedBookings.length === 0) {
+        console.log('📋 User is not eligible to review (no unreviewed completed bookings)');
+        setUnreviewedBookings([]);
         return;
       }
 
-      const completedBooking = eligibilityData.completedBooking;
-      console.log(`✅ Found completed booking: ${completedBooking.bookingId}`);
+      const bookings = eligibilityData.unreviewedBookings;
+      console.log(`✅ Found ${bookings.length} unreviewed booking(s):`, 
+        bookings.map((b: UnreviewedBooking) => `${b.bookingId} (${b.serviceName})`)
+      );
 
-      // UPDATED: January 12, 2026 - Check if this specific booking already has a review
-      const reviewData = await api.get(`/api/reviews/booking/${completedBooking.bookingId}`);
-
-      if (reviewData.success && !reviewData.hasReview) {
-        // Found a completed booking without a review!
-        console.log(`✅ User is eligible to review booking ${completedBooking.bookingId}`);
-        setEligibleBooking({
-          booking_id: completedBooking.bookingId,
-          booking_date: completedBooking.bookingDate,
-          provider_user_id: providerId,
-          customer_user_id: userId,
-          hasReview: false
-        });
-      } else {
-        console.log('📋 Completed booking already has a review');
-        setEligibleBooking(null);
-      }
+      setUnreviewedBookings(bookings);
 
     } catch (error) {
       console.error('❌ Error checking review eligibility:', error);
-      setEligibleBooking(null);
+      setUnreviewedBookings([]);
     }
   };
 
@@ -190,85 +199,195 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   // ========================================================================
 
   /**
+   * Handle "Write a Review" button press
+   * If user has multiple bookings, show selection modal
+   * If user has only one booking, directly open write review modal
+   */
+  const handleWriteReviewPress = () => {
+    if (unreviewedBookings.length === 1) {
+      // Only one booking - directly open write review modal
+      const booking = unreviewedBookings[0];
+      setSelectedBooking({
+        booking_id: booking.bookingId,
+        booking_date: booking.bookingDate,
+        provider_user_id: providerId,
+        customer_user_id: currentUserId!,
+        provider_name: providerName,
+        service_name: booking.serviceName
+      });
+      setShowWriteReview(true);
+    } else {
+      // Multiple bookings - show selection modal
+      setShowBookingSelection(true);
+    }
+  };
+
+  /**
+   * Handle booking selection from the list
+   */
+  const handleBookingSelect = (booking: UnreviewedBooking) => {
+    setSelectedBooking({
+      booking_id: booking.bookingId,
+      booking_date: booking.bookingDate,
+      provider_user_id: providerId,
+      customer_user_id: currentUserId!,
+      provider_name: providerName,
+      service_name: booking.serviceName
+    });
+    setShowBookingSelection(false);
+    setShowWriteReview(true);
+  };
+
+  /**
    * Handle successful review submission
-   * Refresh the reviews list and close write review modal
+   * Refresh the reviews list and close modals
    */
   const handleReviewSuccess = () => {
     setShowWriteReview(false);
+    setSelectedBooking(null);
     setRefreshKey(prev => prev + 1); // Force ReviewsList to refresh
-    setEligibleBooking(null); // User no longer eligible (just reviewed)
+    
+    // Refresh eligibility to remove the reviewed booking from the list
+    if (currentUserId) {
+      checkReviewEligibility(currentUserId);
+    }
   };
+
+  /**
+   * Handle closing the write review modal
+   */
+  const handleCloseWriteReview = () => {
+    setShowWriteReview(false);
+    setSelectedBooking(null);
+  };
+
+  // ========================================================================
+  // RENDER HELPERS
+  // ========================================================================
+
+  /**
+   * Render a single booking item in the selection list
+   */
+  const renderBookingItem = ({ item }: { item: UnreviewedBooking }) => (
+    <TouchableOpacity
+      style={styles.bookingItem}
+      onPress={() => handleBookingSelect(item)}
+    >
+      <View style={styles.bookingItemLeft}>
+        <Ionicons name="calendar" size={20} color="#4A90E2" />
+        <View style={styles.bookingItemText}>
+          <Text style={styles.bookingItemService}>{item.serviceName}</Text>
+          <Text style={styles.bookingItemDate}>
+            {new Date(item.bookingDate).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            })}
+          </Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#999" />
+    </TouchableOpacity>
+  );
 
   // ========================================================================
   // RENDER
   // ========================================================================
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Reviews</Text>
-            <Text style={styles.providerName}>{providerName}</Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={28} color="#333" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Reviews List */}
-        <ReviewList 
-          key={refreshKey}
-          providerId={providerId} 
-          limit={50} 
-        />
-
-        {/* Write Review Button */}
-        {checkingEligibility ? (
-          <View style={styles.checkingContainer}>
-            <ActivityIndicator size="small" color="#4A90E2" />
-            <Text style={styles.checkingText}>Checking eligibility...</Text>
-          </View>
-        ) : eligibleBooking ? (
-          <View style={styles.writeReviewContainer}>
-            <TouchableOpacity
-              style={styles.writeReviewButton}
-              onPress={() => setShowWriteReview(true)}
-            >
-              <Ionicons name="create" size={20} color="#fff" />
-              <Text style={styles.writeReviewButtonText}>Write a Review</Text>
+    <>
+      {/* Main Reviews Modal */}
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={onClose}
+      >
+        <SafeAreaView style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <Text style={styles.headerTitle}>Reviews</Text>
+              <Text style={styles.providerName}>{providerName}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color="#333" />
             </TouchableOpacity>
           </View>
-        ) : currentUserId ? (
-          <View style={styles.infoContainer}>
-            <Ionicons name="information-circle-outline" size={20} color="#999" />
-            <Text style={styles.infoText}>
-              Complete a booking to leave a review
-            </Text>
-          </View>
-        ) : null}
 
-        {/* Write Review Modal */}
-        <WriteReviewModal
-          visible={showWriteReview}
-          booking={eligibleBooking ? {
-            booking_id: eligibleBooking.booking_id,
-            provider_user_id: eligibleBooking.provider_user_id,
-            customer_user_id: eligibleBooking.customer_user_id,
-            booking_date: eligibleBooking.booking_date,
-            provider_name: providerName
-          } : null}
-          onClose={() => setShowWriteReview(false)}
-          onSuccess={handleReviewSuccess}
-        />
-      </SafeAreaView>
-    </Modal>
+          {/* Reviews List */}
+          <ReviewList 
+            key={refreshKey}
+            providerId={providerId} 
+            limit={50} 
+          />
+
+          {/* Write Review Button */}
+          {checkingEligibility ? (
+            <View style={styles.checkingContainer}>
+              <ActivityIndicator size="small" color="#4A90E2" />
+              <Text style={styles.checkingText}>Checking eligibility...</Text>
+            </View>
+          ) : unreviewedBookings.length > 0 ? (
+            <View style={styles.writeReviewContainer}>
+              <TouchableOpacity
+                style={styles.writeReviewButton}
+                onPress={handleWriteReviewPress}
+              >
+                <Ionicons name="create" size={20} color="#fff" />
+                <Text style={styles.writeReviewButtonText}>
+                  {unreviewedBookings.length === 1 
+                    ? 'Write a Review'
+                    : `Write a Review (${unreviewedBookings.length} bookings)`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : currentUserId ? (
+            <View style={styles.infoContainer}>
+              <Ionicons name="information-circle-outline" size={20} color="#999" />
+              <Text style={styles.infoText}>
+                Complete a booking to leave a review
+              </Text>
+            </View>
+          ) : null}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Booking Selection Modal (when user has multiple unreviewed bookings) */}
+      <Modal
+        visible={showBookingSelection}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowBookingSelection(false)}
+      >
+        <View style={styles.selectionBackdrop}>
+          <View style={styles.selectionModal}>
+            <View style={styles.selectionHeader}>
+              <Text style={styles.selectionTitle}>Select a Booking to Review</Text>
+              <TouchableOpacity onPress={() => setShowBookingSelection(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={unreviewedBookings}
+              renderItem={renderBookingItem}
+              keyExtractor={(item) => item.bookingId.toString()}
+              style={styles.bookingList}
+              contentContainerStyle={styles.bookingListContent}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Write Review Modal */}
+      <WriteReviewModal
+        visible={showWriteReview}
+        booking={selectedBooking}
+        onClose={handleCloseWriteReview}
+        onSuccess={handleReviewSuccess}
+      />
+    </>
   );
 };
 
@@ -354,6 +473,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontStyle: 'italic',
+  },
+
+  // Booking Selection Modal Styles
+  selectionBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  selectionModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 40,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  selectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  bookingList: {
+    flex: 1,
+  },
+  bookingListContent: {
+    padding: 20,
+  },
+  bookingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  bookingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  bookingItemText: {
+    flex: 1,
+  },
+  bookingItemService: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  bookingItemDate: {
+    fontSize: 14,
+    color: '#666',
   },
 });
 
