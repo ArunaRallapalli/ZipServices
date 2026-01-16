@@ -38,3 +38,4 @@ yarn-error.*
 
 # Debugging logs
 logs/*.log
+backend/logs/combined.log backend/logs/combined1.log backend/logs/combined2.log backend/logs/combined3.log backend/logs/error.log
