@@ -1,7 +1,7 @@
 // backend/server.ts
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import pool from '../backend/config/pool';
+import pool from './config/pool';
 import { supabase } from "./config/Supabase";
 
 // ✅ ADDED: Debugging and logging infrastructure
