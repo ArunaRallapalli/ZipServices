@@ -6,7 +6,7 @@
     "dev": "cross-env NODE_ENV=development ts-node --project tsconfig.backend.json server.ts",
     "prod": "cross-env NODE_ENV=production ts-node --project tsconfig.backend.json server.ts",
     "build": "tsc --project tsconfig.backend.json",
-    "start": "cross-env NODE_ENV=production node dist/server.js",
+    "start": "cross-env NODE_ENV node dist/server.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "debug": "cross-env NODE_ENV=development node --inspect -r ts-node/register server.ts",
