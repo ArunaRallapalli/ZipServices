@@ -8,9 +8,10 @@
     "strict": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
+    "rootDir": ".",
+    "baseUrl": ".",
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "typeRoots": ["./node_modules/@types"]
+    "skipLibCheck": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
