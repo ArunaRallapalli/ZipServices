@@ -20,9 +20,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/Supabase";
 
-interface AuthRequest extends Request {
-  user?: { user_id: string; business_id: number };
-}
+import { AuthRequest } from "../middleware/auth";
+
 
 const router = Router();
 
