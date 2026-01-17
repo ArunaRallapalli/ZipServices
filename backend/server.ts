@@ -31,11 +31,10 @@ logger.info('Starting ZipServices server...');
 debugEnv();
 
 // Make pool accessible in all routes
-app.use((req, _res, next) => {
+app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
-
 // ✅ Middleware must be BEFORE routes
 app.use(cors({
   origin: '*',

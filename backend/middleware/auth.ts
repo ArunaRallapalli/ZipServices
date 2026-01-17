@@ -17,7 +17,12 @@ export interface AuthRequest extends Request {
     email?: string;
     userType?: string;
   };
+  params: any;
+  body: any;
+  query: any;
+  headers: any;
 }
+
 
 /**
  * MIDDLEWARE: authenticateToken
