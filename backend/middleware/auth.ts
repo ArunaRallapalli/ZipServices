@@ -12,14 +12,11 @@ import jwt from 'jsonwebtoken';
  */
 export interface AuthRequest extends Request {
   user?: {
-    user_id: string | number;      // ✅ Changed from userId
-    business_id?: number;           // ✅ Added business_id
-    email?: string;                 // ✅ Made optional
-    userType?: string;              // ✅ Made optional
+    user_id: string | number;
+    business_id?: number;
+    email?: string;
+    userType?: string;
   };
-  params: any;
-  body: any;
-  query: any;
 }
 
 /**
@@ -55,7 +52,6 @@ export const authenticateToken = (
       business_id: decoded.business_id
     });
 
-    // ✅ Assign decoded token directly (types now match!)
     req.user = decoded;
     
     next();
@@ -79,7 +75,7 @@ export const authorizeUser = (
   next: NextFunction
 ): void => {
   const requestedUserId = req.params.userId || req.params.user_id;
-  const authenticatedUserId = req.user?.user_id;  // ✅ Using user_id (not userId)
+  const authenticatedUserId = req.user?.user_id;
 
   console.log('🔒 ===== AUTHORIZATION CHECK =====');
   console.log('  Route:', req.method, req.path);
