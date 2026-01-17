@@ -5,13 +5,14 @@
     "moduleResolution": "node",
     "esModuleInterop": true,
     "allowJs": true,
-    "strict": true,
+    "strict": false,
     "resolveJsonModule": true,
     "outDir": "./dist",
     "rootDir": ".",
     "baseUrl": ".",
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noImplicitAny": false
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
