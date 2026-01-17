@@ -43,9 +43,9 @@ import {
   POSTER_TYPES,
   DEFAULT_SEARCH,
   LOGGING 
-} from '../../src/Constants/servicePosts';
-import { SUPABASE_ERROR } from '../../src/Constants/supabase';
-import { getZipCoordinates, getZipLocation } from '../../src/Services/zipCodeService';
+} from '../Constants/ServicePosts';
+import { SUPABASE_ERROR } from '../Constants/supabase';
+import { getZipCoordinates, getZipLocation } from '../services/zipCodeService';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
 
 const supabaseAdmin = createClient(
