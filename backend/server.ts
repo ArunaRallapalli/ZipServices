@@ -48,19 +48,21 @@ app.use(requestTracking);
 app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
 
 // Health check
-app.get("/ping", (_req: Request, res: Response) => {
-  res.json({ message: "pong" });
-});
-
-// ✅ Database health check - MODIFIED TO USE SUPABASE CLIENT
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
+    console.log('Health check starting...');
+    console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'Set' : 'NOT SET');
+    console.log('SUPABASE_KEY:', process.env.SUPABASE_KEY ? 'Set' : 'NOT SET');
+    
     const { data, error } = await supabase
       .from('users')
       .select('user_id')
       .limit(1);
     
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
     
     res.json({ 
       status: "ok",
@@ -69,14 +71,14 @@ app.get("/api/health", async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
+    console.error('Health check error:', error);
     res.status(500).json({
       status: "error",
       message: "Database connection failed",
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: JSON.stringify(error)
     });
   }
 });
-
 // ✅ NEW ROUTES WITH /api PREFIX
 app.use("/api/service-categories", serviceCategoriesRouter);
 app.use("/api/users", usersRouter);
