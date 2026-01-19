@@ -18,7 +18,7 @@
  * ============================================================================
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response,NextFunction} from "express";
 import bcrypt from "bcryptjs";
 import { supabase } from "../config/Supabase";
 import { authenticateToken, authorizeUser, AuthRequest } from "../middleware/auth";

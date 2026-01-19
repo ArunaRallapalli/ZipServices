@@ -99,6 +99,14 @@ console.log('✅ Review routes registered at /api/reviews');
 
 // ✅ ADDED: Error logger (must be AFTER all routes)
 app.use(errorLogger);
+// backend/server.ts
+app.use(cors({
+  origin: [
+    'https://ArunaRallapalli.github.io',  // Replace with your actual GitHub Pages URL
+    'http://localhost:8081'              // Local development
+  ],
+  credentials: true
+}));
 
 // Debug routes logging
 console.log("=== REGISTERED ROUTES ===");
