@@ -4,20 +4,38 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+const supabaseKey = process.env.SUPABASE_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Add fetch options to handle network issues
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  },
+  db: {
+    schema: 'public'
+  }
+});
 
-// Test connection
+// Test connection (simplified for production)
 (async () => {
   try {
-    const { data, error } = await supabase.from('users').select('count').limit(1);
+    console.log('🔄 Initializing Supabase client...');
+    console.log('📍 Supabase URL:', supabaseUrl ? '✓ Set' : '✗ NOT SET');
+    console.log('🔑 Supabase Key:', supabaseKey ? '✓ Set' : '✗ NOT SET');
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id')
+      .limit(1);
+    
     if (error) {
-      console.log("⚠️ Supabase client initialized (connection will be tested on first query)");
+      console.log("⚠️ Supabase client initialized but connection test failed:", error.message);
     } else {
       console.log("✅ Supabase client connected successfully!");
     }
-  } catch (err) {
-    console.log("⚠️ Supabase client initialized");
+  } catch (err: any) {
+    console.log("⚠️ Supabase client initialized (connection will be verified on first request)");
+    console.error("Connection test error:", err.message);
   }
 })();
