@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Nearby Marketplace App",
-    "slug": "nearbymarketplaceapp",
+    "name": "ZipServices",
+    "slug": "ZipServices",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -43,8 +43,16 @@
       "usesCleartextTraffic": true 
     },
 
-    "web": {
-      "favicon": "./assets/favicon.png"
+  "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "build": {
+        "babel": {
+          "include": []
+        }
+      },
+      "output": "static",
+      "publicPath": "/ZipServices/"
     }
   }
 }
