@@ -2,7 +2,8 @@ import { Pool } from 'pg';
 
 // Build connection string from environment variables
 const connectionString = process.env.DATABASE_URL || 
-  `postgresql://postgres.aorpdjxljwnxggjnofx:${process.env.SUPABASE_KEY}@aws-1-us-west-1.pooler.supabase.com:5432/postgres`;
+  `postgresql://postgres:Ganeshaya333!@db.aorpdijxljwnxggjnofx.supabase.co:5432/postgres
+`;
 
 export const pool = new Pool({
   connectionString,
