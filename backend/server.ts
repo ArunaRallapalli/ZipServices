@@ -4,7 +4,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import pool from './config/pool';
+import {pool} from './config/database';
 import { supabase } from "./config/Supabase";
 
 // ✅ ADDED: Debugging and logging infrastructure
@@ -54,18 +54,8 @@ app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
     console.log('Health check starting...');
-    console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'Set' : 'NOT SET');
-    console.log('SUPABASE_KEY:', process.env.SUPABASE_KEY ? 'Set' : 'NOT SET');
     
-    const { data, error } = await supabase
-      .from('users')
-      .select('user_id')
-      .limit(1);
-    
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
+    const result = await pool.query('SELECT 1 as health');
     
     res.json({ 
       status: "ok",
@@ -73,15 +63,15 @@ app.get("/api/health", async (_req: Request, res: Response) => {
       database: "connected",
       timestamp: new Date().toISOString()
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Health check error:', error);
     res.status(500).json({
       status: "error",
       message: "Database connection failed",
-      error: JSON.stringify(error)
+      error: error.message
     });
   }
-});
+})
 // ✅ NEW ROUTES WITH /api PREFIX
 app.use("/api/service-categories", serviceCategoriesRouter);
 app.use("/api/users", usersRouter);
