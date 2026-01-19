@@ -7,7 +7,7 @@
     "start": "expo start",
      "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "expo export:web",
+   "build": "expo export --platform web",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
         "dev": "expo start",
@@ -81,6 +81,7 @@
     "@types/uuid": "^10.0.0",
     "babel-preset-expo": "~13.0.0",
     "cross-env": "^10.1.0",
+    "gh-pages": "^5.0.0",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "typescript": "~5.8.3"
