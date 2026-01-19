@@ -1,12 +1,47 @@
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// Render injects env vars directly - only use dotenv in development
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const dotenv = require('dotenv');
+    dotenv.config();
+    console.log('📦 Loaded dotenv for development');
+  } catch (e) {
+    console.log('⚠️ dotenv not available (this is fine in production)');
+  }
+}
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_KEY!;
+// Log environment for debugging
+console.log('🔍 Environment:', process.env.NODE_ENV);
+console.log('🔍 SUPABASE_URL raw value:', process.env.SUPABASE_URL);
 
-// Add fetch options to handle network issues
+const supabaseUrl = process.env.SUPABASE_URL?.trim();
+
+// Support both SUPABASE_KEY (Render) and SUPABASE_SERVICE_ROLE_KEY (local dev)
+const supabaseKey = (
+  process.env.SUPABASE_KEY || 
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)?.trim();
+
+console.log('🔍 SUPABASE_KEY exists:', !!supabaseKey);
+
+if (!supabaseUrl) {
+  console.error('❌ SUPABASE_URL is not set in environment variables');
+  throw new Error('SUPABASE_URL environment variable is required');
+}
+
+if (!supabaseKey) {
+  console.error('❌ SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY is not set in environment variables');
+  throw new Error('SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY environment variable is required');
+}
+
+if (!supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://')) {
+  console.error('❌ Invalid SUPABASE_URL format:', supabaseUrl);
+  throw new Error(`SUPABASE_URL must start with http:// or https://, got: ${supabaseUrl}`);
+}
+
+console.log('✅ Supabase URL validated:', supabaseUrl);
+
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false,
@@ -17,25 +52,4 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
-// Test connection (simplified for production)
-(async () => {
-  try {
-    console.log('🔄 Initializing Supabase client...');
-    console.log('📍 Supabase URL:', supabaseUrl ? '✓ Set' : '✗ NOT SET');
-    console.log('🔑 Supabase Key:', supabaseKey ? '✓ Set' : '✗ NOT SET');
-    
-    const { data, error } = await supabase
-      .from('users')
-      .select('user_id')
-      .limit(1);
-    
-    if (error) {
-      console.log("⚠️ Supabase client initialized but connection test failed:", error.message);
-    } else {
-      console.log("✅ Supabase client connected successfully!");
-    }
-  } catch (err: any) {
-    console.log("⚠️ Supabase client initialized (connection will be verified on first request)");
-    console.error("Connection test error:", err.message);
-  }
-})();
+console.log('✅ Supabase client created successfully');

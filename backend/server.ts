@@ -1,4 +1,7 @@
 // backend/server.ts
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import pool from './config/pool';
