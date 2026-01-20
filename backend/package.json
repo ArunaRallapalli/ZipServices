@@ -1,9 +1,9 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "server.ts",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "ts-node server.ts",
+    "start": "node dist/server.js",
     "dev": "nodemon --watch . --ext ts --exec ts-node server.ts",
     "build": "tsc"
   },
@@ -13,7 +13,6 @@
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
-    "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
@@ -21,9 +20,7 @@
     "pg": "^8.17.1",
     "resend": "^6.6.0",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -36,7 +33,9 @@
     "@types/node": "^20.19.11",
     "@types/pg": "^8.16.0",
     "@types/uuid": "^9.0.7",
-    "cross-env": "^7.0.3",
-    "nodemon": "^3.0.2"
+    "typescript": "^5.9.2",
+    "ts-node": "^10.9.2",
+    "nodemon": "^3.0.2",
+    "cross-env": "^7.0.3"
   }
 }
