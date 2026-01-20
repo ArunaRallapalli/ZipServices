@@ -3,17 +3,10 @@
   "version": "1.0.0",
   "main": "server.ts",
   "scripts": {
-  "start": "expo start",
-  "ios": "expo start --ios",
-  "web": "expo start --web",
-  "build": "expo export --platform web && cp public/.nojekyll dist/",
-  "predeploy": "npm run build",
-  "deploy": "gh-pages -d dist -t true",
-  "dev": "expo start",
-  "android": "expo run:android",
-  "dev-backend": "nodemon --watch backend --ext ts --exec ts-node backend/server.ts",
-  "start-backend": "ts-node backend/server.ts"
-},
+    "start": "ts-node server.ts",
+    "dev": "nodemon --watch . --ext ts --exec ts-node server.ts",
+    "build": "tsc"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.2",
     "bcrypt": "^6.0.0",
@@ -22,13 +15,10 @@
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
-    "expo": "~53.0.22",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "pg": "^8.17.1",
-    "react": "19.0.0",
-    "react-native": "0.79.6",
     "resend": "^6.6.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0"
