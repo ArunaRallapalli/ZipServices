@@ -39,7 +39,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Import screen components for each tab
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
-import SearchResultsScreen from "./SearchresultsScreen";
+import SearchResultsScreen from "./SearchResultsScreen";
 import PostLandingScreen from "./PostLandingScreen"; // NEW - Landing page with 2 buttons
 import PostServiceScreen from "./PostServiceScreen"; // Form for posting services
 import RequestServiceCategoryScreen from "./Requestservicecategoryscreen"; // Form for requesting categories
