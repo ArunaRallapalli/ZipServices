@@ -99,14 +99,28 @@ console.log('✅ Review routes registered at /api/reviews');
 
 // ✅ ADDED: Error logger (must be AFTER all routes)
 app.use(errorLogger);
-// backend/server.ts
+// Added below code on 01/21/2026 to fix CORS issues - been blocked by CORS policy
+const allowedOrigins = [
+  'http://localhost:19006',
+  'https://gozipmarket.com',
+  'https://www.gozipmarket.com',
+  'https://arunarallapalli.github.io/ZipServices/' // Github Page URL
+];
+
 app.use(cors({
-  origin: [
-    'https://ArunaRallapalli.github.io',  // Replace with your actual GitHub Pages URL
-    'http://localhost:8081'              // Local development
-  ],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
+
+
+
+
 
 // Debug routes logging
 console.log("=== REGISTERED ROUTES ===");
