@@ -1,18 +1,17 @@
 {
   "name": "zipservices",
   "version": "1.0.0",
-  "homepage": "https://ArunaRallapalli.github.io/ZipServices",
+  "homepage": "https://arunarallapalli.github.io/ZipServices",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-     "ios": "expo start --ios",
+    "ios": "expo start --ios",
     "web": "expo start --web",
-   "build": "expo export --platform web && node fix-paths.js",
+    "build": "expo export --platform web && node fix-paths.js",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist -t",
-        "dev": "expo start",
+    "deploy": "gh-pages -d dist",
+    "dev": "expo start",
     "android": "expo run:android",
-   
     "dev-backend": "nodemon --watch backend --ext ts --exec ts-node backend/server.ts",
     "start-backend": "ts-node backend/server.ts"
   },
