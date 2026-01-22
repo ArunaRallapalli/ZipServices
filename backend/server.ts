@@ -39,12 +39,27 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 // ✅ Middleware must be BEFORE routes
+//added the below on top to avoid CORS issues
+const allowedOrigins = [
+  'http://localhost:19006',
+  'https://gozipmarket.com',
+  'https://www.gozipmarket.com',
+  'https://arunarallapalli.github.io/ZipServices/' // Github Page URL
+];
+
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization']
+ // credentials: true
 }));
-app.use(express.json());
+
 
 // ✅ ADDED: Request tracking and performance monitoring
 app.use(requestTracking);
@@ -98,30 +113,8 @@ app.use('/api/reviews', reviewsRoutes);
 console.log('✅ Review routes registered at /api/reviews');
 
 // ✅ ADDED: Error logger (must be AFTER all routes)
+
 app.use(errorLogger);
-// Added below code on 01/21/2026 to fix CORS issues - been blocked by CORS policy
-const allowedOrigins = [
-  'http://localhost:19006',
-  'https://gozipmarket.com',
-  'https://www.gozipmarket.com',
-  'https://arunarallapalli.github.io/ZipServices/' // Github Page URL
-];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
-
-
-
-
-
 // Debug routes logging
 console.log("=== REGISTERED ROUTES ===");
 console.log("✅ NEW API ROUTES:");
