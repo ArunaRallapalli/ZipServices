@@ -18,3 +18,11 @@ if (fs.existsSync(nojekyllSrc)) {
   fs.copyFileSync(nojekyllSrc, nojekyllDest);
   console.log('✓ Copied .nojekyll');
 }
+
+// Copy CNAME for custom domain
+const cnameSrc = path.join(__dirname, 'Public', 'CNAME');
+const cnameDest = path.join(__dirname, 'dist', 'CNAME');
+if (fs.existsSync(cnameSrc)) {
+  fs.copyFileSync(cnameSrc, cnameDest);
+  console.log('✓ Copied CNAME');
+}
