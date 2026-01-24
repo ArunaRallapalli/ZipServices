@@ -39,7 +39,7 @@
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png",
-      "publicPath": "/ZipServices/"
+      "publicPath": "/"
     },
     "assetBundlePatterns": [
       "**/*"

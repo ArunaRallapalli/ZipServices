@@ -384,8 +384,8 @@ const pickerSelectStyles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     color: '#333',
-    paddingRight: 40, // ✅ More space for icon
-    backgroundColor: 'transparent', // ✅ Transparent so Pressable shows through
+    paddingRight: 40,
+    backgroundColor: 'transparent',
     borderRadius: 8,
     height: 50,
   },
@@ -395,8 +395,8 @@ const pickerSelectStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     color: '#333',
-    paddingRight: 40, // ✅ More space for icon
-    backgroundColor: 'transparent', // ✅ Transparent so Pressable shows through
+    paddingRight: 40,
+    backgroundColor: 'transparent',
     borderRadius: 8,
     height: 50,
   },
@@ -413,6 +413,20 @@ const pickerSelectStyles = StyleSheet.create({
     appearance: 'none',
     WebkitAppearance: 'none',
     MozAppearance: 'none',
+    // ✅ ADD THESE for scrollable dropdown
+    cursor: 'pointer',
+  } as any,
+  
+  // ✅ ADD THIS - Style for the dropdown menu itself (Web only)
+  modalViewTop: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  } as any,
+  
+  modalViewMiddle: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    maxHeight: '60vh',  // ✅ Limit height to 60% of viewport
+    overflowY: 'auto',   // ✅ Enable vertical scrolling
   } as any,
   
   placeholder: {

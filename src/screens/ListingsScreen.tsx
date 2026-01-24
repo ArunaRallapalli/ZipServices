@@ -216,24 +216,23 @@ const ListingsScreen: React.FC = () => {
    * Searches through title, category, description, city, and state
    */
   useEffect(() => {
-    // ✅ ALWAYS filter out inactive listings FIRST
-    let filtered = listings.filter(item => item.is_active !== false);
+  // ✅ FIXED: Only show explicitly active listings
+  let filtered = listings.filter(item => item.is_active === true);
 
-    // Then apply search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.service_category.toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query) ||
-        item.city?.toLowerCase().includes(query) ||
-        item.state?.toLowerCase().includes(query)
-      );
-    }
+  // Then apply search query
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filtered = filtered.filter(item =>
+      item.title.toLowerCase().includes(query) ||
+      item.service_category.toLowerCase().includes(query) ||
+      item.description?.toLowerCase().includes(query) ||
+      item.city?.toLowerCase().includes(query) ||
+      item.state?.toLowerCase().includes(query)
+    );
+  }
 
-    setFilteredListings(filtered);
-  }, [searchQuery, listings]);
-
+  setFilteredListings(filtered);
+}, [searchQuery, listings]);
   /**
    * Handle edit button press
    * Navigates directly to edit screen without confirmation dialog

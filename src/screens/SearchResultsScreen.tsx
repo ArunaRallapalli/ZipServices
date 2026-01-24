@@ -516,36 +516,31 @@ useFocusEffect(
    */
   useEffect(() => {
     const loadCategories = async () => {
-      console.log("🚀 [SearchResultsScreen] Loading categories...");
-      setLoadingCategories(true);
-      
-      try {
-        // Fetch categories from API (with fallback)
-        const fetchedCategories = await fetchCategories();
-        console.log("✅ [SearchResultsScreen] Categories loaded:", fetchedCategories.length);
+  console.log("🚀 [SearchResultsScreen] Loading categories...");
+  setLoadingCategories(true);
+  
+  try {
+    const fetchedCategories = await fetchCategories();
+    
+    // ✅ ADD DETAILED LOGGING
+    console.log("✅ Categories loaded:", fetchedCategories.length);
+    console.log("📋 First 5:", fetchedCategories.slice(0, 5));
+    console.log("📋 Last 5:", fetchedCategories.slice(-5));
+    console.log("🔍 Looking for 'Web Development':", 
+      fetchedCategories.indexOf('Web Development'));
+    console.log("🔍 Looking for 'Other':", 
+      fetchedCategories.indexOf('Other'));
+    
+    setCategories(fetchedCategories);
+    
+    // ... rest of the code
+  } catch (error) {
+    console.error("❌ Error loading categories:", error);
+  } finally {
+    setLoadingCategories(false);
+  }
+};
         
-        setCategories(fetchedCategories);
-        
-        // Set initial category if none selected
-        if (!serviceNeeded && fetchedCategories.length > 0) {
-          if (preselectedCategory && fetchedCategories.includes(preselectedCategory)) {
-            // Use preselected category from navigation params
-            console.log("✅ [SearchResultsScreen] Using preselected category:", preselectedCategory);
-            setServiceNeeded(preselectedCategory);
-          } else {
-            // Use first category as default
-            console.log("✅ [SearchResultsScreen] Using first category:", fetchedCategories[0]);
-            setServiceNeeded(fetchedCategories[0]);
-          }
-        }
-      } catch (error) {
-        console.error("❌ [SearchResultsScreen] Error loading categories:", error);
-      } finally {
-        setLoadingCategories(false);
-        console.log("✅ [SearchResultsScreen] Category loading complete");
-      }
-    };
-
     loadCategories();
   }, []); // Run once on mount
 

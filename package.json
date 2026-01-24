@@ -1,7 +1,7 @@
 {
   "name": "zipservices",
   "version": "1.0.0",
-  "homepage": "https://arunarallapalli.github.io/ZipServices",
+  "homepage": "https://gozipmarket.com",
   "main": "index.js",
   "scripts": {
     "start": "expo start",

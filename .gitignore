@@ -42,3 +42,8 @@ backend/logs/combined.log backend/logs/combined1.log backend/logs/combined2.log 
 backend/logs/*.log
 backend/logs/*.log
 *.log
+backend/.env.production
+
+# Environment files - NEVER commit these
+.env
+backend/.env

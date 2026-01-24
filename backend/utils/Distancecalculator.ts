@@ -140,7 +140,10 @@ export async function getZipCoordinates(
       return null;
     }
 
-    const data: ZipCodeData = await response.json();
+    const data = await response.json() as ZipCodeData;
+if (!data['post code']) {
+  throw new Error('Invalid zip code response');
+}
     
     if (!data.places || data.places.length === 0) {
       console.error(`❌ No location data for ZIP ${zipCode}`);

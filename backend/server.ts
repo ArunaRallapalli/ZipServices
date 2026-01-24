@@ -38,25 +38,38 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
+// ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Make pool accessible in all routes
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  (req as any).pool = pool;
+  next();
+});
 // ✅ Middleware must be BEFORE routes
 //added the below on top to avoid CORS issues
 const allowedOrigins = [
+  'http://localhost:8081',        // ← ADD THIS
   'http://localhost:19006',
   'https://gozipmarket.com',
   'https://www.gozipmarket.com',
-  'https://arunarallapalli.github.io/ZipServices/' // Github Page URL
+  'https://arunarallapalli.github.io'  // ← Remove trailing slash
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, Postman, etc)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log('Blocked by CORS:', origin);  // Debug log
       callback(new Error('Not allowed by CORS'));
     }
   },
-  
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH','OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
   credentials: true
 }));
