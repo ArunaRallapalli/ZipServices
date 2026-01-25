@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "build": "expo export --platform web && node fix-paths.js",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
+    "deploy": "gh-pages -d dist --dotfiles",
     "dev": "expo start",
     "android": "expo run:android",
     "dev-backend": "nodemon --watch backend --ext ts --exec ts-node backend/server.ts",
