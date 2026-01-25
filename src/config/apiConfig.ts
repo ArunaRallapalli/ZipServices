@@ -6,7 +6,7 @@ import Constants from "expo-constants";
  */
 const DEV_PORT = 5000;
 const DEV_LAN_IP = "192.168.4.48";  // Your computer's LAN IP
-const PROD_URL = "https://your-app-api.herokuapp.com"; // Production URL
+const PROD_URL = "https://gozipmarket-api.onrender.com"; // Production URL
 
 /**
  * More reliable device detection for iOS
