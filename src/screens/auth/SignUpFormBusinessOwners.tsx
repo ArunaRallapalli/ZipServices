@@ -28,6 +28,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import api from '../../api'; // ADDED: January 5, 2026
+import { validateZipCode } from '../../Services/zipCodeService';
 
 type SignUpBusinessNavProp = StackNavigationProp<
   RootStackParamList,
@@ -56,44 +57,45 @@ const SignUpFormBusinessOwners = () => {
 
   // Auto-populate city and state from zip code
   // NOTE: This uses external ZIP API, not our backend, so keeping native fetch
-  const fetchCityStateFromZip = async (zipCode: string) => {
-    if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
-      return;
+ // Auto-populate city and state from zip code
+// UPDATED: January 26, 2026 - Using backend validation to avoid CORS
+const fetchCityStateFromZip = async (zipCode: string) => {
+  if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
+    return;
+  }
+
+  try {
+    setIsLoadingZipData(true);
+    console.log("📍 Validating ZIP code via backend:", zipCode);
+
+    // Use backend validation service (avoids CORS issues)
+    const result = await validateZipCode(zipCode);
+    console.log("📍 ZIP validation result:", result);
+
+    if (result.valid && result.city && result.stateAbbr) {
+      setFormData(prev => ({
+        ...prev,
+        city: result.city || '',
+        state: result.stateAbbr || '',
+      }));
+
+      console.log("✅ Auto-populated city:", result.city, "state:", result.stateAbbr);
+    } else {
+      console.log("❌ ZIP code validation failed:", result.error);
+      // Clear city/state if ZIP is invalid
+      setFormData(prev => ({
+        ...prev,
+        city: '',
+        state: '',
+      }));
     }
-
-    try {
-      setIsLoadingZipData(true);
-      console.log("📍 Fetching city/state for zip code:", zipCode);
-
-      // External API - keep using native fetch
-      const response = await fetch(`http://api.zippopotam.us/us/${zipCode}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("📍 Zip code data received:", data);
-
-        if (data.places && data.places.length > 0) {
-          const place = data.places[0];
-          const city = place["place name"];
-          const state = place["state abbreviation"];
-
-          setFormData(prev => ({
-            ...prev,
-            city: city,
-            state: state,
-          }));
-
-          console.log("✅ Auto-populated city:", city, "state:", state);
-        }
-      } else {
-        console.log("❌ Zip code not found or invalid");
-      }
-    } catch (error) {
-      console.error("❌ Error fetching zip code data:", error);
-    } finally {
-      setIsLoadingZipData(false);
-    }
-  };
+  } catch (error) {
+    console.error("❌ Error validating ZIP code:", error);
+    // Don't block user - validation will happen on submit
+  } finally {
+    setIsLoadingZipData(false);
+  }
+};
 
   // Validation functions
   const isValidEmail = (email: string) =>
@@ -129,13 +131,14 @@ const SignUpFormBusinessOwners = () => {
     }
 
     // Validate city and state were auto-populated
-    if (!formData.city || !formData.state) {
-      Alert.alert(
-        "Validation Error", 
-        "Please enter a valid US zip code. City and state will be filled automatically."
-      );
-      return;
-    }
+  // Validate city and state were auto-populated
+if (!formData.city || !formData.state) {
+  Alert.alert(
+    "Invalid ZIP Code", 
+    "Please enter a valid 5-digit US ZIP code. The city and state will appear automatically when you enter a valid ZIP."
+  );
+  return;
+}
 
     if (!isValidEmail(formData.email)) {
       Alert.alert("Validation Error", "Invalid email format");

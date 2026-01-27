@@ -6,6 +6,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import {pool} from './config/database';
 import { supabase } from "./config/Supabase";
+import zipCodeRoutes from './routes/zipCode';
 
 // ✅ ADDED: Debugging and logging infrastructure
 import logger from './utils/logger';
@@ -108,6 +109,8 @@ app.use('/', servicePostsRouter);
 
 // ✅ EXISTING ROUTES (keep these for backward compatibility)
 app.use("/users", usersRouter);
+// ZIP code validation endpoint
+app.use('/api/zip-code', zipCodeRoutes);
 app.use("/business_owners", businessOwnerAuthRouter);
 app.use("/business_owners/crud", businessOwnersRouter);
 //app.use("/business_owners/search", businessOwnerSearchRouter);
