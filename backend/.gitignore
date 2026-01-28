@@ -1,0 +1,10 @@
+
+# Debug scripts
+check-prod-db-connections*.js
+debug-verification*.js
+Check*.js
+Debug*.js
+DEPLOYMENT-CHECKLIST.js
+PRODUCTION-FIX-GUIDE.js
+FILE-STRUCTURE-GUIDE.md
+logs/*.log
