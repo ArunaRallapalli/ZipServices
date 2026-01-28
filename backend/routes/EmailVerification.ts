@@ -11,6 +11,7 @@ import { Resend } from 'resend';
 import crypto from 'crypto';
 import pool from '../config/pool';
 import dotenv from 'dotenv';
+import { supabase } from '../config/Supabase';
 
 dotenv.config();
 
@@ -79,11 +80,19 @@ router.post('/send', async (req: Request, res: Response) => {
     );
 
     // Save new verification token to database
-    await pool.query(
-      `INSERT INTO email_verifications (user_id, verification_token, expires_at, verified)
-       VALUES ($1, $2, $3, false)`,
-      [userId, hashedToken, expiresAt]
-    );
+   const { error: verificationError } = await supabase
+  .from('email_verifications')
+  .insert({
+    user_id: userId,
+    verification_token: hashedToken,
+    expires_at: expiresAt.toISOString(),
+    verified: false
+  });
+
+if (verificationError) {
+  console.error('❌ Supabase error saving token:', verificationError);
+  throw verificationError;
+}
 
     // Create verification link based on environment
     const isDevelopment = process.env.NODE_ENV !== 'production';

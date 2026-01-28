@@ -18,7 +18,8 @@ import { supabase } from "../config/Supabase";
 import crypto from 'crypto';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
-import pool from '../config/pool';
+
+
 
 dotenv.config();
 // 🔍 ADD THIS DEBUG SECTION HERE
@@ -62,12 +63,19 @@ console.log('✅ Token generated and hashed');
     // Token expires in 24 hours
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     // Save verification token to database
-       console.log('💾 Attempting to save token to database...');  // ← ADD THIS LINE
-    await pool.query(
-      `INSERT INTO email_verifications (user_id, verification_token, expires_at, verified)
-       VALUES ($1, $2, $3, false)`,
-      [userId, hashedToken, expiresAt]
-    );
+   const { error: verificationError } = await supabase
+  .from('email_verifications')
+  .insert({
+    user_id: userId,
+    verification_token: hashedToken,
+    expires_at: expiresAt.toISOString(),
+    verified: false
+  });
+
+if (verificationError) {
+  console.error('❌ Supabase error saving token:', verificationError);
+  throw verificationError;
+}
     console.log('✅ Token saved to database successfully');
 
     // Create verification link based on environment
