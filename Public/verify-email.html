@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Verify Email - ZipService</title>
+  <title>Email Verification - ZipService</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
@@ -51,21 +51,9 @@
       font-size: 18px; 
       font-weight: 600;
       cursor: pointer; 
-      margin-top: 8px;
       width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
     }
     button:hover { background: #45a049; }
-    button.secondary {
-      background: white;
-      color: #4A90E2;
-      border: 2px solid #4A90E2;
-      margin-top: 8px;
-    }
-    button.secondary:hover { background: #f0f7ff; }
     .error-info {
       background: #fff3cd;
       border-left: 4px solid #ffc107;
@@ -74,9 +62,6 @@
       text-align: left;
       border-radius: 4px;
     }
-    .error-info strong { display: block; margin-bottom: 8px; color: #333; }
-    .error-info ul { margin-left: 20px; color: #666; font-size: 14px; }
-    .error-info li { margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -91,14 +76,15 @@
   </div>
 
   <script>
+    console.log('🔍 Email Verification Page Loaded');
+    
     // Get URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const email = urlParams.get('email');
 
-    console.log('🔐 Email Verification Page Loaded');
-    console.log('   Email:', email);
-    console.log('   Token (first 10):', token ? token.substring(0, 10) : 'missing');
+    console.log('📧 Email:', email);
+    console.log('🔑 Token (first 10):', token ? token.substring(0, 10) : 'missing');
 
     // Display email
     if (email) {
@@ -116,11 +102,13 @@
     } else {
       // Call verification API
       console.log('📤 Calling verification API...');
+      console.log('🌐 API URL: https://gozipmarket-api.onrender.com/api/email-verification/verify');
       
       fetch('https://gozipmarket-api.onrender.com/api/email-verification/verify', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ 
           email: decodeURIComponent(email), 
@@ -129,6 +117,9 @@
       })
       .then(response => {
         console.log('📥 Response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         return response.json();
       })
       .then(data => {
@@ -162,18 +153,6 @@
         console.error('❌ Verification error:', error);
         
         let errorMessage = error.message || 'An unexpected error occurred.';
-        let showResend = true;
-        
-        if (errorMessage.includes('expired')) {
-          errorMessage = 'This verification link has expired.';
-        } else if (errorMessage.includes('already been used')) {
-          errorMessage = 'This verification link has already been used.';
-        } else if (errorMessage.includes('Invalid')) {
-          errorMessage = 'This verification link is invalid.';
-        } else if (errorMessage.includes('Network') || errorMessage.includes('Failed to fetch')) {
-          errorMessage = 'Network error. Please check your connection.';
-          showResend = false;
-        }
         
         document.getElementById('status').innerHTML = `
           <div style="font-size: 80px; margin-bottom: 16px;">❌</div>
@@ -186,16 +165,12 @@
               <li>Link has expired (valid for 24 hours)</li>
               <li>Link has already been used</li>
               <li>Invalid or corrupted link</li>
+              <li>Network error - please try again</li>
             </ul>
           </div>
           
-          ${showResend ? `
-            <button class="secondary" onclick="window.location.href='https://gozipmarket.com/signin'">
-              📧 Request New Link
-            </button>
-          ` : ''}
-          <button onclick="window.location.href='https://gozipmarket.com'">
-            🏠 Go to Home
+          <button onclick="window.location.href='https://gozipmarket.com/signin'">
+            🏠 Go to Sign In
           </button>
         `;
       });
@@ -203,35 +178,3 @@
   </script>
 </body>
 </html>
-```
-
----
-
-## 📁 **Where to Put This File:**
-
-1. **If your GitHub Pages serves from root:**
-```
-   your-repo/
-   ├── verify-email.html  ← Put it here
-   ├── index.html
-   └── ...
-```
-
-2. **If your GitHub Pages serves from `/docs`:**
-```
-   your-repo/
-   ├── docs/
-   │   ├── verify-email.html  ← Put it here
-   │   ├── index.html
-   │   └── ...
-   └── ...
-```
-
-3. **If your GitHub Pages serves from `/public`:**
-```
-   your-repo/
-   ├── public/
-   │   ├── verify-email.html  ← Put it here
-   │   ├── index.html
-   │   └── ...
-   └── ...
