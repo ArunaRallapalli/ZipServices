@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Verification - Redirecting...</title>
+  <script>
+    // Immediately redirect to verify-email.html with same query params
+    window.location.replace('/verify-email.html' + window.location.search);
+  </script>
+</head>
+<body>
+  <p>Redirecting to email verification...</p>
+</body>
+</html>
+```
+
+**Where to put it:**
+```
+your-frontend-repo/
+├── verify-email.html        ← You already have this
+└── verify-email/
+    └── index.html          ← Create this NEW file
