@@ -107,7 +107,8 @@ console.log('✅ Verification token saved, ID:', insertResult.rows[0].id);
       ? 'http://localhost:8081' 
       : 'https://gozipmarket.com';
 
-    const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+    //const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
 
     console.log('🌍 Environment:', process.env.NODE_ENV);
     console.log('🔗 Frontend URL:', frontendUrl);
