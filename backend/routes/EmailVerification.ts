@@ -288,18 +288,25 @@ router.post('/verify', async (req: Request, res: Response) => {
       });
     }
 
-    // Mark email as verified in users table
-    await pool.query(
-      'UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
-      [user.user_id]
-    );
+   // Mark email as verified in users table
+const updateResult = await pool.query(
+  'UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
+  [user.user_id]
+);
 
-    // Mark token as used
-    await pool.query(
-      'UPDATE email_verifications SET verified = true WHERE id = $1',
-      [verificationRecord.id]
-    );
+console.log('📊 UPDATE users result:', updateResult); // ADD THIS
+console.log('   Rows affected:', updateResult.rowCount); // ADD THIS
 
+// Mark token as used
+const tokenUpdateResult = await pool.query(
+  'UPDATE email_verifications SET verified = true WHERE id = $1',
+  [verificationRecord.id]
+);
+
+console.log('📊 UPDATE tokens result:', tokenUpdateResult); // ADD THIS
+console.log('   Rows affected:', tokenUpdateResult.rowCount); // ADD THIS
+
+console.log('✅ Email verified successfully for user:', user.user_id); 
     console.log('✅ Email verified successfully for user:', user.user_id);
 
     res.status(200).json({
