@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import API_URL from '../config/apiConfig';
+import api from '../api';
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Alert } from '../Utils/Alert';
 
@@ -56,29 +56,29 @@ const VerifyEmailScreen: React.FC = () => {
       setErrorMessage('Invalid verification link. Missing token or email.');
     }
   }, [token, email]);
-
-  /**
+   /**
    * Handle email verification
+   * ✅ FIXED: Uses api client for correct production URL
    */
   const handleVerifyEmail = async () => {
     setVerifying(true);
     setVerificationStatus('loading');
 
+    console.log('🔐 Starting email verification...');
+    console.log('   Email:', email);
+    console.log('   Token (first 10 chars):', token.substring(0, 10));
+
     try {
-      const response = await fetch(`${API_URL}/api/email-verification/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          token,
-        }),
+      // ✅ Use api client (automatically uses correct URL)
+      const data = await api.post('/api/email-verification/verify', {
+        email,
+        token,
       });
 
-      const data = await response.json();
+      console.log('✅ Verification response:', data);
 
-      if (response.ok && data.success) {
+      // Handle response
+      if (data.success) {
         if (data.alreadyVerified) {
           setVerificationStatus('already-verified');
         } else {
@@ -88,15 +88,24 @@ const VerifyEmailScreen: React.FC = () => {
         setVerificationStatus('error');
         setErrorMessage(data.message || 'Verification failed. Please try again.');
       }
-    } catch (error) {
-      console.error('Email verification error:', error);
+    } catch (error: any) {
+      console.error('❌ Email verification error:', error);
       setVerificationStatus('error');
-      setErrorMessage('Network error. Please check your connection and try again.');
+      
+      // Better error handling
+      if (error.message?.includes('expired')) {
+        setErrorMessage('This verification link has expired. Please request a new one.');
+      } else if (error.message?.includes('already been used')) {
+        setErrorMessage('This verification link has already been used.');
+      } else if (error.message?.includes('Invalid')) {
+        setErrorMessage('Invalid verification link. Please request a new one.');
+      } else {
+        setErrorMessage(error.message || 'Network error. Please check your connection and try again.');
+      }
     } finally {
       setVerifying(false);
     }
   };
-
   /**
    * Navigate to sign in
    */
