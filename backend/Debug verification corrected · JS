@@ -1,0 +1,121 @@
+/**
+ * Debug Email Verification Status - CORRECTED VERSION
+ * 
+ * Place this file in: backend/ (root of backend directory)
+ * Usage: node debug-verification.js user@email.com
+ * 
+ * This checks a specific user's verification status in the database
+ */
+
+require('dotenv').config();
+
+// Import pool - adjust path based on your structure
+let pool;
+try {
+  pool = require('./dist/config/pool').default;
+} catch (e1) {
+  try {
+    pool = require('./src/config/pool').default;
+  } catch (e2) {
+    try {
+      pool = require('./config/pool');
+    } catch (e3) {
+      console.error('❌ Could not find pool configuration!');
+      console.error('   Tried: ./dist/config/pool, ./src/config/pool, ./config/pool');
+      console.error('   Please adjust the require path in this script.');
+      process.exit(1);
+    }
+  }
+}
+
+const email = process.argv[2];
+
+if (!email) {
+  console.error('❌ Please provide an email address');
+  console.log('Usage: node debug-verification.js user@email.com');
+  process.exit(1);
+}
+
+async function debugVerification() {
+  console.log('🔍 Debugging email verification for:', email);
+  console.log('='.repeat(60));
+  
+  try {
+    // Check user record
+    console.log('\n1️⃣ Checking USER record:');
+    const userQuery = 'SELECT user_id, email, email_verified, created_at, updated_at FROM users WHERE email = $1';
+    const userResult = await pool.query(userQuery, [email.toLowerCase()]);
+    
+    if (userResult.rows.length === 0) {
+      console.log('❌ User NOT found in database!');
+      await pool.end();
+      return;
+    }
+    
+    const user = userResult.rows[0];
+    console.log('✅ User found:');
+    console.log('   User ID:', user.user_id);
+    console.log('   Email:', user.email);
+    console.log('   Email Verified:', user.email_verified ? '✅ TRUE' : '❌ FALSE');
+    console.log('   Created:', user.created_at);
+    console.log('   Updated:', user.updated_at);
+    
+    // Check verification records
+    console.log('\n2️⃣ Checking EMAIL_VERIFICATIONS records:');
+    const verificationQuery = `
+      SELECT id, user_id, verification_token, expires_at, verified, created_at
+      FROM email_verifications 
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 5
+    `;
+    const verificationResult = await pool.query(verificationQuery, [user.user_id]);
+    
+    if (verificationResult.rows.length === 0) {
+      console.log('⚠️  No verification records found!');
+    } else {
+      console.log(`Found ${verificationResult.rows.length} verification record(s):`);
+      verificationResult.rows.forEach((record, index) => {
+        const isExpired = new Date() > new Date(record.expires_at);
+        console.log(`\n   Record #${index + 1}:`);
+        console.log('   ID:', record.id);
+        console.log('   Token (first 10 chars):', record.verification_token.substring(0, 10) + '...');
+        console.log('   Verified:', record.verified ? '✅ YES' : '❌ NO');
+        console.log('   Expires:', record.expires_at);
+        console.log('   Status:', isExpired ? '⏰ EXPIRED' : '✅ VALID');
+        console.log('   Created:', record.created_at);
+      });
+    }
+    
+    // Summary
+    console.log('\n' + '='.repeat(60));
+    console.log('📊 SUMMARY:');
+    if (user.email_verified) {
+      console.log('✅ Email is VERIFIED - Login should work!');
+    } else {
+      console.log('❌ Email is NOT VERIFIED - Login will be blocked');
+      
+      const hasVerifiedToken = verificationResult.rows.some(r => r.verified);
+      if (hasVerifiedToken) {
+        console.log('\n⚠️  WARNING: Verification token was marked as used,');
+        console.log('   but user.email_verified is still FALSE!');
+        console.log('   This indicates the UPDATE query is not working!');
+        console.log('\n💡 SOLUTION:');
+        console.log('   1. Deploy your updated email-verification.ts code');
+        console.log('   2. Or manually fix with SQL:');
+        console.log(`   UPDATE users SET email_verified = TRUE WHERE user_id = ${user.user_id};`);
+      } else {
+        console.log('\nℹ️  User has not clicked verification link yet');
+      }
+    }
+    console.log('='.repeat(60));
+    
+  } catch (error) {
+    console.error('❌ Database error:', error.message);
+    console.error('\nFull error:', error);
+  } finally {
+    await pool.end();
+  }
+}
+
+debugVerification();

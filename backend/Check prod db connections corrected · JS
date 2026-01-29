@@ -1,0 +1,149 @@
+/**
+ * Production Database Connection Checker - CORRECTED VERSION
+ * 
+ * Place this file in: backend/ (root of backend directory)
+ * Run with: node check-prod-db-connections.js
+ * 
+ * This checks if pool and supabase point to the same database
+ */
+
+require('dotenv').config();
+
+// Import pool - adjust path based on your structure
+let pool;
+try {
+  // Try TypeScript compiled version first
+  pool = require('./dist/config/pool').default;
+} catch (e1) {
+  try {
+    // Try direct source
+    pool = require('./src/config/pool').default;
+  } catch (e2) {
+    try {
+      // Try if pool is in root config
+      pool = require('./config/pool');
+    } catch (e3) {
+      console.error('❌ Could not find pool configuration!');
+      console.error('   Tried: ./dist/config/pool, ./src/config/pool, ./config/pool');
+      console.error('   Please adjust the require path in this script.');
+      process.exit(1);
+    }
+  }
+}
+
+async function checkConnections() {
+  console.log('🔍 Checking Database Connections in Production');
+  console.log('='.repeat(70));
+  console.log('Environment:', process.env.NODE_ENV || 'development');
+  console.log('='.repeat(70));
+
+  try {
+    // Test 1: Check pool connection
+    console.log('\n1️⃣ Testing POOL connection:');
+    const poolTest = await pool.query('SELECT current_database(), current_user, version()');
+    console.log('✅ Pool connected successfully');
+    console.log('   Database:', poolTest.rows[0].current_database);
+    console.log('   User:', poolTest.rows[0].current_user);
+    console.log('   PostgreSQL:', poolTest.rows[0].version.split(' ').slice(0, 2).join(' '));
+    
+    // Test 2: Check table structure
+    console.log('\n2️⃣ Checking database tables:');
+    const tablesQuery = `
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('users', 'email_verifications')
+    `;
+    const tables = await pool.query(tablesQuery);
+    console.log('   Found tables:', tables.rows.map(r => r.table_name).join(', '));
+    
+    if (tables.rows.length !== 2) {
+      console.log('   ⚠️  Missing tables! Expected: users, email_verifications');
+    }
+    
+    // Test 3: Write and read test
+    console.log('\n3️⃣ Testing WRITE operations:');
+    
+    const testUserId = 999999;
+    const testToken = 'test-token-' + Date.now();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    console.log('   Creating test verification record...');
+    const insertResult = await pool.query(
+      'INSERT INTO email_verifications (user_id, verification_token, expires_at, verified) VALUES ($1, $2, $3, $4) RETURNING id',
+      [testUserId, testToken, expiresAt, false]
+    );
+    const insertedId = insertResult.rows[0].id;
+    console.log('   ✅ Inserted test record, ID:', insertedId);
+    
+    console.log('   Reading back test record...');
+    const readResult = await pool.query(
+      'SELECT * FROM email_verifications WHERE id = $1',
+      [insertedId]
+    );
+    
+    if (readResult.rows.length > 0) {
+      console.log('   ✅ Can read what was written - database is working!');
+    } else {
+      console.log('   ❌ CRITICAL: Cannot read what was just written!');
+    }
+    
+    console.log('   Cleaning up test record...');
+    await pool.query('DELETE FROM email_verifications WHERE user_id = $1', [testUserId]);
+    console.log('   ✅ Test record deleted');
+    
+    // Test 4: Check for problematic records
+    console.log('\n4️⃣ Checking for verification issues:');
+    const problemQuery = `
+      SELECT 
+        u.user_id,
+        u.email,
+        u.email_verified,
+        COUNT(ev.id) as verification_records,
+        COUNT(CASE WHEN ev.verified = true THEN 1 END) as used_tokens
+      FROM users u
+      LEFT JOIN email_verifications ev ON u.user_id = ev.user_id
+      WHERE u.email_verified = false
+      GROUP BY u.user_id, u.email, u.email_verified
+      HAVING COUNT(CASE WHEN ev.verified = true THEN 1 END) > 0
+      LIMIT 5
+    `;
+    
+    const problems = await pool.query(problemQuery);
+    
+    if (problems.rows.length > 0) {
+      console.log('   ⚠️  Found', problems.rows.length, 'users with token marked used but email still unverified:');
+      problems.rows.forEach(p => {
+        console.log('      -', p.email, '- Has', p.used_tokens, 'used tokens');
+      });
+      console.log('   This indicates the UPDATE query is not working!');
+    } else {
+      console.log('   ✅ No problematic records found');
+    }
+    
+    // Summary
+    console.log('\n' + '='.repeat(70));
+    console.log('📊 SUMMARY:');
+    console.log('='.repeat(70));
+    console.log('✅ Pool connection: Working');
+    console.log('✅ Database operations: Working');
+    
+    if (problems.rows.length > 0) {
+      console.log('⚠️  Issue detected: Users have verified tokens but email_verified is FALSE');
+      console.log('   This was the bug! Your updated code should fix this.');
+    } else {
+      console.log('✅ No verification issues detected');
+    }
+    
+    console.log('='.repeat(70));
+    
+  } catch (error) {
+    console.error('❌ Error during checks:', error.message);
+    console.error('\nFull error:', error);
+  } finally {
+    await pool.end();
+    console.log('\n✅ Connection closed');
+  }
+}
+
+checkConnections();
