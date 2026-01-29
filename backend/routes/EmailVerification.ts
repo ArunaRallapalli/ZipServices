@@ -217,7 +217,9 @@ console.log('✅ Verification token saved, ID:', insertResult.rows[0].id);
 router.post('/verify', async (req: Request, res: Response) => {
   const { email, token } = req.body;
 
-  console.log('🔐 Email verification attempt for:', email);
+  console.log('🔐 ===== EMAIL VERIFICATION START =====');
+  console.log('📧 Email:', email);
+  console.log('🔑 Token (first 10):', token.substring(0, 10));
 
   try {
     // Validate inputs
@@ -230,9 +232,13 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     // Get user
     const userQuery = 'SELECT user_id, email_verified FROM users WHERE email = $1';
+    console.log('📊 Running query:', userQuery, [email.toLowerCase()]);
+    
     const userResult = await pool.query(userQuery, [email.toLowerCase()]);
+    console.log('📊 Query returned rows:', userResult.rows.length);
 
     if (userResult.rows.length === 0) {
+      console.log('❌ User not found');
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -240,9 +246,13 @@ router.post('/verify', async (req: Request, res: Response) => {
     }
 
     const user = userResult.rows[0];
+    console.log('👤 User found:');
+    console.log('   user_id:', user.user_id, typeof user.user_id);
+    console.log('   email_verified:', user.email_verified, typeof user.email_verified);
 
     // Check if already verified
-    if (user.email_verified) {
+    if (user.email_verified === true) {
+      console.log('ℹ️ Email already verified - returning early');
       return res.status(200).json({
         success: true,
         message: 'Email already verified',
@@ -252,6 +262,7 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     // Hash the token to compare with database
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    console.log('🔐 Hashed token (first 10):', hashedToken.substring(0, 10));
 
     // Check if token exists and is valid
     const tokenQuery = `
@@ -261,9 +272,13 @@ router.post('/verify', async (req: Request, res: Response) => {
       ORDER BY id DESC
       LIMIT 1
     `;
+    console.log('📊 Token query params:', [user.user_id, hashedToken.substring(0, 10) + '...']);
+    
     const tokenResult = await pool.query(tokenQuery, [user.user_id, hashedToken]);
+    console.log('📊 Token query returned rows:', tokenResult.rows.length);
 
     if (tokenResult.rows.length === 0) {
+      console.log('❌ Token not found');
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired verification link'
@@ -271,9 +286,15 @@ router.post('/verify', async (req: Request, res: Response) => {
     }
 
     const verificationRecord = tokenResult.rows[0];
+    console.log('🎫 Verification record:');
+    console.log('   id:', verificationRecord.id);
+    console.log('   user_id:', verificationRecord.user_id);
+    console.log('   verified:', verificationRecord.verified);
+    console.log('   expires_at:', verificationRecord.expires_at);
 
     // Check if token already used
-    if (verificationRecord.verified) {
+    if (verificationRecord.verified === true) {
+      console.log('❌ Token already used');
       return res.status(400).json({
         success: false,
         message: 'This verification link has already been used'
@@ -282,32 +303,42 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     // Check if token expired
     if (new Date() > new Date(verificationRecord.expires_at)) {
+      console.log('❌ Token expired');
       return res.status(400).json({
         success: false,
         message: 'This verification link has expired. Please request a new one.'
       });
     }
 
-   // Mark email as verified in users table
-const updateResult = await pool.query(
-  'UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
-  [user.user_id]
-);
+    // ✅ ALL CHECKS PASSED - NOW UPDATE DATABASE
+    console.log('✅ All checks passed - updating database...');
 
-console.log('📊 UPDATE users result:', updateResult); // ADD THIS
-console.log('   Rows affected:', updateResult.rowCount); // ADD THIS
+    // Mark email as verified in users table
+    const updateUserQuery = 'UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING user_id, email_verified, updated_at';
+    console.log('📊 UPDATE users query:', updateUserQuery, [user.user_id]);
+    
+    const updateUserResult = await pool.query(updateUserQuery, [user.user_id]);
+    console.log('📊 UPDATE users result:');
+    console.log('   rowCount:', updateUserResult.rowCount);
+    console.log('   rows:', updateUserResult.rows);
 
-// Mark token as used
-const tokenUpdateResult = await pool.query(
-  'UPDATE email_verifications SET verified = true WHERE id = $1',
-  [verificationRecord.id]
-);
+    if (updateUserResult.rowCount === 0) {
+      console.log('❌ UPDATE users failed - no rows affected!');
+      throw new Error('Failed to update user - no rows affected');
+    }
 
-console.log('📊 UPDATE tokens result:', tokenUpdateResult); // ADD THIS
-console.log('   Rows affected:', tokenUpdateResult.rowCount); // ADD THIS
+    // Mark token as used
+    const updateTokenQuery = 'UPDATE email_verifications SET verified = true WHERE id = $1 RETURNING id, verified';
+    console.log('📊 UPDATE token query:', updateTokenQuery, [verificationRecord.id]);
+    
+    const updateTokenResult = await pool.query(updateTokenQuery, [verificationRecord.id]);
+    console.log('📊 UPDATE token result:');
+    console.log('   rowCount:', updateTokenResult.rowCount);
+    console.log('   rows:', updateTokenResult.rows);
 
-console.log('✅ Email verified successfully for user:', user.user_id); 
-    console.log('✅ Email verified successfully for user:', user.user_id);
+    console.log('✅ ===== EMAIL VERIFICATION SUCCESS =====');
+    console.log('   User ID:', user.user_id);
+    console.log('   Email:', email);
 
     res.status(200).json({
       success: true,
@@ -315,7 +346,8 @@ console.log('✅ Email verified successfully for user:', user.user_id);
     });
 
   } catch (error) {
-    console.error('❌ Email verification error:', error);
+    console.error('❌ ===== EMAIL VERIFICATION ERROR =====');
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to verify email'
