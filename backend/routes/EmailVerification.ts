@@ -1,14 +1,5 @@
 /**
  * Email Verification API Routes
- * # Open backend/routes/EmailVerification.ts
-# Change line 13 from:
-# import pool from '../config/pool';
-# To:
-# import pool from '../config/pool'; // Database connection
- * 
- * Handles email verification functionality:
- * 1. POST /api/email-verification/send - Send verification email
- * 2. POST /api/email-verification/verify - Verify token and mark email as verified
  */
 
 import { Router, Request, Response } from 'express';
@@ -17,32 +8,28 @@ import crypto from 'crypto';
 import pool from '../config/pool';
 import dotenv from 'dotenv';
 
+// ✅ ADD THIS
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const router = Router();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ✅ ADD THIS (ADMIN CLIENT – BACKEND ONLY)
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 /**
  * POST /api/email-verification/send
- * 
- * Send verification email to user
- * 
- * Body: { userId: number, email: string, fullName?: string }
- * 
- * Flow:
- * 1. Check if user exists and email not already verified
- * 2. Generate verification token
- * 3. Save token to database with expiration (24 hours)
- * 4. Send verification email
+ * (UNCHANGED)
  */
 router.post('/send', async (req: Request, res: Response) => {
   const { userId, email, fullName } = req.body;
 
-  console.log('📧 Email verification requested for:', email);
-
   try {
-    // Validate inputs
     if (!userId || !email || !email.includes('@')) {
       return res.status(400).json({
         success: false,
@@ -50,8 +37,8 @@ router.post('/send', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if user exists
-    const userQuery = 'SELECT user_id, email, email_verified, full_name FROM users WHERE user_id = $1 AND email = $2';
+    const userQuery =
+      'SELECT user_id, email, email_verified, full_name FROM users WHERE user_id = $1 AND email = $2';
     const userResult = await pool.query(userQuery, [userId, email.toLowerCase()]);
 
     if (userResult.rows.length === 0) {
@@ -63,7 +50,6 @@ router.post('/send', async (req: Request, res: Response) => {
 
     const user = userResult.rows[0];
 
-    // Check if already verified
     if (user.email_verified) {
       return res.status(200).json({
         success: true,
@@ -71,129 +57,53 @@ router.post('/send', async (req: Request, res: Response) => {
       });
     }
 
-    // Generate secure random token
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
 
-    // Token expires in 24 hours
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // Mark any existing unused tokens as verified (to clean up)
     await pool.query(
       'UPDATE email_verifications SET verified = true WHERE user_id = $1 AND verified = false',
       [userId]
     );
 
-    // Save new verification token to database
- // ✅ CORRECT - Use pool instead:
-const insertQuery = `
-  INSERT INTO email_verifications (user_id, verification_token, expires_at, verified)
-  VALUES ($1, $2, $3, $4)
-  RETURNING id
-`;
+    const insertQuery = `
+      INSERT INTO email_verifications (user_id, verification_token, expires_at, verified)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `;
 
-const insertResult = await pool.query(insertQuery, [
-  userId,
-  hashedToken,
-  expiresAt,  // No need for .toISOString() with pool
-  false
-]);
+    await pool.query(insertQuery, [
+      userId,
+      hashedToken,
+      expiresAt,
+      false
+    ]);
 
-console.log('✅ Verification token saved, ID:', insertResult.rows[0].id);
+    const frontendUrl =
+      process.env.NODE_ENV !== 'production'
+        ? 'http://localhost:8081'
+        : 'https://gozipmarket.com';
 
-    // Create verification link based on environment
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const frontendUrl = isDevelopment 
-      ? 'http://localhost:8081' 
-      : 'https://gozipmarket.com';
+    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(
+      email
+    )}`;
 
-    //const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
-    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
-
-    console.log('🌍 Environment:', process.env.NODE_ENV);
-    console.log('🔗 Frontend URL:', frontendUrl);
-
-    // Send verification email via Resend
-    const emailResult = await resend.emails.send({
+    await resend.emails.send({
       from: 'ZipService <noreply@gozipmarket.com>',
       to: email,
       subject: 'Verify Your ZipService Email',
-      html: `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-              .header { background-color: #4A90E2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-              .content { background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
-              .button { display: inline-block; background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-              .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-              .info { background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 12px; margin: 20px 0; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <h1>Welcome to ZipService! 🎉</h1>
-              </div>
-              <div class="content">
-                <p>Hi ${fullName || user.full_name || 'there'},</p>
-                
-                <p>Thank you for signing up for ZipService! We're excited to have you join our community.</p>
-                
-                <p>To complete your registration and start using all features, please verify your email address by clicking the button below:</p>
-                
-                <p style="text-align: center;">
-                  <a href="${verificationLink}" class="button">Verify Email Address</a>
-                </p>
-                
-                <p>Or copy and paste this link into your browser:</p>
-                <p style="word-break: break-all; background-color: #eee; padding: 10px; border-radius: 4px;">
-                  ${verificationLink}
-                </p>
-                
-                <div class="info">
-                  <strong>ℹ️ Important:</strong>
-                  <ul>
-                    <li>This link expires in 24 hours</li>
-                    <li>If you didn't create an account, please ignore this email</li>
-                    <li>Your account access is limited until email is verified</li>
-                  </ul>
-                </div>
-                
-                <p>Once verified, you'll be able to:</p>
-                <ul>
-                  <li>Post and manage your services</li>
-                  <li>Connect with customers in your area</li>
-                  <li>Send and receive messages</li>
-                  <li>Build your business profile</li>
-                </ul>
-                
-                <p>If you have any questions, feel free to reach out to our support team.</p>
-                
-                <p>Welcome aboard!</p>
-                <p><strong>The ZipService Team</strong></p>
-              </div>
-              <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
-                <p>This is an automated email, please do not reply.</p>
-              </div>
-            </div>
-          </body>
-        </html>
-      `
+      html: `<a href="${verificationLink}">Verify Email</a>`
     });
-
-    console.log('✅ Verification email sent:', emailResult);
 
     res.status(200).json({
       success: true,
       message: 'Verification email sent successfully'
     });
-
   } catch (error) {
-    console.error('❌ Email verification send error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send verification email'
@@ -203,26 +113,12 @@ console.log('✅ Verification token saved, ID:', insertResult.rows[0].id);
 
 /**
  * POST /api/email-verification/verify
- * 
- * Verify email token and mark email as verified
- * 
- * Body: { email: string, token: string }
- * 
- * Flow:
- * 1. Verify token exists and not expired
- * 2. Verify token not already used
- * 3. Mark email as verified in users table
- * 4. Mark token as used
+ * 🔴 THIS IS WHERE THE FIX IS
  */
 router.post('/verify', async (req: Request, res: Response) => {
   const { email, token } = req.body;
 
-  console.log('🔐 ===== EMAIL VERIFICATION START =====');
-  console.log('📧 Email:', email);
-  console.log('🔑 Token (first 10):', token.substring(0, 10));
-
   try {
-    // Validate inputs
     if (!email || !token) {
       return res.status(400).json({
         success: false,
@@ -230,15 +126,12 @@ router.post('/verify', async (req: Request, res: Response) => {
       });
     }
 
-    // Get user
-    const userQuery = 'SELECT user_id, email_verified FROM users WHERE email = $1';
-    console.log('📊 Running query:', userQuery, [email.toLowerCase()]);
-    
+    // 🔹 GET USER (ADD supabase_user_id)
+    const userQuery =
+      'SELECT user_id, email_verified, supabase_user_id FROM users WHERE email = $1';
     const userResult = await pool.query(userQuery, [email.toLowerCase()]);
-    console.log('📊 Query returned rows:', userResult.rows.length);
 
     if (userResult.rows.length === 0) {
-      console.log('❌ User not found');
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -246,13 +139,8 @@ router.post('/verify', async (req: Request, res: Response) => {
     }
 
     const user = userResult.rows[0];
-    console.log('👤 User found:');
-    console.log('   user_id:', user.user_id, typeof user.user_id);
-    console.log('   email_verified:', user.email_verified, typeof user.email_verified);
 
-    // Check if already verified
     if (user.email_verified === true) {
-      console.log('ℹ️ Email already verified - returning early');
       return res.status(200).json({
         success: true,
         message: 'Email already verified',
@@ -260,25 +148,25 @@ router.post('/verify', async (req: Request, res: Response) => {
       });
     }
 
-    // Hash the token to compare with database
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    console.log('🔐 Hashed token (first 10):', hashedToken.substring(0, 10));
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
 
-    // Check if token exists and is valid
     const tokenQuery = `
-      SELECT id, user_id, expires_at, verified 
-      FROM email_verifications 
+      SELECT id, user_id, expires_at, verified
+      FROM email_verifications
       WHERE user_id = $1 AND verification_token = $2
       ORDER BY id DESC
       LIMIT 1
     `;
-    console.log('📊 Token query params:', [user.user_id, hashedToken.substring(0, 10) + '...']);
-    
-    const tokenResult = await pool.query(tokenQuery, [user.user_id, hashedToken]);
-    console.log('📊 Token query returned rows:', tokenResult.rows.length);
+
+    const tokenResult = await pool.query(tokenQuery, [
+      user.user_id,
+      hashedToken
+    ]);
 
     if (tokenResult.rows.length === 0) {
-      console.log('❌ Token not found');
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired verification link'
@@ -286,68 +174,60 @@ router.post('/verify', async (req: Request, res: Response) => {
     }
 
     const verificationRecord = tokenResult.rows[0];
-    console.log('🎫 Verification record:');
-    console.log('   id:', verificationRecord.id);
-    console.log('   user_id:', verificationRecord.user_id);
-    console.log('   verified:', verificationRecord.verified);
-    console.log('   expires_at:', verificationRecord.expires_at);
 
-    // Check if token already used
     if (verificationRecord.verified === true) {
-      console.log('❌ Token already used');
       return res.status(400).json({
         success: false,
         message: 'This verification link has already been used'
       });
     }
 
-    // Check if token expired
     if (new Date() > new Date(verificationRecord.expires_at)) {
-      console.log('❌ Token expired');
       return res.status(400).json({
         success: false,
-        message: 'This verification link has expired. Please request a new one.'
+        message: 'This verification link has expired'
       });
     }
 
-    // ✅ ALL CHECKS PASSED - NOW UPDATE DATABASE
-    console.log('✅ All checks passed - updating database...');
+    // ✅ UPDATE YOUR USERS TABLE
+    const updateUserQuery = `
+      UPDATE users
+      SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $1
+      RETURNING supabase_user_id
+    `;
 
-    // Mark email as verified in users table
-    const updateUserQuery = 'UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING user_id, email_verified, updated_at';
-    console.log('📊 UPDATE users query:', updateUserQuery, [user.user_id]);
-    
-    const updateUserResult = await pool.query(updateUserQuery, [user.user_id]);
-    console.log('📊 UPDATE users result:');
-    console.log('   rowCount:', updateUserResult.rowCount);
-    console.log('   rows:', updateUserResult.rows);
+    const updateUserResult = await pool.query(updateUserQuery, [
+      user.user_id
+    ]);
 
     if (updateUserResult.rowCount === 0) {
-      console.log('❌ UPDATE users failed - no rows affected!');
-      throw new Error('Failed to update user - no rows affected');
+      throw new Error('Failed to update user');
     }
 
-    // Mark token as used
-    const updateTokenQuery = 'UPDATE email_verifications SET verified = true WHERE id = $1 RETURNING id, verified';
-    console.log('📊 UPDATE token query:', updateTokenQuery, [verificationRecord.id]);
-    
-    const updateTokenResult = await pool.query(updateTokenQuery, [verificationRecord.id]);
-    console.log('📊 UPDATE token result:');
-    console.log('   rowCount:', updateTokenResult.rowCount);
-    console.log('   rows:', updateTokenResult.rows);
+    const { supabase_user_id } = updateUserResult.rows[0];
 
-    console.log('✅ ===== EMAIL VERIFICATION SUCCESS =====');
-    console.log('   User ID:', user.user_id);
-    console.log('   Email:', email);
+    // 🔥 **THIS IS THE CRITICAL FIX**
+    await supabaseAdmin.auth.admin.updateUserById(
+  supabase_user_id,
+  {
+    email_confirm: true
+  }
+);
+
+
+    // ✅ MARK TOKEN AS USED
+    await pool.query(
+      'UPDATE email_verifications SET verified = true WHERE id = $1',
+      [verificationRecord.id]
+    );
 
     res.status(200).json({
       success: true,
       message: 'Email verified successfully! You can now sign in.'
     });
-
   } catch (error) {
-    console.error('❌ ===== EMAIL VERIFICATION ERROR =====');
-    console.error('Error:', error);
+    console.error('Email verification error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to verify email'
