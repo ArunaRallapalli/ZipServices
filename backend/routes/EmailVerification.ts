@@ -169,7 +169,7 @@ router.post('/send', async (req: Request, res: Response) => {
       `
     });
 
-    console.log('✅ Verification email sent:', emailResult.id);
+    console.log('✅ Verification email sent:', emailResult);
 
     res.status(200).json({
       success: true,
