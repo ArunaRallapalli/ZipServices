@@ -21,7 +21,7 @@ import jwt from "jsonwebtoken";
 import { supabase } from "../config/Supabase";
 
 import { AuthRequest } from "../middleware/auth";
-
+import pool from '../config/pool';
 
 const router = Router();
 
@@ -52,14 +52,19 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
   if (!email || !password) return res.status(400).json({ message: "Missing email or password" });
 
   try {
-    // 1️⃣ Fetch user by email from `users` table
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('user_id, email, password, email_verified, user_type')
-      .eq('email', email)
-      .single();
+    // 1️⃣ Fetch user by email from `users` table using pool (PostgreSQL)
+    const userResult = await pool.query(
+      'SELECT user_id, email, password, email_verified, user_type FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
 
-    if (userError || !user || !user.user_id || !user.password) {
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.user_id || !user.password) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
     
@@ -68,6 +73,9 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
 
     // ✅ CHECK IF EMAIL IS VERIFIED
+    console.log('🔐 Login attempt for:', email);
+    console.log('   email_verified:', user.email_verified, typeof user.email_verified);
+    
     if (!user.email_verified) {
       console.log('❌ Login blocked - email not verified:', email);
       return res.status(403).json({
@@ -91,11 +99,10 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     }
 
     // 4️⃣ Generate JWT
-    // FIXED: January 9, 2026 - Convert user_id to string for consistency
     const token = generateToken(String(user.user_id), owner.business_id);
     
     console.log('✅ Login successful for user:', user.user_id);
-    console.log('   Token generated with user_id:', String(user.user_id), typeof String(user.user_id));
+    console.log('   Email verified:', user.email_verified);
 
     // 5️⃣ Return token + business owner profile
     res.json({ 
