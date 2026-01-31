@@ -88,15 +88,21 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
     }
 
     // 3️⃣ Fetch business owner profile
-    const { data: owner, error: ownerError } = await supabase
-      .from('business_owners')
-      .select('*')
-      .eq('user_id', user.user_id)
-      .single();
+   // ✅ CORRECT - Using pool (same as user query)
+const ownerResult = await pool.query(
+  'SELECT * FROM business_owners WHERE user_id = $1',
+  [user.user_id]
+);
 
-    if (ownerError || !owner) {
-      return res.status(404).json({ message: "Business owner profile not found" });
-    }
+console.log('📊 Business owner query result:', ownerResult.rowCount);
+
+if (ownerResult.rows.length === 0) {
+  console.log('❌ No business owner found for user_id:', user.user_id);
+  return res.status(404).json({ message: "Business owner profile not found" });
+}
+
+const owner = ownerResult.rows[0];
+console.log('✅ Business owner found:', owner.business_id);
 
     // 4️⃣ Generate JWT
     const token = generateToken(String(user.user_id), owner.business_id);
