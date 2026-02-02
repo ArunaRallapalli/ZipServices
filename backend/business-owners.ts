@@ -25,7 +25,7 @@ import pool from './config/pool';
  /**
  * GET /business-owners/by-user/:user_id
  */
-router.get("/by-user/:user_id", authenticateToken, authorizeUser, async (req: AuthRequest, res: Response) => {
+router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res: Response) => {
   const { user_id } = req.params;
   const userId = parseInt(user_id, 10);
 
