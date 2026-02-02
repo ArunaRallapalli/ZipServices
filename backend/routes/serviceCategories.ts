@@ -40,10 +40,11 @@ router.get("/", async (req: Request, res: Response) => {
     
     console.log(`✅ Service Categories: Found ${data.length} categories`);
     
-    res.json({
-      success: true,
-      categories: data.map(row => row.category_name)
-    });
+ // ✅ FIXED - Returns full objects with display_order
+res.json({
+  success: true,
+  categories: data  // Return full objects
+});
   } catch (err: any) {
     console.error("❌ Error fetching service categories:", err);
     res.status(500).json({ 
