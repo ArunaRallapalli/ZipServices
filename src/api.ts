@@ -48,7 +48,7 @@ async function request<T = any>(
 ): Promise<T> {
   try {
     // Get token from AsyncStorage
-    const token = await AsyncStorage.getItem('userToken');
+    const token = await AsyncStorage.getItem('access_token');
     console.log('🔐 Token from AsyncStorage:', token ? 'exists' : 'missing');
     
     // Build headers with Content-Type
