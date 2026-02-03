@@ -125,156 +125,161 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
 
   const checkAuthStatus = useCallback(async (showDebug = false) => {
-    try {
-      const [token, userType, userId, userEmail, storedUserInfo] = await Promise.all([
-        AsyncStorage.getItem("userToken"),
-        AsyncStorage.getItem("userType"),
-        AsyncStorage.getItem("userId"),
-        AsyncStorage.getItem("userEmail"),
-        AsyncStorage.getItem("userInfo")
-      ]);
-       console.log('🔐 Aruna added this - Token from AsyncStorage:', token); // ← Add this here
-      if (showDebug) {
-        console.log("🔍 Auth Context Check:", {
-          hasToken: !!token,
-          userType,
-          userId: userId || 'null',
-          hasStoredInfo: !!storedUserInfo,
-          timestamp: new Date().toISOString()
-        });
-      }
- // User is authenticated only if all required values exist
-      const isAuthenticated = !!(token && userType && userId);
-      let userInfo: UserInfo | null = null;
+  try {
+    // ✅ FIX: Use 'access_token' instead of 'userToken'
+    const [token, userType, userId, userEmail, storedUserInfo] = await Promise.all([
+      AsyncStorage.getItem("access_token"),  // ← CHANGED
+      AsyncStorage.getItem("userType"),
+      AsyncStorage.getItem("userId"),
+      AsyncStorage.getItem("userEmail"),
+      AsyncStorage.getItem("userInfo")
+    ]);
 
-      if (isAuthenticated) {
-          // Attempt to restore stored userInfo
-        if (storedUserInfo) {
-          try {
-            userInfo = JSON.parse(storedUserInfo);
-            // Ensure user_id is properly set as a number
-            if (userInfo && userId) {
-              userInfo.user_id = parseInt(userId);
-            }
-          } catch (parseError) {
-            console.error("Error parsing stored user info:", parseError);
-          }
-        }
-        // Fallback: create minimal userInfo if none exists
-        // Always ensure we have at least basic user info if authenticated
-        if (!userInfo && userId) {
-          userInfo = {
-            user_id: parseInt(userId),
-            user_type: userType as 'customer' | 'business_owner',
-            email: userEmail || undefined,
-          };
-        }
-      }
-      // Build new auth state
-      const newAuthState = {
-        isAuthenticated,
-        userToken: token,
+    if (showDebug) {
+      console.log("🔍 Auth Context Check:", {
+        hasToken: !!token,
         userType,
-        userId: userId ? parseInt(userId) : null,
-        userInfo,
-        loading: false,
-        initialized: true
-      };
-// Update context state
-      setAuthState(newAuthState);
-
-      if (showDebug) {
-        console.log("✅ Auth state updated:", {
-          isAuthenticated,
-          hasUserInfo: !!userInfo,
-          userId: userInfo?.user_id || 'null',
-          userType: userInfo?.user_type || 'null'
-        });
-      }
-
-      return { isAuthenticated, userInfo };
-    } catch (error) {
-      // Fallback to logged-out state on error
-      console.error("Error checking auth status:", error);
-      const errorState = {
-        isAuthenticated: false,
-        userToken: null,
-        userType: null,
-        userId: null,
-        userInfo: null,
-        loading: false,
-        initialized: true
-      };
-      setAuthState(errorState);
-      return { isAuthenticated: false, userInfo: null };
+        userId: userId || 'null',
+        hasStoredInfo: !!storedUserInfo,
+        timestamp: new Date().toISOString()
+      });
     }
-  }, []); 
+
+    // User is authenticated only if all required values exist
+    const isAuthenticated = !!(token && userType && userId);
+    let userInfo: UserInfo | null = null;
+
+    if (isAuthenticated) {
+      // Attempt to restore stored userInfo
+      if (storedUserInfo) {
+        try {
+          userInfo = JSON.parse(storedUserInfo);
+          // Ensure user_id is properly set as a number
+          if (userInfo && userId) {
+            userInfo.user_id = parseInt(userId);
+          }
+        } catch (parseError) {
+          console.error("Error parsing stored user info:", parseError);
+        }
+      }
+      
+      // Fallback: create minimal userInfo if none exists
+      if (!userInfo && userId) {
+        userInfo = {
+          user_id: parseInt(userId),
+          user_type: userType as 'customer' | 'business_owner',
+          email: userEmail || undefined,
+        };
+      }
+    }
+
+    // Build new auth state
+    const newAuthState = {
+      isAuthenticated,
+      userToken: token,
+      userType,
+      userId: userId ? parseInt(userId) : null,
+      userInfo,
+      loading: false,
+      initialized: true
+    };
+
+    // Update context state
+    setAuthState(newAuthState);
+
+    if (showDebug) {
+      console.log("✅ Auth state updated:", {
+        isAuthenticated,
+        hasUserInfo: !!userInfo,
+        userId: userInfo?.user_id || 'null',
+        userType: userInfo?.user_type || 'null'
+      });
+    }
+
+    return { isAuthenticated, userInfo };
+  } catch (error) {
+    console.error("Error checking auth status:", error);
+    const errorState = {
+      isAuthenticated: false,
+      userToken: null,
+      userType: null,
+      userId: null,
+      userInfo: null,
+      loading: false,
+      initialized: true
+    };
+    setAuthState(errorState);
+    return { isAuthenticated: false, userInfo: null };
+  }
+}, []);
   /* --------------------------------------------------------------
    * signIn
    * --------------------------------------------------------------
    * Saves auth data to AsyncStorage and updates context state.
    */
+const signIn = useCallback(async (
+  token: string,
+  userType: string,
+  userId: number,
+  email?: string,
+  userInfo?: UserInfo
+) => {
+  try {
+    // ✅ FIX: Use 'access_token' instead of 'userToken'
+    const authData: [string, string][] = [
+      ['access_token', token],  // ← CHANGED
+      ['userType', userType],
+      ['userId', userId.toString()],
+      ['userEmail', email || ''],
+    ];
 
-  const signIn = useCallback(async (
-    token: string,
-    userType: string,
-    userId: number,
-    email?: string,
-    userInfo?: UserInfo
-  ) => {
-    try {
-      const authData: [string, string][] = [
-        ['userToken', token],
-        ['userType', userType],
-        ['userId', userId.toString()],
-        ['userEmail', email || ''],
-      ];
+    // Ensure userInfo has the correct user_id
+    const finalUserInfo = userInfo ? { ...userInfo, user_id: userId } : {
+      user_id: userId,
+      user_type: userType as 'customer' | 'business_owner',
+      email
+    };
 
-      // Ensure userInfo has the correct user_id
-      const finalUserInfo = userInfo ? { ...userInfo, user_id: userId } : {
-        user_id: userId,
-        user_type: userType as 'customer' | 'business_owner',
-        email
-      };
+    authData.push(['userInfo', JSON.stringify(finalUserInfo)]);
 
-      authData.push(['userInfo', JSON.stringify(finalUserInfo)]);
-// Persist to storage
-      await AsyncStorage.multiSet(authData);
+    // Persist to storage
+    await AsyncStorage.multiSet(authData);
 
-      const newAuthState = {
-        isAuthenticated: true,
-        userToken: token,
-        userType,
-        userId,
-        userInfo: finalUserInfo,
-        loading: false,
-        initialized: true
-      };
+    const newAuthState = {
+      isAuthenticated: true,
+      userToken: token,
+      userType,
+      userId,
+      userInfo: finalUserInfo,
+      loading: false,
+      initialized: true
+    };
 
-      setAuthState(newAuthState);
+    setAuthState(newAuthState);
 
-      console.log('✅ User signed in successfully:', {
-        hasToken: !!token,
-        hasUserInfo: !!finalUserInfo,
-        userId: finalUserInfo.user_id.toString(),
-        userType: finalUserInfo.user_type
-      });
+    console.log('✅ User signed in successfully:', {
+      hasToken: !!token,
+      hasUserInfo: !!finalUserInfo,
+      userId: finalUserInfo.user_id.toString(),
+      userType: finalUserInfo.user_type
+    });
 
-      Alert.alert(
-        'Welcome!',
-        'You have been signed in successfully!',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.error('Error signing in:', error);
-      Alert.alert(
-        'Sign In Error',
-        'Failed to save sign in information. Please try again.',
-        [{ text: 'OK' }]
-      );
-      throw error;
-    }
-  }, []);
+    Alert.alert(
+      'Welcome!',
+      'You have been signed in successfully!',
+      [{ text: 'OK' }]
+    );
+  } catch (error) {
+    console.error('Error signing in:', error);
+    Alert.alert(
+      'Sign In Error',
+      'Failed to save sign in information. Please try again.',
+      [{ text: 'OK' }]
+    );
+    throw error;
+  }
+}, []);
+  
   /* --------------------------------------------------------------
    * signOut
    * --------------------------------------------------------------
@@ -282,41 +287,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
 
   const signOut = useCallback(async () => {
-    try {
-      await AsyncStorage.multiRemove([
-        'userToken',
-        'userType',
-        'userId',
-        'userEmail',
-        'userInfo'
-      ]);
+  try {
+    // ✅ FIX: Clear 'access_token' instead of 'userToken'
+    await AsyncStorage.multiRemove([
+      'access_token',  // ← CHANGED
+      'userType',
+      'userId',
+      'userEmail',
+      'userInfo'
+    ]);
 
-      setAuthState({
-        isAuthenticated: false,
-        userToken: null,
-        userType: null,
-        userId: null,
-        userInfo: null,
-        loading: false,
-        initialized: true
-      });
+    setAuthState({
+      isAuthenticated: false,
+      userToken: null,
+      userType: null,
+      userId: null,
+      userInfo: null,
+      loading: false,
+      initialized: true
+    });
 
-      console.log('✅ User signed out successfully');
+    console.log('✅ User signed out successfully');
 
-      Alert.alert(
-        'Signed Out',
-        'You have been signed out successfully.',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.error('Error signing out:', error);
-      Alert.alert(
-        'Sign Out Error',
-        'There was an error signing out. Please try again.',
-        [{ text: 'OK' }]
-      );
-    }
-  }, []);
+    Alert.alert(
+      'Signed Out',
+      'You have been signed out successfully.',
+      [{ text: 'OK' }]
+    );
+  } catch (error) {
+    console.error('Error signing out:', error);
+    Alert.alert(
+      'Sign Out Error',
+      'There was an error signing out. Please try again.',
+      [{ text: 'OK' }]
+    );
+  }
+}, []);
   /* --------------------------------------------------------------
    * refreshAuth
    * --------------------------------------------------------------
@@ -384,6 +390,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       mounted = false;
     };
   }, []); 
+  /* --------------------------------------------------------------
+ * SESSION EXPIRATION DETECTION
+ * --------------------------------------------------------------
+ * Checks if token was cleared (expired) and redirects to login
+ */
+useEffect(() => {
+  // Check every 30 seconds if token exists but auth state says we're logged in
+  const intervalId = setInterval(async () => {
+    if (authState.isAuthenticated) {
+      const token = await AsyncStorage.getItem('access_token');
+      
+      if (!token) {
+        // Token was cleared (401 error from api.ts) but state still thinks we're logged in
+        console.log('⚠️ Token cleared - session expired, redirecting to login');
+        
+        // Update state to logged out
+        setAuthState({
+          isAuthenticated: false,
+          userToken: null,
+          userType: null,
+          userId: null,
+          userInfo: null,
+          loading: false,
+          initialized: true
+        });
+        
+        // Clear any remaining data
+        await AsyncStorage.multiRemove([
+          'userType',
+          'userId',
+          'userEmail',
+          'userInfo'
+        ]);
+        
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+  }, 30000); // Check every 30 seconds
+
+  return () => clearInterval(intervalId);
+}, [authState.isAuthenticated]);
   /* --------------------------------------------------------------
    * MEMOIZED CONTEXT VALUE
    * --------------------------------------------------------------
