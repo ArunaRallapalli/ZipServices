@@ -150,6 +150,14 @@ export const isValidZipCode = (zip: string): boolean => {
  * 3. Returns categories if successful
  * 4. Shows alert and returns fallback list on error
  */
+/**
+ * Fetches available service categories from the backend API
+ * Falls back to a hardcoded list if the API call fails
+ * UPDATED: January 5, 2026 - Using api.get() instead of fetch
+ * UPDATED: February 2, 2026 - Extract names from objects to preserve backend sort order
+ * 
+ * @returns Promise resolving to an array of category names (sorted by display_order)
+ */
 export const fetchCategories = async (): Promise<string[]> => {
   console.log("🔄 [searchUtils] Fetching categories from API...");
   
@@ -161,21 +169,28 @@ export const fetchCategories = async (): Promise<string[]> => {
   ];
 
   try {
-    // UPDATED: Using api client instead of fetch
     const data = await api.get('/api/service-categories');
     
     console.log("✅ [searchUtils] Categories data received:", data);
 
-    // Validate data structure and return categories
+    // Validate data structure
     if (data.success && Array.isArray(data.categories) && data.categories.length > 0) {
-      console.log(`✅ [searchUtils] Found ${data.categories.length} categories`);
-      return data.categories;
+      // ✅ NEW: Backend now returns objects with category_name and display_order
+      // Extract names while preserving the sort order from backend
+      const categoryNames = data.categories.map((cat: any) => 
+        typeof cat === 'string' ? cat : cat.category_name
+      );
+      
+      console.log(`✅ [searchUtils] Found ${categoryNames.length} categories (sorted by display_order)`);
+      console.log(`📋 [searchUtils] First 3: ${categoryNames.slice(0, 3).join(', ')}`);
+      console.log(`📋 [searchUtils] Last 3: ${categoryNames.slice(-3).join(', ')}`);
+      
+      return categoryNames;
     } else {
       console.warn("⚠️ [searchUtils] Invalid data structure");
       throw new Error("Invalid categories data structure");
     }
   } catch (error: any) {
-    // Log error and notify user
     console.error("❌ [searchUtils] Category fetch error:", error);
     Alert.alert(
       "Categories Loading Issue",
@@ -186,7 +201,6 @@ export const fetchCategories = async (): Promise<string[]> => {
     return fallbackCategories;
   }
 };
-
 /**
  * Fetches city and state information for a given ZIP code
  * Queries external API for real-time ZIP code data

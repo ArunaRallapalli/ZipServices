@@ -104,40 +104,32 @@ async function request<T = any>(
         hasToken: !!token
       });
 
-      // ✅ UPDATED: Special handling for auth errors (expired/invalid token)
+      // ✅ PERMANENT FIX: Better auth error handling
       if (response.status === 401) {
-        console.warn('🔐 Unauthorized - Token expired or invalid. Clearing auth data...');
+        console.warn('🔐 Unauthorized - Token expired or invalid');
         
-        // Clear ALL auth data from AsyncStorage
+        // Clear the actual token key being used
         try {
-          await AsyncStorage.multiRemove([
-            'userToken',
-            'userType',
-            'userId',
-            'userEmail',
-            'userInfo'
-          ]);
-          
-          // ✅ NEW: Set flag for graceful session expiration handling
-          await AsyncStorage.setItem('sessionExpired', 'true');
-          
-          console.log('✅ Expired auth data cleared from storage');
-          
-          // Don't throw error - let the app handle navigation gracefully
-          return {} as T;
-          
+          await AsyncStorage.removeItem('access_token');
+          console.log('✅ Cleared expired token');
         } catch (clearError) {
-          console.error('❌ Failed to clear auth data:', clearError);
+          console.error('❌ Failed to clear token:', clearError);
         }
+        
+        // Create error with status code
+        const error: any = new Error('Unauthorized');
+        error.status = 401;
+        throw error;
       }
       
+      // For other errors, throw with details
       const error = new Error(errorMessage);
       (error as any).status = response.status;
       (error as any).response = data;
       throw error;
     }
 
-    // Success logging
+    // ✅ SUCCESS CASE: Return data
     console.log(`✅ API Success: ${options.method || 'GET'} ${endpoint}`, {
       status: response.status,
       hasData: !!data
@@ -155,7 +147,6 @@ async function request<T = any>(
     throw error;
   }
 }
-
 /**
  * API Client Object with convenience methods
  */
@@ -326,4 +317,5 @@ export type BookingPayload = {
 /**
  * Export the API client as default
  */
+
 export default api;
