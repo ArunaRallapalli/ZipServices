@@ -26,7 +26,7 @@
 
 import { useAuth } from "../contexts/AuthContext";
 import api from "../api"; // ADDED: January 5, 2026
-
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ADD THIS LINE
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -265,7 +265,7 @@ const PostServiceScreen: React.FC = () => {
       setLoading(false);
     }
   };
-
+//until here
   const clearForm = () => {
     setTitle('');
     setDescription('');
@@ -275,6 +275,38 @@ const PostServiceScreen: React.FC = () => {
 
   const navigateToRequestCategory = () => {
     navigation.navigate('RequestServiceCategoryScreen' as never);
+  };
+    // ============ DEBUG FUNCTION - TEMPORARY ============
+  const clearAllAndRelogin = async () => {
+    try {
+      console.log('🧹 Clearing all auth data...');
+      
+      // Clear ALL possible auth keys
+      await AsyncStorage.multiRemove([
+        'userToken',      // Old key
+        'access_token',   // New key
+        'userType',
+        'userId',
+        'userEmail',
+        'userInfo',
+        '@zipservice_user'
+      ]);
+      
+      console.log('✅ All cleared');
+      
+      Alert.alert(
+        'Cleared',
+        'All auth data cleared. Please log in again.',
+        [
+          {
+            text: 'Go to Login',
+            onPress: () => navigation.navigate('BusinessOwnerHomeScreen' as never)
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Clear error:', error);
+    }
   };
 
   if (loadingUser || loadingCategories) {

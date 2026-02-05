@@ -391,6 +391,38 @@ const signIn = useCallback(async (
     };
   }, []); 
   /* --------------------------------------------------------------
+   * TOKEN MIGRATION (CLEANUP OLD TOKEN KEY)
+   * --------------------------------------------------------------
+   */
+  useEffect(() => {
+    const migrateOldTokens = async () => {
+      try {
+        // Check if we have old token key
+        const oldToken = await AsyncStorage.getItem('userToken');
+        const newToken = await AsyncStorage.getItem('access_token');
+        
+        if (oldToken && !newToken) {
+          // Migrate old token to new key
+          console.log('🔄 Migrating old token to new key...');
+          await AsyncStorage.setItem('access_token', oldToken);
+          await AsyncStorage.removeItem('userToken');
+          console.log('✅ Token migration complete');
+        }
+        
+        // Log current state
+        const currentToken = await AsyncStorage.getItem('access_token');
+        console.log('🔑 Current token status:', {
+          hasToken: !!currentToken,
+          tokenPreview: currentToken?.substring(0, 30) + '...'
+        });
+      } catch (error) {
+        console.error('❌ Token migration error:', error);
+      }
+    };
+    
+    migrateOldTokens();
+  }, []);
+  /* --------------------------------------------------------------
  * SESSION EXPIRATION DETECTION
  * --------------------------------------------------------------
  * Checks if token was cleared (expired) and redirects to login
