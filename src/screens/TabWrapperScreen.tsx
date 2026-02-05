@@ -1,26 +1,25 @@
 /**
  * BottomTabs Component - Main Tab Navigation for Business Owners
- * UPDATED: Post tab now shows landing page with 2 button options
+ * 
+ * Last Updated: February 5, 2026
+ * Changes:
+ * - Fixed API endpoints to include /api prefix
+ * - Fixed code structure (removed misplaced useEffect)
+ * - Fixed typo in console.log
+ * - Cleaned up session expiration handling
  * 
  * Overview:
  * This component creates the bottom tab navigation bar that appears at the bottom of the screen
  * after a business owner successfully logs in. It serves as the main navigation hub for the app.
  * 
  * Features:
- * -changed on jan 7th 2026 
- * 5 Tab Screens: Home, Post, Listings, Messages, Profile
+ * - 5 Tab Screens: Home, Post, Listings, Messages, Profile
  * - Real-time unread message badge on Messages tab (polls every 15 seconds)
- * - Dynamic screen rendering based on user authentication status (business_owner vs guest)
- * - Initial navigation support via route params
- * - Custom styled icons with active/inactive states
- * - Post tab includes stack navigator with 3 screens:
- *   1. PostLandingScreen (default) - Shows 2 button options
- *   2. PostServiceForm - For posting service offers
- *   3. RequestServiceCategory - For requesting new categories
- * 4. shows the unread message count on the messages icon badge (jan 2026)
+ * - Dynamic screen rendering based on user authentication status
+ * - Post tab includes stack navigator with 3 screens
  * 
  * Backend APIs Used:
- * - GET /messages/business-owner/:user_id - Fetches unread message count
+ * - GET /api/messages/business-owner/:user_id - Fetches unread message count
  */
 
 import React, { useState, useEffect } from 'react';
@@ -28,21 +27,20 @@ import { createResponsiveStyles } from '../Utils/globalStyles';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import { RootStackParamList, TabParamList } from "../navigation/MainStackNavigator";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Ionicons, AntDesign } from '@expo/vector-icons';
-//import API_URL from "../config/apiConfig";
-import api from '../api' // ADDED: January 5, 2026
+import api from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 // Import screen components for each tab
 import ListingsScreen from "./ListingsScreen";
 import BusinessOwnerProfileScreen from './Profile/BusinessOwnerProfileScreen';
 import SearchResultsScreen from "./SearchResultsScreen";
-import PostLandingScreen from "./PostLandingScreen"; // NEW - Landing page with 2 buttons
-import PostServiceScreen from "./PostServiceScreen"; // Form for posting services
-import RequestServiceCategoryScreen from "./Requestservicecategoryscreen"; // Form for requesting categories
+import PostLandingScreen from "./PostLandingScreen";
+import PostServiceScreen from "./PostServiceScreen";
+import RequestServiceCategoryScreen from "./Requestservicecategoryscreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import { useAuth } from "../contexts/AuthContext";
 import { MessagesPlaceholder, ProfilePlaceholder, PostPlaceholder } from "./auth/SignInPlaceholderScreen";
@@ -57,9 +55,9 @@ type TabWrapperRouteProp = RouteProp<RootStackParamList, 'TabWrapperScreen'>;
 /**
  * PostStackNavigator - Stack navigator for Post-related screens
  * 3 screens:
- * 1. PostLanding (default) - Shows 2 buttons: Post Service or Request Category
- * 2. PostServiceForm - The actual form to post a service
- * 3. RequestServiceCategory - The form to request a new category
+ * 1. PostLanding (default) - Shows 2 buttons
+ * 2. PostServiceForm - Form to post a service
+ * 3. RequestServiceCategory - Form to request a new category
  */
 const PostStackNavigator: React.FC = () => {
   return (
@@ -69,14 +67,12 @@ const PostStackNavigator: React.FC = () => {
         headerShown: false,
       }}
     >
-      {/* Landing Screen - Shows 2 button options */}
       <PostStack.Screen 
         name="PostLanding" 
         component={PostLandingScreen}
         options={{ headerTitle: 'Post Services' }}
       />
       
-      {/* Service Posting Form */}
       <PostStack.Screen 
         name="PostServiceForm" 
         component={PostServiceScreen}
@@ -93,7 +89,6 @@ const PostStackNavigator: React.FC = () => {
         }}
       />
       
-      {/* Category Request Form */}
       <PostStack.Screen 
         name="RequestServiceCategory" 
         component={RequestServiceCategoryScreen}
@@ -116,14 +111,7 @@ const PostStackNavigator: React.FC = () => {
 const BottomTabs: React.FC = () => {
   // Get user information from auth context
   const { userType, userInfo } = useAuth();
-  // DEBUG: Log stored access token
-  useEffect(() => {
-    const logStoredToken = async () => {
-      const storedToken = await AsyncStorage.getItem('access_token');
-      console.log('💾 Stored access_token in Tabwrapper:', storedToken);
-    };
-    logStoredToken();
-  }, []);
+  
   // Local state for unread message count (displayed as badge)
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -131,7 +119,20 @@ const BottomTabs: React.FC = () => {
   const route = useRoute<TabWrapperRouteProp>();
   const navigation = useNavigation();
 
-  // Handle initial screen navigation when component receives route params
+  /* ================================================================
+   * EFFECT 1: Debug - Log stored access token on mount
+   * ================================================================ */
+  useEffect(() => {
+    const logStoredToken = async () => {
+      const storedToken = await AsyncStorage.getItem('access_token');
+      console.log('💾 [BottomTabs] Stored access_token:', storedToken ? 'exists' : 'missing');
+    };
+    logStoredToken();
+  }, []);
+
+  /* ================================================================
+   * EFFECT 2: Handle initial screen navigation from route params
+   * ================================================================ */
   useEffect(() => {
     if (route.params?.screen) {
       requestAnimationFrame(() => {
@@ -140,92 +141,80 @@ const BottomTabs: React.FC = () => {
           try {
             tabNav.navigate(route.params.screen, route.params.params);
           } catch (error) {
-            console.log('Navigation error caught:', error);
+            console.log('[BottomTabs] Navigation error caught:', error);
           }
         }
       });
     }
   }, [route.params?.screen]);
+
+  /* ================================================================
+   * EFFECT 3: Check for session expiration on mount
+   * ================================================================ */
+  useEffect(() => {
+    const checkSessionExpired = async () => {
+      try {
+        const expired = await AsyncStorage.getItem('sessionExpired');
+        if (expired === 'true') {
+          console.log('🔐 [BottomTabs] Session expired detected - redirecting to Home');
+          
+          // Clear the flag
+          await AsyncStorage.removeItem('sessionExpired');
+          
+          // Navigate to Home tab
+          const tabNav = navigation as any;
+          if (tabNav && typeof tabNav.navigate === 'function') {
+            tabNav.navigate('Home');
+          }
+        }
+      } catch (error) {
+        console.error('[BottomTabs] Error checking session expiration:', error);
+      }
+    };
+    
+    checkSessionExpired();
+  }, []);
  
-  /**
-   * Fetch unread message count from backend
+  /* ================================================================
+   * EFFECT 4: Fetch and poll unread message count
    * Only runs when user is signed in (has user_id)
-   * Polls every 30 seconds to keep count updated
-   */
+   * Polls every 15 seconds to keep count updated
+   * ================================================================ */
   useEffect(() => {
     // Early return: Don't set up polling if no user is signed in
     if (!userInfo?.user_id) {
       console.log('[BottomTabs] No user signed in, skipping unread count setup');
-      setUnreadCount(0); // Reset count when no user
+      setUnreadCount(0);
       return;
     }
     
     const fetchUnreadCount = async () => {
-  try {
-    if (!userInfo?.user_id) return;
+      try {
+        if (!userInfo?.user_id) return;
 
-    const endpoint = `/messages/business-owner/${userInfo.user_id}`;
-    const messages = await api.get(endpoint); // ✅ Data returned directly
+        // ✅ FIXED: Added /api prefix
+        const endpoint = `/api/messages/business-owner/${userInfo.user_id}`;
+        const messages = await api.get(endpoint);
 
-    console.log('[BottomTabs] Unread messages raw data:', MessageScreenComponent);  // ✅
+        console.log('[BottomTabs] Unread messages raw data:', messages);
 
-    // Count only unread messages for this user
-    const unreadMessages = Array.isArray(messages)  // ✅
-      ? messages.filter(  // ✅
-          (msg: any) =>
-            Number(msg.receiver_id) === Number(userInfo.user_id) &&
-            msg.is_read === false
-        )
-      : [];
-/**
- * ============================================================================
- * ADD THIS TO BottomTabs.tsx
- * ============================================================================
- * 
- * Location: Around line 101, right after your existing useEffect hooks
- * Place it BEFORE the fetchUnreadCount useEffect (the one with unread message polling)
- * 
- * This code checks if a session has expired and redirects to Home tab
- */
+        // Count only unread messages for this user
+        const unreadMessages = Array.isArray(messages)
+          ? messages.filter(
+              (msg: any) =>
+                Number(msg.receiver_id) === Number(userInfo.user_id) &&
+                msg.is_read === false
+            )
+          : [];
 
-// ✅ NEW: Handle session expiration gracefully
-useEffect(() => {
-  const checkSessionExpired = async () => {
-    try {
-      const expired = await AsyncStorage.getItem('sessionExpired');
-      if (expired === 'true') {
-        console.log('🔐 Session expired detected - redirecting to Home');
-        
-        // Clear the flag
-        await AsyncStorage.removeItem('sessionExpired');
-        
-        // Navigate to Home tab (which will show Sign In for unauthenticated users)
-        const tabNav = navigation as any;
-        if (tabNav && typeof tabNav.navigate === 'function') {
-          tabNav.navigate('Home');
-        }
+        const count = unreadMessages.length;
+        console.log('[BottomTabs] ✅ Unread message count:', count);
+        setUnreadCount(count);
+      } catch (error: any) {
+        console.error('[BottomTabs] Error fetching unread count:', error.response?.status || error.message);
+        // Don't set count to 0 on error - keep previous value
       }
-    } catch (error) {
-      console.error('Error checking session expiration:', error);
-    }
-  };
-  
-  checkSessionExpired();
-}, []); // Empty dependency array - only runs on mount
-
-/**
- * ============================================================================
- * THAT'S IT! No other changes needed to BottomTabs.tsx
- * ============================================================================
- */
-    const count = unreadMessages.length;
-    console.log('[BottomTabs] ✅ Unread message count:', count);
-    setUnreadCount(count);
-  } catch (error: any) {
-    console.error('[BottomTabs] Error fetching unread count:', error.response?.status || error.message);
-  }
-};
-
+    };
     
     console.log('[BottomTabs] Setting up unread count polling for user:', userInfo.user_id);
     fetchUnreadCount(); // Initial fetch
@@ -236,15 +225,17 @@ useEffect(() => {
       fetchUnreadCount();
     }, 15000);
     
+    // Cleanup function
     return () => {
       console.log('[BottomTabs] Cleanup - clearing interval');
       clearInterval(interval);
     };
   }, [userInfo?.user_id]); // Only re-run when user_id changes
   
-  // Conditionally select which screen components to use based on user authentication
-  // Guests (not signed in) see placeholder screens that prompt them to sign in
-  // Business owners (signed in) see the full functional screens
+  /* ================================================================
+   * Screen Component Selection
+   * Conditionally select which components to use based on auth status
+   * ================================================================ */
   const MessageScreenComponent = userType === "business_owner"
     ? BusinessOwnerChatScreen
     : MessagesPlaceholder;
@@ -253,11 +244,13 @@ useEffect(() => {
     ? BusinessOwnerProfileScreen
     : ProfilePlaceholder;
 
-  // Post tab now uses stack navigator with landing page
   const PostScreenComponent = userType === "business_owner"
     ? PostStackNavigator
     : PostPlaceholder;
 
+  /* ================================================================
+   * Tab Navigator Render
+   * ================================================================ */
   return (
     <Tab.Navigator
       id={undefined}
@@ -273,7 +266,6 @@ useEffect(() => {
             case 'Listings':
               return <Ionicons name="list" size={iconSize} color={color} />;
             case 'Messages':
-              console.log('[BottomTabs] Rendering Messages icon, unreadCount:', unreadCount);
               return (
                 <View>
                   <AntDesign name="message1" size={iconSize} color={color} />
@@ -324,27 +316,32 @@ useEffect(() => {
         headerShown: false,
       })}
       screenListeners={{
-  tabPress: async () => {
-    if (!userInfo?.user_id) return;
+        tabPress: async () => {
+          // Refresh unread count when Messages tab is pressed
+          if (!userInfo?.user_id) return;
 
-    try {
-      const endpoint = `/messages/business-owner/${userInfo.user_id}`;
-      const messages = await api.get(endpoint);  // ✅ Data returned directly
+          try {
+            // ✅ FIXED: Added /api prefix
+            const endpoint = `/api/messages/business-owner/${userInfo.user_id}`;
+            const messages = await api.get(endpoint);
 
-      const count = Array.isArray(messages)
-        ? messages.filter(msg => Number(msg.receiver_id) === Number(userInfo.user_id) && msg.is_read === false).length
-        : 0;
+            const count = Array.isArray(messages)
+              ? messages.filter(
+                  (msg: any) => 
+                    Number(msg.receiver_id) === Number(userInfo.user_id) && 
+                    msg.is_read === false
+                ).length
+              : 0;
 
-      setUnreadCount(count);
-      console.log('[BottomTabs] ✅ Refreshed unread count on tabPress:', count);
-    } catch (err: any) {
-      console.error('[BottomTabs] Error refreshing unread count:', err.response?.status || err.message);
-    }
-  },
-}}
-
+            setUnreadCount(count);
+            console.log('[BottomTabs] ✅ Refreshed unread count on tabPress:', count);
+          } catch (err: any) {
+            console.error('[BottomTabs] Error refreshing unread count:', err.response?.status || err.message);
+          }
+        },
+      }}
     >
-      {/* Home Tab - ✅ Added explicit tabBarLabel */}
+      {/* Home Tab */}
       <Tab.Screen 
         name="Home" 
         component={SearchResultsScreen}
@@ -362,7 +359,7 @@ useEffect(() => {
         }}
       />
       
-      {/* Post Tab - ✅ Already has custom tabBarLabel */}
+      {/* Post Tab */}
       <Tab.Screen 
         name="Post"
         component={PostScreenComponent}
@@ -375,7 +372,7 @@ useEffect(() => {
         }}
       />
       
-      {/* Listings Tab - ✅ Added explicit tabBarLabel */}
+      {/* Listings Tab */}
       <Tab.Screen
         name="Listings"
         component={ListingsScreen}
@@ -388,7 +385,7 @@ useEffect(() => {
         }}
       />
       
-      {/* Messages Tab - ✅ Added explicit tabBarLabel */}
+      {/* Messages Tab */}
       <Tab.Screen 
         name="Messages"
         component={MessageScreenComponent}
@@ -401,7 +398,7 @@ useEffect(() => {
         }}
       />
       
-      {/* Profile Tab - ✅ Added explicit tabBarLabel */}
+      {/* Profile Tab */}
       <Tab.Screen 
         name="Profile" 
         component={ProfileScreenComponent}
@@ -413,10 +410,13 @@ useEffect(() => {
           )
         }}
       />
-   </Tab.Navigator>
+    </Tab.Navigator>
   );
 };
 
+/* ================================================================
+ * Styles
+ * ================================================================ */
 const styles = createResponsiveStyles({
   badge: {
     position: 'absolute',
