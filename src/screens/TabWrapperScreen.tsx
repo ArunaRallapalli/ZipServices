@@ -193,7 +193,7 @@ const BottomTabs: React.FC = () => {
         if (!userInfo?.user_id) return;
 
         // ✅ FIXED: Added /api prefix
-        const endpoint = `/api/messages/business-owner/${userInfo.user_id}`;
+        const endpoint = `/messages/business-owner/${userInfo.user_id}`;
         const messages = await api.get(endpoint);
 
         console.log('[BottomTabs] Unread messages raw data:', messages);
@@ -322,7 +322,7 @@ const BottomTabs: React.FC = () => {
 
           try {
             // ✅ FIXED: Added /api prefix
-            const endpoint = `/api/messages/business-owner/${userInfo.user_id}`;
+            const endpoint = `/messages/business-owner/${userInfo.user_id}`;
             const messages = await api.get(endpoint);
 
             const count = Array.isArray(messages)
