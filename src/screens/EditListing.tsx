@@ -86,7 +86,7 @@ const EditListing: React.FC = () => {
   const [saving, setSaving] = useState(false);
   
   // State: Service categories fetched from API
-  const [serviceCategories, setServiceCategories] = useState<string[]>([]);
+  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number }[]>([]);
   
   // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
@@ -138,43 +138,43 @@ const EditListing: React.FC = () => {
         // Fallback categories if API fails
         console.warn("Invalid category data, using fallback categories");
         setServiceCategories([
-          "Cleaning",
-          "Plumbing",
-          "Electrical",
-          "Landscaping",
-          "Home Repair",
-          "Pet Care",
-          "Moving",
-          "Tutoring",
-          "Photography",
-          "Catering",
-          "Beauty",
-          "Decoration",
-          "Tailoring",
-          "Other",
-        ]);
+  { category_name: 'Cleaning', display_order: 1 },
+  { category_name: 'Plumbing', display_order: 2 },
+  { category_name: 'Electrical', display_order: 3 },
+  { category_name: 'Landscaping', display_order: 4 },
+  { category_name: 'Home Repair', display_order: 5 },
+  { category_name: 'Pet Care', display_order: 6 },
+  { category_name: 'Moving', display_order: 7 },
+  { category_name: 'Tutoring', display_order: 8 },
+  { category_name: 'Photography', display_order: 9 },
+  { category_name: 'Catering', display_order: 10 },
+  { category_name: 'Beauty', display_order: 11 },
+  { category_name: 'Decoration', display_order: 12 },
+  { category_name: 'Tailoring', display_order: 13 },
+  { category_name: 'Other', display_order: 14 },
+]);
       }
     } catch (error) {
-      console.error("Error fetching service categories:", error);
-      // Use fallback categories on error
-      setServiceCategories([
-        "Cleaning",
-        "Plumbing",
-        "Electrical",
-        "Landscaping",
-        "Home Repair",
-        "Pet Care",
-        "Moving",
-        "Tutoring",
-        "Photography",
-        "Catering",
-        "Beauty",
-        "Decoration",
-        "Tailoring",
-        "Other",
-      ]);
-    }
-  };
+  console.error("Error fetching service categories:", error);
+  // Use fallback categories on error
+  setServiceCategories([
+    { category_name: 'Cleaning', display_order: 1 },
+    { category_name: 'Plumbing', display_order: 2 },
+    { category_name: 'Electrical', display_order: 3 },
+    { category_name: 'Landscaping', display_order: 4 },
+    { category_name: 'Home Repair', display_order: 5 },
+    { category_name: 'Pet Care', display_order: 6 },
+    { category_name: 'Moving', display_order: 7 },
+    { category_name: 'Tutoring', display_order: 8 },
+    { category_name: 'Photography', display_order: 9 },
+    { category_name: 'Catering', display_order: 10 },
+    { category_name: 'Beauty', display_order: 11 },
+    { category_name: 'Decoration', display_order: 12 },
+    { category_name: 'Tailoring', display_order: 13 },
+    { category_name: 'Other', display_order: 14 },
+  ]);
+}
+  }
 
   /**
    * Fetch the existing post data from the backend by postId
@@ -481,7 +481,11 @@ const EditListing: React.FC = () => {
                 <Picker.Item label="Select a category..." value="" />
                 {/* Map through dynamically loaded categories */}
                 {serviceCategories.map((category) => (
-                  <Picker.Item key={category} label={category} value={category} />
+                  <Picker.Item 
+    key={category.category_name} 
+    label={category.category_name} 
+    value={category.category_name} 
+  />
                 ))}
               </Picker>
             </View>
