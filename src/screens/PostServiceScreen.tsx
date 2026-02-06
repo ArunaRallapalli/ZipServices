@@ -343,38 +343,7 @@ const PostServiceScreen: React.FC = () => {
   const navigateToRequestCategory = () => {
     navigation.navigate('RequestServiceCategoryScreen' as never);
   };
-    // ============ DEBUG FUNCTION - TEMPORARY ============
-  const clearAllAndRelogin = async () => {
-    try {
-      console.log('🧹 Clearing all auth data...');
-      
-      // Clear ALL possible auth keys
-      await AsyncStorage.multiRemove([
-        'userToken',      // Old key
-        'access_token',   // New key
-        'userType',
-        'userId',
-        'userEmail',
-        'userInfo',
-        '@zipservice_user'
-      ]);
-      
-      console.log('✅ All cleared');
-      
-      Alert.alert(
-        'Cleared',
-        'All auth data cleared. Please log in again.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => navigation.navigate('BusinessOwnerHomeScreen' as never)
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('❌ Clear error:', error);
-    }
-  };
+    
 
   if (loadingUser || loadingCategories) {
     return (
@@ -437,25 +406,7 @@ const PostServiceScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.form}>
-           {/* ============ TEMPORARY DEBUG BUTTON ============ */}
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#FF6B35',
-              padding: 15,
-              borderRadius: 8,
-              marginBottom: 20,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            onPress={clearAllAndRelogin}
-          >
-            <Ionicons name="trash-outline" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 8 }}>
-              🧹 Clear All Auth & Force Re-login (DEBUG)
-            </Text>
-          </TouchableOpacity>
-          {/* ============================================== */}
+          
           
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Title *</Text>
