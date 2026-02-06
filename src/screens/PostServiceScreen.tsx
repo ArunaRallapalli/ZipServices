@@ -61,8 +61,8 @@ const PostServiceScreen: React.FC = () => {
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
-  const [serviceCategories, setServiceCategories] = useState<string[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number }[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -126,11 +126,21 @@ const PostServiceScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Error loading service categories:', error);
-      // Fallback categories
+      // Fallback categories (objects matching { category_name, display_order })
       setServiceCategories([
-        'Cleaning', 'Plumbing', 'Electrical', 'Landscaping',
-        'Home Repair', 'Pet Care', 'Moving', 'Tutoring',
-        'Photography', 'Catering', 'Beauty Services', 'Tech Support', 'Other'
+        { category_name: 'Cleaning', display_order: 1 },
+        { category_name: 'Plumbing', display_order: 2 },
+        { category_name: 'Electrical', display_order: 3 },
+        { category_name: 'Landscaping', display_order: 4 },
+        { category_name: 'Home Repair', display_order: 5 },
+        { category_name: 'Pet Care', display_order: 6 },
+        { category_name: 'Moving', display_order: 7 },
+        { category_name: 'Tutoring', display_order: 8 },
+        { category_name: 'Photography', display_order: 9 },
+        { category_name: 'Catering', display_order: 10 },
+        { category_name: 'Beauty Services', display_order: 11 },
+        { category_name: 'Tech Support', display_order: 12 },
+        { category_name: 'Other', display_order: 13 }
       ]);
     } finally {
       setLoadingCategories(false);
@@ -218,12 +228,38 @@ const PostServiceScreen: React.FC = () => {
     try {
       setLoading(true);
       
+      // ============ COMPREHENSIVE DEBUG LOGGING ============
+      console.log('════════════════════════════════════════');
+      console.log('🚀 ATTEMPTING TO POST SERVICE');
+      console.log('════════════════════════════════════════');
+      
+      // Check all auth sources
+      const tokenFromStorage = await AsyncStorage.getItem('access_token');
+      const oldTokenFromStorage = await AsyncStorage.getItem('userToken');
+      const userFromUserContext = await AsyncStorage.getItem('@zipservice_user');
+      
+      console.log('📊 Auth Status Check:');
+      console.log('  AuthContext.isAuthenticated:', isAuthenticated);
+      console.log('  AuthContext.userId:', userId);
+      console.log('  AuthContext.userType:', userType);
+      console.log('  Token (access_token) in storage:', !!tokenFromStorage);
+      console.log('  Token preview:', tokenFromStorage?.substring(0, 30) + '...');
+      console.log('  Old token (userToken) exists:', !!oldTokenFromStorage);
+      console.log('  UserContext data exists:', !!userFromUserContext);
+      
+      if (!tokenFromStorage) {
+        console.error('❌ CRITICAL: No token found in AsyncStorage!');
+        Alert.alert('Error', 'No authentication token found. Please log in again.');
+        navigation.navigate('BusinessOwnerHomeScreen' as never);
+        return;
+      }
+      
       let posterType = userType || 'guest';
 
       const servicePostData = {
         user_id: userId,
         poster_type: posterType,
-        post_type: 'offer', // Always 'offer' now
+        post_type: 'offer',
         title: title.trim(),
         description: description.trim(),
         service_category: serviceCategory,
@@ -233,10 +269,17 @@ const PostServiceScreen: React.FC = () => {
         contact_email: contactEmail.trim(),
       };
 
-      console.log('📤 Submitting service offer:', servicePostData);
+      console.log('📤 Submitting service offer:');
+      console.log('  Endpoint: POST /api/service-posts');
+      console.log('  Data:', JSON.stringify(servicePostData, null, 2));
+      console.log('════════════════════════════════════════');
 
-      // UPDATED: Using api client instead of fetch
       const data = await api.post('/api/service-posts', servicePostData);
+
+      console.log('════════════════════════════════════════');
+      console.log('✅ SUCCESS!');
+      console.log('  Response:', data);
+      console.log('════════════════════════════════════════');
 
       clearForm();
       
@@ -259,13 +302,37 @@ const PostServiceScreen: React.FC = () => {
         ]
       );
     } catch (error: any) {
-      console.error('❌ Error creating service post:', error);
-      Alert.alert('Error', error.message || 'Failed to create service post. Please try again.');
+      console.log('════════════════════════════════════════');
+      console.error('❌ ERROR POSTING SERVICE');
+      console.error('  Error type:', error.name);
+      console.error('  Error message:', error.message);
+      console.error('  Status code:', error.status);
+      console.error('  Response data:', error.response);
+      console.error('  Full error:', error);
+      console.log('════════════════════════════════════════');
+      
+      // More specific error messages
+      let errorMessage = 'Failed to create service post. Please try again.';
+      
+      if (error.status === 401) {
+        errorMessage = 'Your session has expired. Please log in again.';
+        // Force navigation to login
+        setTimeout(() => {
+          navigation.navigate('BusinessOwnerHomeScreen' as never);
+        }, 2000);
+      } else if (error.status === 403) {
+        errorMessage = 'You do not have permission to perform this action.';
+      } else if (error.response?.error) {
+        errorMessage = error.response.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
-//until here
   const clearForm = () => {
     setTitle('');
     setDescription('');
@@ -370,6 +437,26 @@ const PostServiceScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.form}>
+           {/* ============ TEMPORARY DEBUG BUTTON ============ */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#FF6B35',
+              padding: 15,
+              borderRadius: 8,
+              marginBottom: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onPress={clearAllAndRelogin}
+          >
+            <Ionicons name="trash-outline" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 8 }}>
+              🧹 Clear All Auth & Force Re-login (DEBUG)
+            </Text>
+          </TouchableOpacity>
+          {/* ============================================== */}
+          
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Title *</Text>
             <TextInput
@@ -411,8 +498,12 @@ const PostServiceScreen: React.FC = () => {
               >
                 <Picker.Item label="Select a category..." value="" />
                 {serviceCategories.map((category) => (
-                  <Picker.Item key={category} label={category} value={category} />
-                ))}
+                    <Picker.Item 
+                      key={category.category_name} 
+                      label={category.category_name} 
+                      value={category.category_name} 
+                    />
+                  ))}
               </Picker>
             </View>
           </View>
