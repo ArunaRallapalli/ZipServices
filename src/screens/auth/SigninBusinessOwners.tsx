@@ -404,6 +404,8 @@ console.log('💾 Stored access_token:', storedToken);
               autoComplete="email"
               placeholder="Enter your email"
               editable={!loading}
+              onSubmitEditing={handleForgotPassword}  // ✅ ADD THIS LINE
+  returnKeyType="send"  // ✅ ADD THIS LINE (shows "Send" on keyboard)
             />
 
             <View style={styles.buttonContainer}>
@@ -458,6 +460,8 @@ console.log('💾 Stored access_token:', storedToken);
               secureTextEntry
               placeholder="Re-enter new password"
               editable={!loading}
+               onSubmitEditing={handleResetPassword}  // ✅ ADD THIS LINE
+              returnKeyType="done"  // ✅ ADD THIS LINE (shows "Done" on keyboard)
             />
 
             <Text style={styles.helperText}>
@@ -501,6 +505,8 @@ console.log('💾 Stored access_token:', storedToken);
               autoComplete="password"
               placeholder="Enter your password"
               editable={!loading}
+               onSubmitEditing={handleLogin}  // ✅ ADD THIS LINE
+  returnKeyType="go"  // ✅ ADD THIS LINE (shows "Go" on keyboard)
             />
 
             <TouchableOpacity 

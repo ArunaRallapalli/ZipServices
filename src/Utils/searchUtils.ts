@@ -12,6 +12,7 @@
  * - Location data resolution from ZIP codes using external API
  * - ZIP code validation
  * - Popular category configuration with icons and colors
+ * - Support for radius-based searching until 3330 miles (in US from the zip code)
  * 
  * UPDATED: Now supports radius-based search with distance calculation
  * Backend returns posts sorted by distance with mile information
@@ -284,7 +285,7 @@ export const fetchLocationFromZip = async (zipCode: string): Promise<LocationDat
 export const searchServicePosts = async (params: SearchParams): Promise<SearchResults> => {
   console.log("🔍 [searchUtils] Searching with params:", params);
 
-  const { serviceCategory, zipCode, radius = 25 } = params;
+  const { serviceCategory, zipCode, radius = 3330 } = params;
 
   // Initialize result arrays
   let allPosts: ServicePost[] = [];

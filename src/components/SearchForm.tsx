@@ -179,6 +179,8 @@ const SearchForm: React.FC<SearchFormProps> = ({
           value={zipCode}
           onChangeText={onZipChange}
           maxLength={5}
+          onSubmitEditing={handleSearchWithValidation}  // ✅ ADD THIS LINE
+  returnKeyType="search"  // ✅ ADD THIS LINE (shows "Search" on keyboard)
         />
         
         <TouchableOpacity
