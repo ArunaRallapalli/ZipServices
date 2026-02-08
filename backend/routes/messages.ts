@@ -179,18 +179,19 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
 
   try {
     const { data, error } = await supabase
-      .from('messages')
-      .select(`
-        id,
-        sender_id,
-        receiver_id,
-        message_text,
-        is_read,
-        created_at,
-        sender:users!messages_sender_id_fkey(
-          email,
-          business_owners(business_name)
-        ),
+  .from('messages')
+  .select(`
+    id,
+    sender_id,
+    receiver_id,
+    message_text,
+    is_read,
+    created_at,
+    metadata,
+    sender:users!messages_sender_id_fkey(
+      email,
+      business_owners(business_name)
+    ),
         receiver:users!messages_receiver_id_fkey(
           email,
           business_owners(business_name)
@@ -198,7 +199,12 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
       `)
       .or(`receiver_id.eq.${id},sender_id.eq.${id}`)
       .order('created_at', { ascending: true });
-
+      // ✅ ADD THIS DEBUG LOG
+  console.log(`[business-owner messages] Query for user ${id}:`, {
+    dataLength: data?.length || 0,
+    firstMessage: data?.[0] || 'none',
+    error: error
+  });
     const messages = (data || []).map((row: any) => ({
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
@@ -206,6 +212,7 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
       message_text: row.message_text,
       is_read: row.is_read,
       created_at: row.created_at,
+      metadata: row.metadata,  //
       sender_name: row.sender?.business_owners?.[0]?.business_name,
       sender_email: row.sender?.email,
       receiver_name: row.receiver?.business_owners?.[0]?.business_name,
@@ -368,7 +375,7 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
   console.log('  req.user.user_id (from token):', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
   console.log('  Match?', String(currentUserId) === String(req.user?.user_id));
   
-  if (String(currentUserId) !== String(req.user?.user_id)) {  // ✅ FIXED
+  if (String(currentUserId) !== String(req.user?.user_id)) {
     console.log('❌ Authorization failed - user IDs do not match');
     res.status(403).json({
       success: false,
@@ -382,10 +389,17 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
   console.log(`Fetching messages between currentUser: ${currentId} and otherUser: ${otherId}`);
 
   try {
+    // ✅ FIXED: February 7, 2026 - Explicitly include metadata column
     const { data, error } = await supabase
       .from('messages')
       .select(`
-        *,
+        id,
+        sender_id,
+        receiver_id,
+        message_text,
+        created_at,
+        is_read,
+        metadata,
         sender:users!messages_sender_id_fkey(
           business_owners(business_name)
         )
@@ -423,7 +437,6 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
-
 /**
  * POST /messages/
  * 

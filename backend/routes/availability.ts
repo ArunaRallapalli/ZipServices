@@ -318,7 +318,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
         .insert({
           sender_id: customerId,
           receiver_id: serviceProviderId,
-          message_text: `🔔 New booking request for ${bookingDate}. Check your calendar to confirm!`,
+          message_text: `🔔 New booking request for ${bookingDate}. Go to Calendar in My Listing tab to confirm or decline.`,
           is_read: false,
           created_at: new Date().toISOString()
         });
@@ -405,6 +405,7 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
 });
 
 /**
+/**
  * PATCH /api/availability/bookings/:bookingId
  * 
  * Purpose: Update booking status (provider only)
@@ -426,7 +427,7 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
     // Check if this booking belongs to the authenticated user
     const { data: existingBooking, error: fetchError } = await supabase
       .from('bookings')
-      .select('provider_user_id')
+      .select('provider_user_id, booking_date, customer_user_id')
       .eq('booking_id', bookingId)
       .single();
 
@@ -460,32 +461,50 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
     // Send system message to customer when status changes
     try {
       let chatMessage = '';
+      let messageMetadata: any = null;
       
       if (status === 'confirmed') {
         const bookingDate = data.booking_date.split('T')[0];
         chatMessage = `✅ Your booking for ${bookingDate} has been confirmed! See you then!`;
       } else if (status === 'completed') {
-        chatMessage = `🎉 Your service has been completed! Please leave a review on the search page. Thank you!`;
+        chatMessage = `🎉 Your service has been completed! Please leave a review. Thank you!`;
+        
+        // ✅ Add metadata for review button
+        messageMetadata = {
+          type: 'booking_completed',
+          booking_id: parseInt(bookingId, 10),
+          provider_user_id: parseInt(data.provider_user_id, 10),
+          customer_user_id: parseInt(data.customer_user_id, 10),
+          booking_date: data.booking_date
+        };
       } else if (status === 'cancelled') {
         const bookingDate = data.booking_date.split('T')[0];
         chatMessage = `❌ Your booking for ${bookingDate} has been cancelled by the provider.`;
       }
 
+      // Send the message with optional metadata
       if (chatMessage) {
+        const messageData: any = {
+          sender_id: data.provider_user_id,
+          receiver_id: data.customer_user_id,
+          message_text: chatMessage,
+          is_read: false,
+          created_at: new Date().toISOString()
+        };
+
+        // Add metadata only if it exists
+        if (messageMetadata) {
+          messageData.metadata = messageMetadata;
+        }
+
         const { error: messageError } = await supabase
           .from('messages')
-          .insert({
-            sender_id: data.provider_user_id,
-            receiver_id: data.customer_user_id,
-            message_text: chatMessage,
-            is_read: false,
-            created_at: new Date().toISOString()
-          });
+          .insert(messageData);
 
         if (messageError) {
           console.error('⚠️ [Booking] Could not send chat notification:', messageError);
         } else {
-          console.log(`✅ [Booking] Chat notification sent to customer (status: ${status})`);
+          console.log(`✅ [Booking] Chat notification sent to customer (status: ${status})${messageMetadata ? ' with metadata' : ''}`);
         }
       }
     } catch (msgError) {
@@ -515,5 +534,4 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
     res.status(500).json({ success: false, error: 'Failed to update booking' });
   }
 });
-
 export default router;

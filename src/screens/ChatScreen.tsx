@@ -1,9 +1,9 @@
 /**
- * Last Updated: January 9, 2026
+ * Last Updated: February 7, 2026
  * Changes: 
- * - Calendar button shows AvailabilityCalendarWidget as small right-side overlay
- * - Widget appears as 360px wide popup, doesn't cover full screen
- * - Tap backdrop to close widget
+ * - Added review button for completed booking messages
+ * - Messages with metadata.type='booking_completed' show "Leave Review" button
+ * - Integrated WriteReviewModal for in-chat reviews
  * 
  * ChatScreen Component
  *
@@ -34,6 +34,7 @@ import api from "../api";
 import { Alert } from "../Utils/Alert";
 import { BackButton } from "../components/BackButton";
 import AvailabilityCalendarWidget from "../components/AvailabilityCalendarWidget";
+import WriteReviewModal from "../components/Writereviewmodal"; // ✅ NEW
 import { createResponsiveStyles } from "../Utils/globalStyles";
 
 /* ───────────────────────── Types ───────────────────────── */
@@ -51,6 +52,13 @@ interface Message {
   message_text: string;
   created_at: string;
   is_read?: boolean;
+  metadata?: {
+    type?: string;
+    booking_id?: number;
+    provider_user_id?: number;
+    customer_user_id?: number;
+    booking_date?: string;
+  };
 }
 
 /* ───────────────────── Component ───────────────────── */
@@ -66,6 +74,10 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  
+  // ✅ NEW: Review modal state
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [selectedBookingForReview, setSelectedBookingForReview] = useState<any>(null);
 
   const scrollRef = useRef<FlatList<Message>>(null);
 
@@ -170,26 +182,68 @@ export default function ChatScreen() {
     return () => clearInterval(interval);
   }, [currentUserId, otherUserId]);
 
+  /* ───────────────── NEW: Review Handler ───────────────── */
+  
+  const handleLeaveReview = (message: Message) => {
+    if (!message.metadata) return;
+    
+    const booking = {
+      booking_id: message.metadata.booking_id!,
+      provider_user_id: message.metadata.provider_user_id!,
+      customer_user_id: message.metadata.customer_user_id!,
+      booking_date: message.metadata.booking_date!,
+      provider_name: otherUserName
+    };
+    
+    console.log('📝 Opening review modal for booking:', booking);
+    setSelectedBookingForReview(booking);
+    setShowReviewModal(true);
+  };
+
+  const handleReviewSuccess = () => {
+    Alert.alert('Success', 'Thank you for your review!');
+    setShowReviewModal(false);
+    setSelectedBookingForReview(null);
+  };
+
   /* ───────────────── Render Helpers ───────────────── */
 
-  const renderItem = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.messageBubble,
-        item.sender_id === currentUserId
-          ? styles.sender
-          : styles.receiver,
-      ]}
-    >
-      <Text style={styles.messageText}>{item.message_text}</Text>
-      <Text style={styles.timestamp}>
-        {new Date(item.created_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </Text>
-    </View>
-  );
+  const renderItem = ({ item }: { item: Message }) => {
+    const isCompletionMessage = 
+      item.metadata?.type === 'booking_completed' && 
+      item.sender_id === otherUserId &&
+      item.receiver_id === currentUserId;
+
+    return (
+      <View
+        style={[
+          styles.messageBubble,
+          item.sender_id === currentUserId
+            ? styles.sender
+            : styles.receiver,
+        ]}
+      >
+        <Text style={styles.messageText}>{item.message_text}</Text>
+        <Text style={styles.timestamp}>
+          {new Date(item.created_at).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+        
+        {/* ✅ NEW: Review Button for Completion Messages */}
+        {isCompletionMessage && (
+          <TouchableOpacity
+            style={styles.reviewButton}
+            onPress={() => handleLeaveReview(item)}
+          >
+            <Ionicons name="star" size={16} color="#FFD700" />
+            <Text style={styles.reviewButtonText}>Leave Review</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   /* ───────────────── UI ───────────────── */
 
@@ -272,6 +326,17 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ✅ NEW: Review Modal */}
+      <WriteReviewModal
+        visible={showReviewModal}
+        booking={selectedBookingForReview}
+        onClose={() => {
+          setShowReviewModal(false);
+          setSelectedBookingForReview(null);
+        }}
+        onSuccess={handleReviewSuccess}
+      />
     </SafeAreaView>
   );
 }
@@ -366,6 +431,25 @@ const styles = createResponsiveStyles({
     color: "#e5e7eb",
     marginTop: 4,
     textAlign: "right",
+  },
+
+  // ✅ NEW: Review Button Styles
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+
+  reviewButtonText: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   inputContainer: {
