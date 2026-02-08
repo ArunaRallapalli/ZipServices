@@ -13,15 +13,23 @@
  * This file defines all API endpoints for managing service posts (listings)
  * in the ZipService marketplace application.
  *
+ /**
+  * /**
+ * Last Updated: February 8, 2026
+ * Changes: 
+ * - Added GET /api/service-posts endpoint with query filtering for category requests
+ * - Added JWT authentication to protect sensitive endpoints and user data
+ * - FIXED: Type comparison bugs in authorization checks (String() wrapper added)
  * ENDPOINTS PROVIDED:
  * 1. GET  /api/service-posts/search          - Radius-based search (PUBLIC)
- * 2. GET  /api/service-posts/all             - Get all active posts (PUBLIC)
- * 3. GET  /api/service-posts/user/:userId    - Get user's posts (PROTECTED)
- * 4. POST /api/service-posts                 - Create new post (PROTECTED)
- * 5. GET  /api/service-posts/:postId         - Get single post (PUBLIC)
- * 6. PUT  /api/service-posts/:postId         - Update post (PROTECTED)
- * 7. DELETE /api/service-posts/:postId       - Delete post (PROTECTED)
- * 8. PATCH /api/service-posts/:postId/inactivate - Soft delete (PROTECTED)
+ * 2. GET  /api/service-posts                 - Get posts with filters (PUBLIC) 🆕
+ * 3. GET  /api/service-posts/all             - Get all active posts (PUBLIC)
+ * 4. GET  /api/service-posts/user/:userId    - Get user's posts (PROTECTED)
+ * 5. POST /api/service-posts                 - Create new post (PROTECTED)
+ * 6. GET  /api/service-posts/:postId         - Get single post (PUBLIC)
+ * 7. PUT  /api/service-posts/:postId         - Update post (PROTECTED)
+ * 8. DELETE /api/service-posts/:postId       - Delete post (PROTECTED)
+ * 9. PATCH /api/service-posts/:postId/inactivate - Soft delete (PROTECTED)
  *
  * FEATURES:
  * - Radius-based geographic search using Haversine formula
@@ -260,6 +268,70 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
       success: false,
       error: 'Failed to search service posts',
       details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+// ============================================================================
+// 🆕 NEW ENDPOINT: GET SERVICE POSTS WITH FILTERS (PUBLIC)
+// ============================================================================
+router.get('/api/service-posts', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { post_type, service_category, zip_code, user_id } = req.query;
+
+    console.log('📋 Fetching service posts with filters:', req.query);
+
+    // Build the query
+    let query = supabase
+  .from('service_posts')
+  .select(`
+    *,
+    users!service_posts_user_id_fkey(
+      email,
+      business_owners(business_name, average_rating, review_count)
+    )
+  `)
+  .order('created_at', { ascending: false });
+
+    // Apply filters if provided
+    if (post_type) {
+      query = query.eq('post_type', post_type);
+    }
+    if (service_category) {
+      query = query.eq('service_category', service_category);
+    }
+    if (zip_code) {
+      query = query.eq('zip_code', zip_code);
+    }
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+    }
+
+    const { data: posts, error } = await query;
+
+    if (error) {
+      console.error('❌ Error fetching service posts:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch service posts',
+        details: error.message
+      });
+      return;
+    }
+
+    console.log(`✅ Found ${posts?.length || 0} service posts`);
+
+    res.status(200).json({
+      success: true,
+      posts: posts || [],
+      count: posts?.length || 0
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error in GET /api/service-posts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

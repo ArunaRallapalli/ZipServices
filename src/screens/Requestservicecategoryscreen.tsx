@@ -1,22 +1,13 @@
 /**
  * RequestServiceCategoryScreen Component
  * 
- * Last Updated: January 9, 2026
- * Changes: Migrated from fetch to api client for automatic token handling
- * 
- * Allows users to request new service categories using the EXISTING service_posts table.
- * 
- * STORAGE STRATEGY:
- * - Uses service_posts table with post_type = "request" (matches backend validation)
- * - title = "[CATEGORY REQUEST] {requested category name}"
- * - description = justification for why it's needed
- * - service_category = "Other" (placeholder)
- * - Admins can query posts where title starts with "[CATEGORY REQUEST]" to review requests
+ * Last Updated: February 8, 2026
+ * Changes: Added display of pending category requests
  */
 
 import API_URL from "../config/apiConfig";
 import { useAuth } from "../contexts/AuthContext";
-import api from "../api"; // ✅ ADDED: Import API client for automatic token handling
+import api from "../api";
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -36,6 +27,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { BackButton } from '../components/BackButton'; 
 
+interface CategoryRequest {
+  id: number;
+  title: string;
+  description: string;
+  created_at: string;
+  contact_email: string;
+  zip_code: string;
+}
+
 const RequestServiceCategoryScreen: React.FC = () => {
   const { isAuthenticated, userId, userType } = useAuth();
   const navigation = useNavigation();
@@ -51,8 +51,57 @@ const RequestServiceCategoryScreen: React.FC = () => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   
+  // Requests state
+  const [requests, setRequests] = useState<CategoryRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  
   // Prevent multiple auth checks
   const isCheckingAuth = useRef(false);
+
+  // Function to load user profile
+  const loadUserProfile = async () => {
+    try {
+      console.log('👤 Loading profile for user:', userId);
+
+      const data = await api.get(`/api/users/${userId}/profile`);
+
+      if (data.success && data.profile) {
+        const profile = data.profile;
+
+        if (profile.customerProfile) {
+          setZipCode(profile.customerProfile.zip_code || '');
+        } else if (profile.businessProfile) {
+          setZipCode(profile.businessProfile.zip_code || '');
+        }
+
+        if (profile.user && profile.user.email) {
+          setContactEmail(profile.user.email);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading user profile:', error);
+    }
+  };
+
+  // Function to fetch category requests
+  const loadCategoryRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      
+      const data = await api.get('/api/service-posts?post_type=request');
+      
+      if (data.success && data.posts) {
+        const categoryRequests = data.posts.filter((post: any) => 
+          post.title && post.title.startsWith('[CATEGORY REQUEST]')
+        );
+        setRequests(categoryRequests);
+      }
+    } catch (error) {
+      console.error('Error loading category requests:', error);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   // Check auth only once on mount
   useEffect(() => {
@@ -85,38 +134,14 @@ const RequestServiceCategoryScreen: React.FC = () => {
 
       console.log('✅ Authenticated - loading profile');
       await loadUserProfile();
+      await loadCategoryRequests();
       setLoadingUser(false);
       setAuthChecked(true);
       isCheckingAuth.current = false;
     };
 
     checkAuth();
-  }, []); // ✅ Only run once on mount
-
-  const loadUserProfile = async () => {
-    try {
-      console.log('👤 Loading profile for user:', userId);
-
-      // ✅ CHANGED: Use api client instead of fetch
-      const data = await api.get(`/api/users/${userId}/profile`);
-
-      if (data.success && data.profile) {
-        const profile = data.profile;
-
-        if (profile.customerProfile) {
-          setZipCode(profile.customerProfile.zip_code || '');
-        } else if (profile.businessProfile) {
-          setZipCode(profile.businessProfile.zip_code || '');
-        }
-
-        if (profile.user && profile.user.email) {
-          setContactEmail(profile.user.email);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error loading user profile:', error);
-    }
-  };
+  }, []);
 
   const validateForm = () => {
     if (!categoryName.trim()) {
@@ -160,13 +185,12 @@ const RequestServiceCategoryScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      // Store as a service_post with post_type = "request" and prefixed title
       const categoryRequestData = {
         user_id: userId,
         poster_type: userType || 'business_owner',
         post_type: 'request',
         title: `[CATEGORY REQUEST] ${categoryName.trim()}`,
-       description: justification.trim(),  // ✅ Don't include email in description
+        description: justification.trim(),
         service_category: 'Other',
         zip_code: zipCode.trim(),
         contact_email: contactEmail.trim(),
@@ -176,7 +200,6 @@ const RequestServiceCategoryScreen: React.FC = () => {
 
       console.log('📤 Submitting category request:', categoryRequestData);
 
-      // ✅ FIXED: Use api client instead of fetch for automatic token handling
       const data = await api.post('/api/service-posts', categoryRequestData);
 
       console.log('📥 Response:', data);
@@ -190,6 +213,7 @@ const RequestServiceCategoryScreen: React.FC = () => {
               text: 'OK',
               onPress: () => {
                 clearForm();
+                loadCategoryRequests(); // Reload requests
                 navigation.goBack();
               },
             },
@@ -248,6 +272,8 @@ const RequestServiceCategoryScreen: React.FC = () => {
           </Text>
         </View>
 
+        
+ 
         <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={24} color="#4CAF50" />
           <View style={styles.infoContent}>
@@ -360,6 +386,33 @@ const RequestServiceCategoryScreen: React.FC = () => {
             <Text style={styles.tipText}>Describe the potential demand for this category</Text>
           </View>
         </View>
+        {/* Existing Requests Section */}
+        {loadingRequests ? (
+          <View style={styles.requestsSection}>
+            <ActivityIndicator size="small" color="#4CAF50" />
+          </View>
+        ) : requests.length > 0 ? (
+          <View style={styles.requestsSection}>
+            <Text style={styles.requestsTitle}>
+              📋 Pending Requests ({requests.length})
+            </Text>
+            {requests.map((request) => {
+              return (
+                <View key={request.id} style={styles.requestCard}>
+                  <Text style={styles.requestName}>
+                    {request.title.replace('[CATEGORY REQUEST] ', '')}
+                  </Text>
+                  <Text style={styles.requestDate}>
+                    Submitted: {new Date(request.created_at).toLocaleDateString()}
+                  </Text>
+                  {request.zip_code && (
+                    <Text style={styles.requestZip}>Zip: {request.zip_code}</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -380,6 +433,46 @@ const styles = createResponsiveStyles({
   },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginTop: 12 },
   headerSubtitle: { fontSize: 14, color: '#666', marginTop: 4 },
+  
+  // Requests section styles
+  requestsSection: { 
+    margin: 16, 
+    padding: 16, 
+    backgroundColor: '#fff', 
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  requestsTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 12, 
+    color: '#333' 
+  },
+  requestCard: { 
+    padding: 12, 
+    backgroundColor: '#f9f9f9', 
+    borderRadius: 6, 
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  requestName: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#333' 
+  },
+  requestDate: { 
+    fontSize: 12, 
+    color: '#888', 
+    marginTop: 4 
+  },
+  requestZip: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  
   infoBox: {
     flexDirection: 'row',
     margin: 16,
@@ -423,6 +516,7 @@ const styles = createResponsiveStyles({
     paddingVertical: 14,
     marginTop: 12,
   },
+  
   cancelButtonText: { color: '#666', fontSize: 16, fontWeight: '500' },
   tipsContainer: {
     margin: 16,
@@ -432,9 +526,11 @@ const styles = createResponsiveStyles({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
+  
   tipsTitle: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 12 },
   tipItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   tipText: { flex: 1, fontSize: 14, color: '#555', marginLeft: 8, lineHeight: 20 },
+  
 });
 
 export default RequestServiceCategoryScreen;
