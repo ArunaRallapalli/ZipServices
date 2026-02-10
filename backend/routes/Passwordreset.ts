@@ -83,17 +83,20 @@ router.post('/request', async (req: Request, res: Response) => {
 // Create reset link based on environment
 // Development: http://localhost:8081
 // Production: https://gozipmarket.com
-const isDevelopment = process.env.NODE_ENV !== 'production';
-const frontendUrl = isDevelopment 
-  ? 'http://localhost:8081' 
-  : 'https://gozipmarket.com';
+// ✅ FIXED - Create reset link based on environment
+// Check for Render environment OR explicit NODE_ENV setting
+const isProduction = process.env.RENDER || process.env.NODE_ENV === 'production';
+const frontendUrl = isProduction
+  ? 'https://gozipmarket.com'
+  : 'http://localhost:8081';
 
-console.log('🌍 Environment:', process.env.NODE_ENV);
+console.log('🌍 Environment:', isProduction ? 'PRODUCTION' : 'DEVELOPMENT');
+console.log('🌍 RENDER env var:', process.env.RENDER);
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
 console.log('🔗 Frontend URL:', frontendUrl);
 
 const resetLink = `zipservice://reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 const webResetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
-    
 
     // Send email via Resend
     const emailResult = await resend.emails.send({

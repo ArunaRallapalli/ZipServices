@@ -86,17 +86,19 @@ router.post('/send', async (req: Request, res: Response) => {
 
     console.log('✅ Verification token saved, ID:', insertResult.rows[0].id);
 
-    // Create verification link based on environment
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const frontendUrl = isDevelopment 
-      ? 'http://localhost:8081' 
-      : 'https://gozipmarket.com';
+    // ✅ FIXED - Create verification link based on environment
+// Check for Render environment OR explicit NODE_ENV setting
+const isProduction = process.env.RENDER || process.env.NODE_ENV === 'production';
+const frontendUrl = isProduction
+  ? 'https://gozipmarket.com'
+  : 'http://localhost:8081';
 
-    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
 
-    console.log('🌍 Environment:', process.env.NODE_ENV);
-    console.log('🔗 Verification link created');
-
+console.log('🌍 Environment:', isProduction ? 'PRODUCTION' : 'DEVELOPMENT');
+console.log('🌍 RENDER env var:', process.env.RENDER);
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+console.log('🔗 Verification link created');
     // Send verification email via Resend
     const emailResult = await resend.emails.send({
       from: 'ZipService <noreply@gozipmarket.com>',
