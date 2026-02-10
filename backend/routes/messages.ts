@@ -474,16 +474,17 @@ if (String(sender_id) !== String(req.user?.user_id)) {
 
   try {
     const { data, error } = await supabase
-      .from('messages')
-      .insert([{
-        sender_id,
-        receiver_id,
-        message_text,
-        is_read: false,
-        created_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
+  .from('messages')
+  .insert([{
+    sender_id,
+    receiver_id,
+    message_text,
+    is_read: false,
+    created_at: new Date().toISOString()
+  }])
+  .select()
+  .single();
+  
 
     if (error) throw error;
 

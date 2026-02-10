@@ -108,7 +108,61 @@ router.get("/:userId/profile", authenticateToken, authorizeUser, async (req: Aut
     });
   }
 });
+/**
+ * GET /users/:userId/admin-status
+ * 
+ * Purpose: Get user's admin status
+ * 
+ * Security:
+ * - ✅ Requires valid JWT token (authenticateToken)
+ * - ✅ User can only access their own admin status (authorizeUser)
+ * 
+ * Returns:
+ * - success: boolean
+ * - is_admin: boolean
+ * 
+ * Example: GET /users/432/admin-status
+ * Headers: Authorization: Bearer <token>
+ */
+router.get("/:userId/admin-status", authenticateToken, authorizeUser, async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
 
+    console.log('🔍 Fetching admin status for user:', userId);
+
+    // Fetch is_admin flag from users table
+    const { data, error } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: "User not found",
+          is_admin: false
+        });
+      }
+      throw error;
+    }
+
+    console.log('✅ Admin status for user', userId, ':', data?.is_admin || false);
+
+    res.json({
+      success: true,
+      is_admin: data?.is_admin || false
+    });
+  } catch (error) {
+    console.error('❌ Error fetching admin status:', error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch admin status",
+      is_admin: false
+    });
+  }
+});
 /**
  * GET /users/:userId/roles
  * 

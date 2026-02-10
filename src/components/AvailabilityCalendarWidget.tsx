@@ -188,7 +188,7 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
         Alert.alert(
           'Booking Pending!', 
           data.emailSent 
-            ? 'Thank you! The service provider has been notified by email and chat message to confirm or decline(cancel)".Please use this chat to coordinate timing and other details.' 
+            ? 'Thank you! The service provider has been notified to confirm or decline your request. Please use this chat to coordinate timing and other details.' 
             : 'Booking created',
           [{ text: 'OK', onPress: fetchAvailability }]
         );

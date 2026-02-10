@@ -84,7 +84,8 @@ if (verificationError) {
       ? 'http://localhost:8081' 
       : 'https://gozipmarket.com';
 
-    const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+    
     // ✅ ADD THIS - Show the link
 console.log('🔗 Verification link created:', verificationLink);
 console.log('📤 Calling Resend API to send email...');

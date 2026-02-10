@@ -45,6 +45,7 @@ import { Platform } from "react-native";
 import { WebAlert } from "../components/WebAlert"
 import { setWebAlertHandler } from "../Utils/Alert";
 import CalendarScreen from '../screens/CalendarScreen';
+import AdminCategoryRequestsScreen from '../screens/AdminCategoryRequestsScreen'
 
 // Screen imports - All navigable screens in the app
 import ListingsScreen from "../screens/ListingsScreen";
@@ -129,6 +130,7 @@ export type TabParamList = {
   Listings: undefined;
   Messages: undefined;
   Profile: undefined;
+  AdminCategoryRequestsScreen: undefined;
 };
 
 /**
@@ -153,7 +155,7 @@ export type RootStackParamList = {
   EditListing: { postId: number };                  // Edit existing service post
   PostServiceScreen: undefined;                     // Create new service post
   RequestServiceCategoryScreen: undefined;          // Request new service category
-  
+  AdminCategoryRequests: undefined;
   // Authentication - User sign up/sign in flows
   SignUpFormBusinessOwners: { user_id: number };    // Business owner registration
   SigninBusinessOwners: undefined;                  // Business owner login
@@ -259,6 +261,11 @@ const NavigationStack: React.FC = () => {
 
       >
         {/* All your existing screens stay exactly the same */}
+        <RootStack.Screen 
+  name="AdminCategoryRequests" 
+  component={AdminCategoryRequestsScreen}
+  options={{ title: 'Manage Category Requests' }}
+/>
         <RootStack.Screen 
           name="TabWrapperScreen" 
           component={TabWrapperScreen}

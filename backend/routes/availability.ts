@@ -26,6 +26,7 @@ import express from 'express';
 import { supabase } from '../config/Supabase';
 import { sendBookingNotification } from '../services/emailServices';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
+import { sendBookingStatusUpdate } from '../services/emailServices';
 
 const router = express.Router();
 
@@ -318,7 +319,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
         .insert({
           sender_id: customerId,
           receiver_id: serviceProviderId,
-          message_text: `🔔 New booking request for ${bookingDate}. Go to Calendar in My Listing tab to confirm or decline.`,
+          message_text: `🔔 New booking request for ${bookingDate}. Go to Calendar in Listings tab to confirm or decline.`,
           is_read: false,
           created_at: new Date().toISOString()
         });
@@ -458,7 +459,7 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
 
     if (error) throw error;
 
-    // Send system message to customer when status changes
+   // Send system message to customer when status changes
     try {
       let chatMessage = '';
       let messageMetadata: any = null;
@@ -469,7 +470,6 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
       } else if (status === 'completed') {
         chatMessage = `🎉 Your service has been completed! Please leave a review. Thank you!`;
         
-        // ✅ Add metadata for review button
         messageMetadata = {
           type: 'booking_completed',
           booking_id: parseInt(bookingId, 10),
@@ -492,7 +492,6 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
           created_at: new Date().toISOString()
         };
 
-        // Add metadata only if it exists
         if (messageMetadata) {
           messageData.metadata = messageMetadata;
         }
@@ -507,10 +506,41 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
           console.log(`✅ [Booking] Chat notification sent to customer (status: ${status})${messageMetadata ? ' with metadata' : ''}`);
         }
       }
-    } catch (msgError) {
-      console.error('⚠️ [Booking] Error sending chat message:', msgError);
-    }
+      
+      // ✅ SEND EMAIL NOTIFICATION
+      // Get customer and provider details for email
+      const { data: customerData } = await supabase
+        .from('users')
+        .select('email, business_owners(business_name)')
+        .eq('user_id', data.customer_user_id)
+        .single();
 
+      const { data: providerData } = await supabase
+        .from('users')
+        .select('business_owners(business_name)')
+        .eq('user_id', data.provider_user_id)
+        .single();
+
+      if (customerData?.email && (status === 'confirmed' || status === 'cancelled' || status === 'completed')) {
+        try {
+          const emailResult = await sendBookingStatusUpdate({
+            customerEmail: customerData.email,
+            customerName: customerData.business_owners?.[0]?.business_name || 'Customer',
+            providerName: providerData?.business_owners?.[0]?.business_name || 'Service Provider',
+            bookingDate: data.booking_date.split('T')[0],
+            bookingId: parseInt(bookingId, 10),
+            status: status as 'confirmed' | 'cancelled' | 'completed'
+          });
+
+          console.log(`📧 [Booking] Email notification sent (${status}):`, emailResult);
+        } catch (emailError) {
+          console.error('⚠️ [Booking] Email send failed (non-blocking):', emailError);
+        }
+      }
+      
+    } catch (msgError) {
+      console.error('⚠️ [Booking] Error sending notifications:', msgError);
+    }
     // If cancelled, mark the date as available again
     if (status === 'cancelled' && data) {
       const bookingDate = data.booking_date.split('T')[0];

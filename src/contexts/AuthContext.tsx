@@ -30,6 +30,7 @@ import { useFocusEffect } from '@react-navigation/native';
 interface UserInfo {
   user_id: number;
   user_type?: 'customer' | 'business_owner';
+  is_admin?: boolean;  // ✅ CORRECT - moved and made optional
   full_name?: string;
   phone_number?: string;
   zip_code?: string;
@@ -50,6 +51,7 @@ interface AuthState {
   userInfo: UserInfo | null;
   loading: boolean;
   initialized: boolean; // New flag to track if auth has been initialized
+  is_admin?: boolean; // Optional flag for admin status
 }
 /* ------------------------------------------------------------------
  * AUTH CONTEXT TYPE
@@ -169,6 +171,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           user_id: parseInt(userId),
           user_type: userType as 'customer' | 'business_owner',
           email: userEmail || undefined,
+            is_admin: false // Default to false if not provided
         };
       }
     }

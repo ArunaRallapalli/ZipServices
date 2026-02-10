@@ -3,26 +3,17 @@
  * SERVICE POSTS ROUTES
  * ============================================================================
  * 
- * Last Updated: January 9, 2026
- * Changes: 
- * - Added JWT authentication to protect sensitive endpoints and user data
- * - FIXED: Type comparison bugs in authorization checks (String() wrapper added)
- * 
- * Reason: Prevent unauthorized post creation/modification and protect contact information
- * 
- * This file defines all API endpoints for managing service posts (listings)
- * in the ZipService marketplace application.
- *
- /**
-  * /**
  * Last Updated: February 8, 2026
  * Changes: 
  * - Added GET /api/service-posts endpoint with query filtering for category requests
  * - Added JWT authentication to protect sensitive endpoints and user data
  * - FIXED: Type comparison bugs in authorization checks (String() wrapper added)
+ * - FIXED: Missing route handler for ENDPOINT 9
+ * - FIXED: Admin check using database is_admin flag
+ * 
  * ENDPOINTS PROVIDED:
  * 1. GET  /api/service-posts/search          - Radius-based search (PUBLIC)
- * 2. GET  /api/service-posts                 - Get posts with filters (PUBLIC) 🆕
+ * 2. GET  /api/service-posts                 - Get posts with filters (PUBLIC)
  * 3. GET  /api/service-posts/all             - Get all active posts (PUBLIC)
  * 4. GET  /api/service-posts/user/:userId    - Get user's posts (PROTECTED)
  * 5. POST /api/service-posts                 - Create new post (PROTECTED)
@@ -30,14 +21,7 @@
  * 7. PUT  /api/service-posts/:postId         - Update post (PROTECTED)
  * 8. DELETE /api/service-posts/:postId       - Delete post (PROTECTED)
  * 9. PATCH /api/service-posts/:postId/inactivate - Soft delete (PROTECTED)
- *
- * FEATURES:
- * - Radius-based geographic search using Haversine formula
- * - Distance calculation in miles
- * - Results sorted by proximity
- * - Pagination support
- * - User profile integration
- * - Automatic location data from ZIP codes
+ * 10. PATCH /api/service-posts/category-request/:requestId/status - Admin approve/reject (PROTECTED)
  * ============================================================================
  */
 
@@ -55,6 +39,7 @@ import {
 import { SUPABASE_ERROR } from '../Constants/supabase';
 import { getZipCoordinates, getZipLocation } from '../services/zipCodeService';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
+import { sendCategoryRequestNotification } from '../services/emailServices';
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
@@ -154,14 +139,6 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
       `)
       .eq('service_category', service_category as string)
       .eq('status', POST_STATUS.ACTIVE);
-
-    console.log('🔍 DEBUG - Raw database response:');
-    console.log('   Post count:', data?.length);
-    if (data && data.length > 0) {
-      console.log('   First post structure:', JSON.stringify(data[0], null, 2));
-      console.log('   Users object:', data[0].users);
-      console.log('   Business owners:', data[0].users?.business_owners);
-    }
 
     if (error) {
       console.error('❌ Database query error:', error);
@@ -271,8 +248,9 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
     });
   }
 });
+
 // ============================================================================
-// 🆕 NEW ENDPOINT: GET SERVICE POSTS WITH FILTERS (PUBLIC)
+// ENDPOINT 2: GET SERVICE POSTS WITH FILTERS (PUBLIC)
 // ============================================================================
 router.get('/api/service-posts', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -280,31 +258,21 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
 
     console.log('📋 Fetching service posts with filters:', req.query);
 
-    // Build the query
     let query = supabase
-  .from('service_posts')
-  .select(`
-    *,
-    users!service_posts_user_id_fkey(
-      email,
-      business_owners(business_name, average_rating, review_count)
-    )
-  `)
-  .order('created_at', { ascending: false });
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          business_owners(business_name, average_rating, review_count)
+        )
+      `)
+      .order('created_at', { ascending: false });
 
-    // Apply filters if provided
-    if (post_type) {
-      query = query.eq('post_type', post_type);
-    }
-    if (service_category) {
-      query = query.eq('service_category', service_category);
-    }
-    if (zip_code) {
-      query = query.eq('zip_code', zip_code);
-    }
-    if (user_id) {
-      query = query.eq('user_id', user_id);
-    }
+    if (post_type) query = query.eq('post_type', post_type);
+    if (service_category) query = query.eq('service_category', service_category);
+    if (zip_code) query = query.eq('zip_code', zip_code);
+    if (user_id) query = query.eq('user_id', user_id);
 
     const { data: posts, error } = await query;
 
@@ -337,7 +305,7 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
 });
 
 // ============================================================================
-// ENDPOINT 2: GET ALL SERVICE POSTS (PUBLIC)
+// ENDPOINT 3: GET ALL SERVICE POSTS (PUBLIC)
 // ============================================================================
 router.get('/api/service-posts/all', async (req: Request, res: Response): Promise<void> => {
   
@@ -374,8 +342,6 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
     query = query
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-
-    console.log('📊 Executing query...');
 
     const { data, error, count } = await query;
     
@@ -415,7 +381,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
 });
 
 // ============================================================================
-// ENDPOINT 3: GET SERVICE POSTS BY USER ID (PROTECTED)
+// ENDPOINT 4: GET SERVICE POSTS BY USER ID (PROTECTED)
 // ============================================================================
 router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, async (req: AuthRequest, res: Response): Promise<void> => {
   
@@ -481,7 +447,7 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
 });
 
 // ============================================================================
-// ENDPOINT 4: CREATE NEW SERVICE POST (PROTECTED)
+// ENDPOINT 5: CREATE NEW SERVICE POST (PROTECTED)
 // ============================================================================
 router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   
@@ -511,8 +477,6 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
       return;
     }
 
-    // FIXED: January 9, 2026 - Convert both values to strings for proper comparison
-    // Frontend sends user_id as number, but JWT token has user_id as string
     console.log('🔒 Create post authorization check:');
     console.log('  Requested user_id:', user_id, `(type: ${typeof user_id})`);
     console.log('  Authenticated user_id:', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
@@ -569,7 +533,8 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         zip_code,
         city,
         state,
-        status: POST_STATUS.ACTIVE
+        status: POST_STATUS.ACTIVE,
+        request_status: post_type === 'request' ? 'pending' : null
       }])
       .select()
       .single();
@@ -578,6 +543,49 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
 
     console.log('✅ Service post created successfully with ID:', newPost.id);
 
+   // ✅ SEND EMAIL TO ADMIN IF THIS IS A CATEGORY REQUEST
+if (post_type === 'request' && title.includes('[CATEGORY REQUEST]')) {
+  try {
+    console.log('📧 This is a category request, notifying admin...');
+    
+    // Get admin email from database (get first admin if multiple exist)
+    const { data: adminUsers } = await supabase
+      .from('users')
+      .select('email')
+      .eq('is_admin', true)
+      .limit(1);
+
+    const adminUser = adminUsers?.[0];
+
+    if (adminUser?.email) {
+      // Get user details for email
+      const { data: userData } = await supabase
+        .from('users')
+        .select('email, business_owners(business_name)')
+        .eq('user_id', user_id)
+        .single();
+
+      const userName = userData?.business_owners?.[0]?.business_name || 'User';
+      const categoryName = title.replace('[CATEGORY REQUEST]', '').trim();
+
+      await sendCategoryRequestNotification({
+        adminEmail: adminUser.email,
+        userName,
+        userEmail: contact_email,
+        categoryName,
+        requestId: newPost.id,
+        justification: description
+      });
+
+      console.log('✅ Admin notification sent successfully');
+    } else {
+      console.warn('⚠️ No admin user found in database');
+    }
+  } catch (emailError) {
+    console.error('⚠️ Failed to notify admin (non-blocking):', emailError);
+    // Don't fail the request creation if email fails
+  }
+}
     res.status(201).json({
       success: true,
       post: newPost,
@@ -589,76 +597,6 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
     res.status(500).json({
       success: false,
       error: 'Failed to create service post',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// ============================================================================
-// ENDPOINT 5: GET USER PROFILE (DUPLICATE - Already in users.ts)
-// ============================================================================
-router.get('/api/users/:userId/profile', async (req: Request, res: Response): Promise<void> => {
-  
-  try {
-    const { userId } = req.params;
-
-    console.log('👤 Fetching profile for user:', userId);
-
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        user_id,
-        email,
-        user_type,
-        created_at,
-        business_owners(
-          business_name,
-          phone_number,
-          zip_code,
-          city,
-          state
-        )
-      `)
-      .eq('user_id', userId)
-      .single();
-
-    if (error) {
-      if (error.code === SUPABASE_ERROR.NOT_FOUND) {
-        res.status(404).json({
-          success: false,
-          error: 'User not found'
-        });
-        return;
-      }
-      throw error;
-    }
-
-    const profile = {
-      user: {
-        user_id: data.user_id,
-        email: data.email,
-        user_type: data.user_type,
-        created_at: data.created_at
-      },
-      businessProfile: data.business_owners && data.business_owners.length > 0 ? {
-        business_name: data.business_owners[0].business_name,
-        phone_number: data.business_owners[0].phone_number,
-        zip_code: data.business_owners[0].zip_code,
-        city: data.business_owners[0].city,
-        state: data.business_owners[0].state
-      } : null
-    };
-
-    res.json({
-      success: true,
-      profile: profile
-    });
-
-  } catch (error: unknown) {
-    console.error('Error fetching user profile:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch user profile',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -768,7 +706,6 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
       return;
     }
 
-    // FIXED: January 9, 2026 - Convert both values to strings for proper comparison
     console.log('🔒 Update authorization check:');
     console.log('  Post owner user_id:', existingPost.user_id, `(type: ${typeof existingPost.user_id})`);
     console.log('  Authenticated user_id:', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
@@ -873,7 +810,6 @@ router.delete('/api/service-posts/:postId', authenticateToken, async (req: AuthR
       return;
     }
 
-    // FIXED: January 9, 2026 - Convert both values to strings for proper comparison
     console.log('🔒 Delete authorization check:');
     console.log('  Post owner user_id:', existingPost.user_id, `(type: ${typeof existingPost.user_id})`);
     console.log('  Authenticated user_id:', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
@@ -946,7 +882,6 @@ router.patch('/api/service-posts/:postId/inactivate', authenticateToken, async (
       return;
     }
 
-    // FIXED: January 9, 2026 - Convert both values to strings for proper comparison
     console.log('🔒 Inactivate authorization check:');
     console.log('  Post owner user_id:', existingPost.user_id, `(type: ${typeof existingPost.user_id})`);
     console.log('  Authenticated user_id:', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
@@ -1000,5 +935,133 @@ router.patch('/api/service-posts/:postId/inactivate', authenticateToken, async (
     });
   }
 });
+// ============================================================================
+// ENDPOINT 10: ADMIN APPROVE/REJECT CATEGORY REQUEST (PROTECTED)
+// ============================================================================
+import { sendCategoryRequestDecision } from '../services/emailServices';
 
+router.patch('/api/service-posts/category-request/:requestId/status', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { requestId } = req.params;
+    const { request_status, admin_notes } = req.body;
+
+    console.log(`📝 Updating category request ${requestId} to: ${request_status}`);
+
+    // ✅ Check if user is admin
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('user_id', req.user?.user_id)
+      .single();
+
+    if (userError || !user?.is_admin) {
+      console.log('❌ Access denied - not an admin');
+      res.status(403).json({
+        success: false,
+        error: 'Admin access required. Only authorized admins can approve/reject category requests.'
+      });
+      return;
+    }
+    
+    console.log('✅ Admin check passed');
+    
+    if (!['approved', 'rejected'].includes(request_status)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be "approved" or "rejected"'
+      });
+      return;
+    }
+// Verify it's a category request
+    const { data: existingPost, error: fetchError } = await supabase
+      .from('service_posts')
+      .select('post_type, title, user_id, contact_email, description')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchError || !existingPost) {
+      res.status(404).json({
+        success: false,
+        error: 'Category request not found'
+      });
+      return;
+    }
+
+    if (existingPost.post_type !== 'request' || !existingPost.title.startsWith('[CATEGORY REQUEST]')) {
+      res.status(400).json({
+        success: false,
+        error: 'This is not a category request'
+      });
+      return;
+    }
+
+    // Extract category name from title
+    const categoryName = existingPost.title.replace('[CATEGORY REQUEST]', '').trim();
+
+    // Build updated description with admin notes
+    let updatedDescription = existingPost.description;
+    if (admin_notes) {
+      updatedDescription = `${existingPost.description}\n\n--- Admin Response ---\n${admin_notes}`;
+    }
+
+    // Update status
+    const { data: updatedPost, error } = await supabase
+      .from('service_posts')
+      .update({
+        request_status: request_status,
+        description: updatedDescription,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // ✅ Fetch user details separately for email
+    const { data: userData } = await supabase
+      .from('users')
+      .select('email, business_owners(business_name)')
+      .eq('user_id', existingPost.user_id)
+      .single();
+
+    // ✅ Send email notification to user
+    const userEmail = userData?.email || existingPost.contact_email;
+    const userName = userData?.business_owners?.[0]?.business_name || 'User';
+
+    if (userEmail) {
+      try {
+        const emailResult = await sendCategoryRequestDecision({
+          userEmail,
+          userName,
+          categoryName,
+          requestStatus: request_status,
+          adminNotes: admin_notes
+        });
+
+        console.log('📧 Email notification result:', emailResult);
+      } catch (emailError) {
+        console.error('⚠️ Email send failed (non-blocking):', emailError);
+        // Don't fail the approval/rejection if email fails
+      }
+    }
+
+    console.log(`✅ Category request ${request_status} and email sent`);
+
+    res.json({
+      success: true,
+      post: updatedPost,
+      message: `Category request ${request_status} successfully`
+    });
+
+  } catch (error: unknown) {
+    console.error('❌ Error updating category request status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update category request status',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+    
 export default router;

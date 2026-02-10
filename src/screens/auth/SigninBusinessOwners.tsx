@@ -1,29 +1,11 @@
 /**
  * SignInBusinessOwnersScreen - WITH PASSWORD RESET AND EMAIL VERIFICATION
  * 
- * Last Updated: January 5, 2026
- * Changes: Migrated from fetch to api client for automatic token handling
- * 
- * Authentication screen for business owners with complete password reset flow.
- * 
- * FEATURES:
- * - Password reset request (forgot password)
- * - Password reset verification (set new password)
- * - Email verification requirement
- * - Three modes: 'login', 'forgot', 'reset'
- * - Deep linking support for email reset links
- * 
- * MODES:
- * - LOGIN MODE: Normal email/password sign-in
- * - FORGOT MODE: User enters email to receive reset link
- * - RESET MODE: User enters new password (triggered by email link)
- * 
- * PASSWORD RESET FLOW:
- * 1. User clicks "Forgot Password?"
- * 2. Enters email → Backend sends reset email
- * 3. User clicks link in email → Opens app in reset mode
- * 4. User enters new password → Password updated
- * 5. User can now log in with new password
+ * Last Updated: February 8, 2026
+ * Changes: 
+ * - Migrated from fetch to api client for automatic token handling
+ * - Added is_admin fetching from database during login
+ * - Fixed is_admin fetch order (now fetches AFTER userId is determined)
  */
 
 import React, { useState, useEffect } from "react";
@@ -32,13 +14,11 @@ import {
   Text,
   TextInput,
   Button,
-  StyleSheet,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   SafeAreaView,
-  ActivityIndicator,
 } from "react-native";
 import { Alert } from "../../Utils/Alert";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -46,8 +26,9 @@ import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
 import { createResponsiveStyles } from "../../Utils/globalStyles";
-import api from '../../api'; // ADDED: January 5, 2026
+import api from '../../api';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
+
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, "SigninBusinessOwners">;
 type ScreenRouteProp = RouteProp<RootStackParamList, "SigninBusinessOwners">;
@@ -83,7 +64,6 @@ interface LoginResponse {
   };
 }
 
-// Screen mode type
 type ScreenMode = 'login' | 'forgot' | 'reset';
 
 const decodeJwtManually = (token: string): JWTPayload => {
@@ -117,27 +97,21 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
   const { signIn } = useAuth();
   const route = useRoute<ScreenRouteProp>();
   
-  // Check if user came from password reset email link
   const resetToken = (route.params as any)?.token;
   const resetEmail = (route.params as any)?.email;
   
-  // Screen mode state
   const [mode, setMode] = useState<ScreenMode>(resetToken ? 'reset' : 'login');
   
-  // Login form state for UI and inputs
   const [email, setEmail] = useState(resetEmail || "");
   const [password, setPassword] = useState("");
   
-  // Password reset state
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
-  // UI state
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Update mode if reset token is provided via navigation
   useEffect(() => {
     if (resetToken && resetEmail) {
       setMode('reset');
@@ -145,10 +119,6 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
     }
   }, [resetToken, resetEmail]);
 
-  /**
-   * Handle normal login
-   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
-   */
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert("Validation", "Please enter both email and password");
@@ -158,36 +128,28 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
     try {
       setLoading(true);
       
-      // UPDATED: Using api client instead of fetch
       const data: LoginResponse = await api.post('/business_owners/login', { 
         email: email.trim(), 
         password: password.trim() 
       });
 
-      // ✅ Check if email is verified
+      // Check if email is verified
       if (data.user && data.user.email_verified === false) {
         Alert.alert(
           "Email Not Verified",
           "Please verify your email address before signing in. Check your inbox for the verification link.",
-          [
-            { text: "OK" }
-          ]
+          [{ text: "OK" }]
         );
-        return; // Stop login process
+        return;
       }
-//The code snippet const token = data.token || data.access_token || data.data?.token;
-//  is a JavaScript expression that demonstrates a robust way to extract a token 
-// from an API response object (data) by checking 
-// //  multiple possible property names in order of preference. 
 
       const token = data.token || data.access_token || data.data?.token;
       console.log('💾 Stored token:', token);
-// Store token for API client
-await AsyncStorage.setItem('access_token', token);
+      
+      await AsyncStorage.setItem('access_token', token);
 
-// DEBUG
-const storedToken = await AsyncStorage.getItem('access_token');
-console.log('💾 Stored access_token:', storedToken);
+      const storedToken = await AsyncStorage.getItem('access_token');
+      console.log('💾 Stored access_token:', storedToken);
 
       if (!token) {
         throw new Error("No authentication token received from server");
@@ -197,10 +159,22 @@ console.log('💾 Stored access_token:', storedToken);
       let userId = 0;
       let businessName = "Business Owner";
 
+      // ✅ First decode token to get userId
       try {
         const decoded = decodeJwtManually(token);
         userId = decoded.user_id || 0;
         businessName = decoded.business_name || decoded.email || "Business Owner";
+      } catch (jwtError) {
+        const userFromResponse = data.user || data.data?.user;
+        userId = userFromResponse?.user_id || userFromResponse?.id || 0;
+        businessName = userFromResponse?.business_name || userFromResponse?.email || "Business Owner";
+      }
+
+      const is_admin = false;
+
+      // ✅ Build userInfo with proper userId and is_admin
+      try {
+        const decoded = decodeJwtManually(token);
         
         userInfo = {
           user_id: userId,
@@ -208,11 +182,10 @@ console.log('💾 Stored access_token:', storedToken);
           email: email.trim(),
           business_name: businessName,
           full_name: businessName,
+          is_admin: is_admin
         };
       } catch (jwtError) {
         const userFromResponse = data.user || data.data?.user;
-        userId = userFromResponse?.user_id || userFromResponse?.id || 0;
-        businessName = userFromResponse?.business_name || userFromResponse?.email || "Business Owner";
         
         userInfo = {
           user_id: userId,
@@ -224,6 +197,7 @@ console.log('💾 Stored access_token:', storedToken);
           zip_code: userFromResponse?.zip_code,
           city: userFromResponse?.city,
           state: userFromResponse?.state,
+          is_admin: is_admin
         };
       }
 
@@ -238,7 +212,6 @@ console.log('💾 Stored access_token:', storedToken);
           'Welcome Back! 🎉',
           `Hi \n\nYour session has been saved securely. You can now:\n• Search, Post,Request and manage your services\n• Chat with customers\n• Access your dashboard\n• Track your bookings`,
           [
-            
             {
               text: 'Get Started',
               onPress: () => {
@@ -260,17 +233,12 @@ console.log('💾 Stored access_token:', storedToken);
     }
   };
 
-  /**
-   * Handle password reset request (forgot password)
-   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
-   */
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       Alert.alert("Email Required", "Please enter your email address");
       return;
     }
 
-    // Basic email validation
     if (!email.includes('@')) {
       Alert.alert("Invalid Email", "Please enter a valid email address");
       return;
@@ -279,19 +247,17 @@ console.log('💾 Stored access_token:', storedToken);
     try {
       setLoading(true);
       
-      // UPDATED: Using api client instead of fetch
       const data = await api.post('/api/password-reset/request', { 
         email: email.trim() 
       });
 
-      // Show success message
       Alert.alert(
         "Check Your Email! 📧",
         "If an account exists with that email, we've sent you a password reset link. Please check your inbox and spam folder.",
         [
           {
             text: "OK",
-            onPress: () => setMode('login') // Return to login mode
+            onPress: () => setMode('login')
           }
         ]
       );
@@ -304,12 +270,7 @@ console.log('💾 Stored access_token:', storedToken);
     }
   };
 
-  /**
-   * Handle password reset verification (set new password)
-   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
-   */
   const handleResetPassword = async () => {
-    // Validate inputs
     if (!newPassword.trim() || !confirmPassword.trim()) {
       Alert.alert("Validation", "Please fill in both password fields");
       return;
@@ -325,7 +286,6 @@ console.log('💾 Stored access_token:', storedToken);
       return;
     }
 
-    // Check password complexity
     const hasUpperCase = /[A-Z]/.test(newPassword);
     const hasLowerCase = /[a-z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
@@ -342,14 +302,12 @@ console.log('💾 Stored access_token:', storedToken);
     try {
       setLoading(true);
       
-      // UPDATED: Using api client instead of fetch
       const data = await api.post('/api/password-reset/verify', { 
         email: email.trim(),
         token: resetToken,
         newPassword: newPassword 
       });
 
-      // Show success message
       setSuccessMessage("Password reset successfully!");
       setShowSuccess(true);
 
@@ -362,7 +320,6 @@ console.log('💾 Stored access_token:', storedToken);
             {
               text: "Log In",
               onPress: () => {
-                // Clear fields and return to login mode
                 setMode('login');
                 setNewPassword("");
                 setConfirmPassword("");
@@ -381,9 +338,6 @@ console.log('💾 Stored access_token:', storedToken);
     }
   };
 
-  /**
-   * Render content based on current mode
-   */
   const renderContent = () => {
     switch (mode) {
       case 'forgot':
@@ -404,8 +358,8 @@ console.log('💾 Stored access_token:', storedToken);
               autoComplete="email"
               placeholder="Enter your email"
               editable={!loading}
-              onSubmitEditing={handleForgotPassword}  // ✅ ADD THIS LINE
-  returnKeyType="send"  // ✅ ADD THIS LINE (shows "Send" on keyboard)
+              onSubmitEditing={handleForgotPassword}
+              returnKeyType="send"
             />
 
             <View style={styles.buttonContainer}>
@@ -460,8 +414,8 @@ console.log('💾 Stored access_token:', storedToken);
               secureTextEntry
               placeholder="Re-enter new password"
               editable={!loading}
-               onSubmitEditing={handleResetPassword}  // ✅ ADD THIS LINE
-              returnKeyType="done"  // ✅ ADD THIS LINE (shows "Done" on keyboard)
+              onSubmitEditing={handleResetPassword}
+              returnKeyType="done"
             />
 
             <Text style={styles.helperText}>
@@ -505,8 +459,8 @@ console.log('💾 Stored access_token:', storedToken);
               autoComplete="password"
               placeholder="Enter your password"
               editable={!loading}
-               onSubmitEditing={handleLogin}  // ✅ ADD THIS LINE
-  returnKeyType="go"  // ✅ ADD THIS LINE (shows "Go" on keyboard)
+              onSubmitEditing={handleLogin}
+              returnKeyType="go"
             />
 
             <TouchableOpacity 

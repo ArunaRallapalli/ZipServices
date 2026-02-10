@@ -43,7 +43,7 @@ import { Alert } from "../Utils/Alert";
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Picker } from '@react-native-picker/picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect,} from '@react-navigation/native';
 
 const PostServiceScreen: React.FC = () => {
   const { isAuthenticated, userId, userType } = useAuth();
@@ -428,12 +428,19 @@ const PostServiceScreen: React.FC = () => {
               style={[styles.input, styles.textArea]}
               value={description}
               onChangeText={setDescription}
+              
               placeholder="Describe your service, experience, what's included..."
               multiline
               numberOfLines={9}
               maxLength={5000}
               textAlignVertical="top"
             />
+            
+
+          <Text style={styles.privacyNote}>
+             🔒 Privacy Notice: This application does not publicly display personal contact information such as phone numbers or email addresses.
+Any contact details included in your description will be visible to others and shared at your own discretion and risk.
+          </Text>
             <Text style={styles.characterCount}>
               {description.length}/5000 characters
             </Text>
@@ -537,6 +544,13 @@ const styles = createResponsiveStyles({
     marginTop: 4,
     fontStyle: 'italic'
   },
+   privacyNote: {
+    fontSize: 12,
+    color: '#D84315',
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

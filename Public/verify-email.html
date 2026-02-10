@@ -62,6 +62,17 @@
       text-align: left;
       border-radius: 4px;
     }
+    .env-badge {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #4A90E2;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -77,6 +88,30 @@
 
   <script>
     console.log('🔍 Email Verification Page Loaded');
+    
+    // ✅ AUTO-DETECT ENVIRONMENT
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1';
+    
+    const API_BASE_URL = isLocalhost 
+      ? 'http://localhost:5000'  // Development
+      : 'https://gozipmarket-api.onrender.com';  // Production
+    
+    const FRONTEND_URL = isLocalhost
+      ? 'http://localhost:8081'  // Development
+      : 'https://gozipmarket.com';  // Production
+    
+    console.log('🌍 Environment:', isLocalhost ? 'DEVELOPMENT' : 'PRODUCTION');
+    console.log('🔗 API URL:', API_BASE_URL);
+    console.log('🔗 Frontend URL:', FRONTEND_URL);
+    
+    // Show environment badge in development
+    if (isLocalhost) {
+      const badge = document.createElement('div');
+      badge.className = 'env-badge';
+      badge.textContent = '🔧 DEV MODE';
+      document.body.appendChild(badge);
+    }
     
     // Get URL parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -97,14 +132,15 @@
       document.getElementById('status').innerHTML = `
         <div class="error">❌ Invalid Link</div>
         <p class="message">This verification link is missing required information.</p>
-        <button onclick="window.location.href='https://gozipmarket.com'">Go to Home</button>
+        <button onclick="window.location.href='${FRONTEND_URL}'">Go to Home</button>
       `;
     } else {
       // Call verification API
+      const verifyUrl = `${API_BASE_URL}/api/email-verification/verify`;
       console.log('📤 Calling verification API...');
-      console.log('🌐 API URL: https://gozipmarket-api.onrender.com/api/email-verification/verify');
+      console.log('🌐 API URL:', verifyUrl);
       
-      fetch('https://gozipmarket-api.onrender.com/api/email-verification/verify', {
+      fetch(verifyUrl, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -118,7 +154,9 @@
       .then(response => {
         console.log('📥 Response status:', response.status);
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          return response.json().then(data => {
+            throw new Error(data.error || data.message || `HTTP ${response.status}`);
+          });
         }
         return response.json();
       })
@@ -131,7 +169,7 @@
               <div style="font-size: 80px; margin-bottom: 16px;">ℹ️</div>
               <div style="color: #2196F3; font-size: 24px; font-weight: bold; margin-bottom: 8px;">Already Verified</div>
               <p class="message">This email has already been verified.<br>You can sign in to your account.</p>
-              <button onclick="window.location.href='https://gozipmarket.com/signin'">
+              <button onclick="window.location.href='${FRONTEND_URL}/signin'">
                 🔐 Go to Sign In
               </button>
             `;
@@ -140,7 +178,7 @@
               <div style="font-size: 80px; margin-bottom: 16px;">✅</div>
               <div class="success">Email Verified!</div>
               <p class="message">Your email has been successfully verified.<br>You can now sign in and access all features.</p>
-              <button onclick="window.location.href='https://gozipmarket.com/signin'">
+              <button onclick="window.location.href='${FRONTEND_URL}/signin'">
                 🔐 Go to Sign In
               </button>
             `;
@@ -169,7 +207,7 @@
             </ul>
           </div>
           
-          <button onclick="window.location.href='https://gozipmarket.com/signin'">
+          <button onclick="window.location.href='${FRONTEND_URL}/signin'">
             🏠 Go to Sign In
           </button>
         `;

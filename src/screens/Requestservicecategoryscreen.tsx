@@ -34,6 +34,7 @@ interface CategoryRequest {
   created_at: string;
   contact_email: string;
   zip_code: string;
+  request_status: 'pending' | 'approved' | 'rejected';
 }
 
 const RequestServiceCategoryScreen: React.FC = () => {
@@ -397,20 +398,43 @@ const RequestServiceCategoryScreen: React.FC = () => {
               📋 Pending Requests ({requests.length})
             </Text>
             {requests.map((request) => {
-              return (
-                <View key={request.id} style={styles.requestCard}>
-                  <Text style={styles.requestName}>
-                    {request.title.replace('[CATEGORY REQUEST] ', '')}
-                  </Text>
-                  <Text style={styles.requestDate}>
-                    Submitted: {new Date(request.created_at).toLocaleDateString()}
-                  </Text>
-                  {request.zip_code && (
-                    <Text style={styles.requestZip}>Zip: {request.zip_code}</Text>
-                  )}
-                </View>
-              );
-            })}
+  // Determine status styling
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return { color: '#4CAF50', text: '✅ Approved', bg: '#E8F5E9' };
+      case 'rejected':
+        return { color: '#F44336', text: '❌ Rejected', bg: '#FFEBEE' };
+      default:
+        return { color: '#FF9800', text: '⏳ Pending Review', bg: '#FFF3E0' };
+    }
+  };
+
+  const statusStyle = getStatusStyle(request.request_status);
+  
+  return (
+    <View key={request.id} style={styles.requestCard}>
+      {/* Header with name and status badge */}
+      <View style={styles.requestHeader}>
+        <Text style={styles.requestName}>
+          {request.title.replace('[CATEGORY REQUEST] ', '')}
+        </Text>
+        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+          <Text style={[styles.statusText, { color: statusStyle.color }]}>
+            {statusStyle.text}
+          </Text>
+        </View>
+      </View>
+      
+      <Text style={styles.requestDate}>
+        Submitted: {new Date(request.created_at).toLocaleDateString()}
+      </Text>
+      {request.zip_code && (
+        <Text style={styles.requestZip}>Zip: {request.zip_code}</Text>
+      )}
+    </View>
+  );
+})}
           </View>
         ) : null}
       </ScrollView>
@@ -530,6 +554,21 @@ const styles = createResponsiveStyles({
   tipsTitle: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 12 },
   tipItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   tipText: { flex: 1, fontSize: 14, color: '#555', marginLeft: 8, lineHeight: 20 },
+  requestHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 8,
+},
+statusBadge: {
+  paddingHorizontal: 12,
+  paddingVertical: 4,
+  borderRadius: 12,
+},
+statusText: {
+  fontSize: 12,
+  fontWeight: '600',
+},
   
 });
 
