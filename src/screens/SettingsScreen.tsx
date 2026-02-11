@@ -1,38 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';  // ✅ Removed useEffect
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
+  // No Alert here!
   Switch,
   Linking,
+  SafeAreaView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { Alert } from '../Utils/Alert';  // ✅ Only this one!
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../contexts/AuthContext';
+import { RootStackParamList } from '../navigation/MainStackNavigator';
+
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SettingsScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NavProp>();
+  const { userInfo, signOut } = useAuth();  // ✅ Get user data from context
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
-  const [userData, setUserData] = useState<any>(null);
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const userStr = await AsyncStorage.getItem('user');
-      if (userStr) {
-        setUserData(JSON.parse(userStr));
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    }
-  };
+  // ✅ NO userData state
+  // ✅ NO useEffect
+  // ✅ NO loadUserData function
 
   const handleLogout = async () => {
     Alert.alert(
@@ -45,8 +41,11 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.multiRemove(['token', 'user']);
-              router.replace('/signin');
+              await signOut();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'BusinessOwnerHomeScreen' }],
+              });
             } catch (error) {
               console.error('Error logging out:', error);
               Alert.alert('Error', 'Failed to logout. Please try again.');
@@ -57,6 +56,7 @@ export default function SettingsScreen() {
     );
   };
 
+  // ... rest of your code
   const openEmail = (email: string, subject: string = '') => {
     const url = `mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`;
     Linking.openURL(url).catch((err) => {
@@ -102,155 +102,153 @@ export default function SettingsScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        {userData && (
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{userData.full_name}</Text>
-            <Text style={styles.userEmail}>{userData.email}</Text>
-          </View>
-        )}
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <ScrollView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Settings</Text>
+          {userInfo && (
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{userInfo.full_name || 'User'}</Text>
+              <Text style={styles.userEmail}>{userInfo.email}</Text>
+            </View>
+          )}
+        </View>
 
-      {/* Account Settings */}
-      <SettingSection title="Account">
-        <SettingItem
-          icon="person-outline"
-          label="Edit Profile"
-          onPress={() => {
-            // Navigate to edit profile
-            Alert.alert('Coming Soon', 'Profile editing will be available soon!');
-          }}
-        />
-        <SettingItem
-          icon="key-outline"
-          label="Change Password"
-          onPress={() => {
-            // Navigate to change password
-            Alert.alert('Coming Soon', 'Password change will be available soon!');
-          }}
-        />
-        <SettingItem
-          icon="shield-checkmark-outline"
-          label="Privacy"
-          onPress={() => {
-            // Navigate to privacy settings
-            Alert.alert('Coming Soon', 'Privacy settings will be available soon!');
-          }}
-        />
-      </SettingSection>
+        {/* Account Settings */}
+        <SettingSection title="Account">
+          <SettingItem
+            icon="person-outline"
+            label="Edit Profile"
+            onPress={() => {
+              // Navigate to Business Owner Profile
+              navigation.navigate('BusinessOwnerProfileScreen', { user_id: userInfo?.user_id } as any);
+            }}
+          />
+          <SettingItem
+            icon="key-outline"
+            label="Change Password"
+            onPress={() => {
+              Alert.alert('Coming Soon', 'Password change will be available soon!');
+            }}
+          />
+          <SettingItem
+            icon="shield-checkmark-outline"
+            label="Privacy"
+            onPress={() => {
+              Alert.alert('Coming Soon', 'Privacy settings will be available soon!');
+            }}
+          />
+        </SettingSection>
 
-      {/* Notifications */}
-      <SettingSection title="Notifications">
-        <SettingItem
-          icon="notifications-outline"
-          label="Push Notifications"
-          showArrow={false}
-          rightComponent={
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
-              trackColor={{ false: '#ccc', true: '#4A90E2' }}
-              thumbColor={notificationsEnabled ? '#fff' : '#f4f3f4'}
-            />
-          }
-        />
-        <SettingItem
-          icon="mail-outline"
-          label="Email Notifications"
-          showArrow={false}
-          rightComponent={
-            <Switch
-              value={emailNotifications}
-              onValueChange={setEmailNotifications}
-              trackColor={{ false: '#ccc', true: '#4A90E2' }}
-              thumbColor={emailNotifications ? '#fff' : '#f4f3f4'}
-            />
-          }
-        />
-      </SettingSection>
+        {/* Notifications */}
+        <SettingSection title="Notifications">
+          <SettingItem
+            icon="notifications-outline"
+            label="Push Notifications"
+            showArrow={false}
+            rightComponent={
+              <Switch
+                value={notificationsEnabled}
+                onValueChange={setNotificationsEnabled}
+                trackColor={{ false: '#ccc', true: '#4A90E2' }}
+                thumbColor={notificationsEnabled ? '#fff' : '#f4f3f4'}
+              />
+            }
+          />
+          <SettingItem
+            icon="mail-outline"
+            label="Email Notifications"
+            showArrow={false}
+            rightComponent={
+              <Switch
+                value={emailNotifications}
+                onValueChange={setEmailNotifications}
+                trackColor={{ false: '#ccc', true: '#4A90E2' }}
+                thumbColor={emailNotifications ? '#fff' : '#f4f3f4'}
+              />
+            }
+          />
+        </SettingSection>
 
-      {/* Help & Support */}
-      <SettingSection title="Help & Support">
-        <SettingItem
-          icon="mail"
-          label="Contact Support"
-          onPress={() => openEmail('support@gozipmarket.com', 'Support Request - ZipService')}
-        />
-        <SettingItem
-          icon="briefcase"
-          label="Business Inquiries"
-          onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - ZipService')}
-        />
-        <SettingItem
-          icon="information-circle-outline"
-          label="General Information"
-          onPress={() => openEmail('info@gozipmarket.com', 'Information Request - ZipService')}
-        />
-        <SettingItem
-          icon="bug-outline"
-          label="Report a Bug"
-          onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - ZipService')}
-        />
-        <SettingItem
-          icon="help-circle-outline"
-          label="FAQ"
-          onPress={() => {
-            Alert.alert('Coming Soon', 'FAQ section will be available soon!');
-          }}
-        />
-      </SettingSection>
+        {/* Help & Support */}
+        <SettingSection title="Help & Support">
+          <SettingItem
+            icon="mail"
+            label="Contact Support"
+            onPress={() => openEmail('support@gozipmarket.com', 'Support Request - ZipService')}
+          />
+          <SettingItem
+            icon="briefcase"
+            label="Business Inquiries"
+            onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - ZipService')}
+          />
+          <SettingItem
+            icon="information-circle-outline"
+            label="General Information"
+            onPress={() => openEmail('info@gozipmarket.com', 'Information Request - ZipService')}
+          />
+          <SettingItem
+            icon="bug-outline"
+            label="Report a Bug"
+            onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - ZipService')}
+          />
+          <SettingItem
+            icon="help-circle-outline"
+            label="FAQ"
+            onPress={() => {
+              Alert.alert('Coming Soon', 'FAQ section will be available soon!');
+            }}
+          />
+        </SettingSection>
 
-      {/* Legal */}
-      <SettingSection title="Legal">
-        <SettingItem
-          icon="document-text-outline"
-          label="Terms of Service"
-          onPress={() => {
-            // Open terms of service
-            Alert.alert('Coming Soon', 'Terms of Service will be available soon!');
-          }}
-        />
-        <SettingItem
-          icon="shield-outline"
-          label="Privacy Policy"
-          onPress={() => {
-            // Open privacy policy
-            Alert.alert('Coming Soon', 'Privacy Policy will be available soon!');
-          }}
-        />
-      </SettingSection>
+        {/* Legal */}
+        <SettingSection title="Legal">
+          <SettingItem
+            icon="document-text-outline"
+            label="Terms of Service"
+            onPress={() => {
+              navigation.navigate('TermsOfService');
+            }}
+          />
+          <SettingItem
+            icon="shield-outline"
+            label="Privacy Policy"
+            onPress={() => {
+              navigation.navigate('PrivacyPolicy');
+            }}
+          />
+        </SettingSection>
 
-      {/* About */}
-      <SettingSection title="About">
-        <SettingItem
-          icon="information-outline"
-          label="App Version"
-          showArrow={false}
-          rightComponent={<Text style={styles.versionText}>1.0.0</Text>}
-        />
-        <SettingItem
-          icon="logo-github"
-          label="Open Source Licenses"
-          onPress={() => {
-            Alert.alert('Coming Soon', 'License information will be available soon!');
-          }}
-        />
-      </SettingSection>
+        {/* About */}
+        <SettingSection title="About">
+          <SettingItem
+            icon="information-outline"
+            label="App Version"
+            showArrow={false}
+            rightComponent={<Text style={styles.versionText}>1.0.0</Text>}
+          />
+          <SettingItem
+            icon="logo-github"
+            label="Open Source Licenses"
+            onPress={() => {
+              Alert.alert('Coming Soon', 'License information will be available soon!');
+            }}
+          />
+        </SettingSection>
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={22} color="#fff" />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={22} color="#fff" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>© 2025 ZipService - Zip Market LLC</Text>
-      </View>
-    </ScrollView>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>© 2025 ZipService - Zip Market LLC</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

@@ -281,8 +281,12 @@ const BottomTabs: React.FC = () => {
             
              case 'Profile':
   return <Ionicons name={focused ? "settings" : "settings-outline"} size={iconSize} color={color} />;
-            default:
-              return <Ionicons name="ellipse" size={iconSize} color={color} />;
+
+// Label
+<Text style={{ fontSize: 12, fontWeight: '800', color }}>
+  Settings
+</Text>
+  
           }
         },
         tabBarActiveTintColor: '#1E40AF',
