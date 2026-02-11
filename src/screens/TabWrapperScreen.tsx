@@ -44,7 +44,7 @@ import RequestServiceCategoryScreen from "./Requestservicecategoryscreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import { useAuth } from "../contexts/AuthContext";
 import { MessagesPlaceholder, ProfilePlaceholder, PostPlaceholder } from "./auth/SignInPlaceholderScreen";
-import SettingsScreen from '../screens/SettingsScreen'
+//import SettingsScreen from '../screens/SettingsScreen'
 // Create navigators with type safety
 const Tab = createBottomTabNavigator<TabParamList>();
 const PostStack = createStackNavigator();
@@ -240,8 +240,8 @@ const BottomTabs: React.FC = () => {
     ? BusinessOwnerChatScreen
     : MessagesPlaceholder;
 
-  const ProfileScreenComponent = userType === "business_owner"
-  ? SettingsScreen  // ← USE SETTINGS INSTEAD
+   const ProfileScreenComponent = userType === "business_owner"
+  ? BusinessOwnerProfileScreen  // ← Direct profile with all sections
   : ProfilePlaceholder;
 
   const PostScreenComponent = userType === "business_owner"

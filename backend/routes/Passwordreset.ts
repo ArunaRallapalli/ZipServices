@@ -96,7 +96,7 @@ console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
 console.log('🔗 Frontend URL:', frontendUrl);
 
 const resetLink = `zipservice://reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
-const webResetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+const webResetLink = `${frontendUrl}/reset-password.html?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
    // Send email via Resend
 const emailResult = await resend.emails.send({
