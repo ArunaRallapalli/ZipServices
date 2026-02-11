@@ -44,7 +44,7 @@ import RequestServiceCategoryScreen from "./Requestservicecategoryscreen";
 import BusinessOwnerChatScreen from "./BusinessOwnerChatScreen";
 import { useAuth } from "../contexts/AuthContext";
 import { MessagesPlaceholder, ProfilePlaceholder, PostPlaceholder } from "./auth/SignInPlaceholderScreen";
-
+import SettingsScreen from '../screens/SettingsScreen'
 // Create navigators with type safety
 const Tab = createBottomTabNavigator<TabParamList>();
 const PostStack = createStackNavigator();
@@ -241,8 +241,8 @@ const BottomTabs: React.FC = () => {
     : MessagesPlaceholder;
 
   const ProfileScreenComponent = userType === "business_owner"
-    ? BusinessOwnerProfileScreen
-    : ProfilePlaceholder;
+  ? SettingsScreen  // ← USE SETTINGS INSTEAD
+  : ProfilePlaceholder;
 
   const PostScreenComponent = userType === "business_owner"
     ? PostStackNavigator
@@ -278,8 +278,9 @@ const BottomTabs: React.FC = () => {
                   )}
                 </View>
               );
-            case 'Profile':
-              return <MaterialIcons name="person" size={iconSize} color={color} />;
+            
+             case 'Profile':
+  return <Ionicons name={focused ? "settings" : "settings-outline"} size={iconSize} color={color} />;
             default:
               return <Ionicons name="ellipse" size={iconSize} color={color} />;
           }
@@ -399,17 +400,17 @@ const BottomTabs: React.FC = () => {
       />
       
       {/* Profile Tab */}
-      <Tab.Screen 
-        name="Profile" 
-        component={ProfileScreenComponent}
-        options={{
-          tabBarLabel: ({ color }) => (
-            <Text style={{ fontSize: 12, fontWeight: '800', color }}>
-              Profile
-            </Text>
-          )
-        }}
-      />
+     <Tab.Screen 
+  name="Profile" 
+  component={ProfileScreenComponent}
+  options={{
+    tabBarLabel: ({ color }) => (
+      <Text style={{ fontSize: 12, fontWeight: '800', color }}>
+        Settings  {/* ← CHANGE LABEL */}
+      </Text>
+    )
+  }}
+/>
     </Tab.Navigator>
   );
 };

@@ -99,11 +99,13 @@ console.log('🌍 Environment:', isProduction ? 'PRODUCTION' : 'DEVELOPMENT');
 console.log('🌍 RENDER env var:', process.env.RENDER);
 console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
 console.log('🔗 Verification link created');
-    // Send verification email via Resend
-    const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
-      to: email,
-      subject: 'Verify Your ZipService Email',
+  // Send verification email via Resend
+const emailResult = await resend.emails.send({
+ // To this:
+from: 'ZipService <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
+replyTo: 'support@gozipmarket.com',
+  to: email,
+  subject: 'Verify Your ZipService Email',  
       html: `
         <!DOCTYPE html>
         <html>

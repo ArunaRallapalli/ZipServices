@@ -18,8 +18,12 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSExceptionDomains": {
-            "localhost": { "NSExceptionAllowsInsecureHTTPLoads": true },
-            "192.168.0.0/16": { "NSExceptionAllowsInsecureHTTPLoads": true }
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            },
+            "192.168.0.0/16": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
           }
         },
         "NSCameraUsageDescription": "This app may use the camera to let you upload profile pictures.",
@@ -43,6 +47,9 @@
     },
     "assetBundlePatterns": [
       "**/*"
+    ],
+    "plugins": [
+      "expo-router"
     ]
   }
 }

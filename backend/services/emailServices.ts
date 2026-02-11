@@ -43,10 +43,12 @@ export async function sendBookingNotification({
 
     console.log('📧 Sending booking notification to:', providerEmail);
 
-    const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
-      to: providerEmail,
-      subject: '📅 New Booking Request',
+  const emailResult = await resend.emails.send({
+// To:
+from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
+replyTo: 'support@gozipmarket.com',
+  to: providerEmail,
+  subject: '📅 New Booking Request',
       html: `
         <!DOCTYPE html>
         <html>
@@ -504,9 +506,11 @@ export async function sendCategoryRequestNotification({
     console.log('📧 Sending category request notification to admin:', adminEmail);
 
     const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
-      to: adminEmail,
-      subject: '📋 New Category Request - Admin Review Needed',
+  // To:
+from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
+replyTo: 'support@gozipmarket.com',
+  to: adminEmail,
+  subject: '📋 New Category Request - Admin Review Needed',
       html: `
         <!DOCTYPE html>
         <html>

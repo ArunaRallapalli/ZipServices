@@ -59,7 +59,7 @@ import {
   isValidZipCode,
   popularCategories,
 } from "../Utils/searchUtils";
-
+import { Footer } from "../components/Footer";
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -652,6 +652,8 @@ useFocusEffect(
           onCategoryPress={handleCategoryPress}
           isZipValid={isZipValid}
         />
+        {/* ✅ ADD FOOTER HERE - At the bottom */}
+      <Footer />
       </ScrollView>
     </SafeAreaView>
   );

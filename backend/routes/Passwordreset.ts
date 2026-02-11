@@ -98,11 +98,13 @@ console.log('🔗 Frontend URL:', frontendUrl);
 const resetLink = `zipservice://reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 const webResetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
-    // Send email via Resend
-    const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>', // Update with your verified domain
-      to: email,
-      subject: 'Reset Your ZipService Password',
+   // Send email via Resend
+const emailResult = await resend.emails.send({
+  // To this:
+from: 'ZipService <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
+replyTo: 'support@gozipmarket.com',  // Users can still reply to support@
+  to: email,
+  subject: 'Reset Your ZipService Password',
       html: `
         <!DOCTYPE html>
         <html>
