@@ -156,7 +156,7 @@ export async function sendCategoryRequestDecision({
   try {
     const isApproved = requestStatus === 'approved';
     const subject = isApproved 
-      ? '✅ Your Category Request has been Approved!' 
+      ? '✅ Your Category Request has been Approved! and Completed!' 
       : 'Update on Your Category Request';
     
     const statusColor = isApproved ? '#4CAF50' : '#FF9800';

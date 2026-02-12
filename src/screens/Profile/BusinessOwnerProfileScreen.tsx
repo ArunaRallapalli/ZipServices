@@ -259,33 +259,37 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           )}
 
          {/* Legal */}
-<Text style={styles.sectionHeader}>Legal</Text>
-<TouchableOpacity 
-  style={styles.legalMenuItem} 
-  onPress={() => navigation.navigate('TermsOfService')}
->
-  <Text style={styles.legalMenuText}>Terms of Service</Text>
-  <Text style={styles.arrow}>›</Text>
-</TouchableOpacity>
-<TouchableOpacity 
-  style={styles.legalMenuItem} 
-  onPress={() => navigation.navigate('PrivacyPolicy')}
->
-  <Text style={styles.legalMenuText}>Privacy Policy</Text>
-  <Text style={styles.arrow}>›</Text>
-</TouchableOpacity>
+          <Text style={styles.sectionHeader}>Legal</Text>
+          <TouchableOpacity 
+            style={styles.legalMenuItem} 
+            onPress={() => navigation.navigate('TermsOfService')}
+          >
+            <Text style={styles.legalMenuText}>Terms of Service</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.legalMenuItem} 
+            onPress={() => navigation.navigate('PrivacyPolicy')}
+          >
+            <Text style={styles.legalMenuText}>Privacy Policy</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
 
-{/* Contact & Support - DISABLED FOR PHASE 1 */}
-{/* <ContactSupportSection showTitle={true} compact={false} /> */}
+          {/* Contact & Support - DISABLED FOR PHASE 1 */}
+          {/* <ContactSupportSection showTitle={true} compact={false} /> */}
 
-<View style={{ marginTop: 20 }}>
-  <Button title="⬅ Back" onPress={() => navigation.goBack()} />
-</View>
+          <View style={{ marginTop: 20 }}>
+            <Button title="⬅ Back" onPress={() => navigation.goBack()} />
+          </View>
+
+          <View style={{ marginTop: 20, marginBottom: 40 }}>
+            <Button title="🚪 Logout" onPress={handleLogout} color="#ef4444" />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};    
+};
 const styles = createResponsiveStyles({
   contentContainer: { padding: 20 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
