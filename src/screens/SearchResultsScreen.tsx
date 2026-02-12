@@ -39,6 +39,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Alert } from "../Utils/Alert";
+import { Text } from 'react-native';
 
 import { useAuth } from "../contexts/AuthContext";
 import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -653,6 +654,11 @@ useFocusEffect(
   onCategoryPress={handleCategoryPress}
   isZipValid={isZipValid}
 />
+{/* Help & Support */} 
+
+  <Text style={[styles.subtitle, { fontWeight: 'bold' }]}>
+  For questions or support, please contact us at zipmarket333@gmail.com
+</Text>
 
 {/* Contact Support Section - DISABLED FOR PHASE 1 */}
 {/* <View style={styles.footer}>

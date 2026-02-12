@@ -138,7 +138,9 @@ const BusinessOwnerHomeScreen: React.FC = () => {
       >
         <Text style={styles.buttonText}>Existing User → Login</Text>
       </TouchableOpacity>
-           
+        <Text style={[styles.subtitle, { fontWeight: 'bold' }]}>
+        For questions or support, please contact us at zipmarket333@gmail.com
+      </Text>     
     </View>
   );
 };
