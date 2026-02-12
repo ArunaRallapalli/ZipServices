@@ -35,6 +35,8 @@ import { BackButton } from '../../components/BackButton';
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import api from '../../api';
 import { useUser } from '../../contexts/UserContext';
+import { ContactSupportSection } from '../../components/ContactSupportSection';
+
 
 // Type definitions
 type BusinessOwnerProfileRouteProp = RouteProp<RootStackParamList, "BusinessOwnerProfileScreen">;
@@ -57,6 +59,7 @@ interface BusinessOwnerProfile {
   street: string;
   city: string;
   state: string;
+  is_admin?: boolean;
 }
 
 const BusinessOwnerProfileScreen: React.FC = () => {
@@ -84,27 +87,42 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     didFetch.current = true;
 
     const fetchProfile = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  try {
+    setLoading(true);
+    setError(null);
 
-        console.log(`📱 Fetching profile for user_id: ${user_id}`);
+    console.log(`📱 Fetching profile for user_id: ${user_id}`);
 
-        // ✅ FIXED: Let API client handle token automatically
-        const response = await api.get(`/business-owners/by-user/${user_id}`);
+    const response = await api.get(`/business-owners/by-user/${user_id}`);
 
-        console.log('✅ Profile loaded successfully:', response);
-        
-        // Backend returns data directly (not wrapped in .data property)
-        setProfile(response);
-      } catch (err: any) {
-        console.error('❌ Profile fetch error:', err);
-        setError("Failed to load profile. Please check your network and try again.");
-        Alert.alert("Error", "Failed to load profile. Please check your network and try again.");
-      } finally {
-        setLoading(false);
-      }
+    console.log('✅ Profile loaded successfully:', response);
+    
+    // ✅ Fetch is_admin from backend API
+    let is_admin = false;
+    try {
+      const adminResponse = await api.get(`/api/users/${user_id}/admin-status`);
+      is_admin = adminResponse.is_admin || false;
+      console.log('✅ Admin status fetched:', is_admin);
+    } catch (error) {
+      console.log('⚠️ Could not fetch admin status, defaulting to false');
+      is_admin = false;
+    }
+    
+    const profileWithAdmin = {
+      ...response,
+      is_admin: is_admin
     };
+    
+    setProfile(profileWithAdmin);
+    
+  } catch (err: any) {
+    console.error('❌ Profile fetch error:', err);
+    setError("Failed to load profile. Please check your network and try again.");
+    Alert.alert("Error", "Failed to load profile. Please check your network and try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
     fetchProfile();
   }, [user_id]);
@@ -224,63 +242,50 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           <Text style={styles.label}>Service Radius (miles):</Text>
           <TextInput style={styles.input} value={String(profile.service_radius_miles || "")} keyboardType="numeric" onChangeText={(text) => setProfile({ ...profile, service_radius_miles: Number(text) || 0 })} />
 
-          <Button title="Save Profile" onPress={handleSave} />
+      <Button title="Save Profile" onPress={handleSave} />
 
-          {/* Legal */}
-          <Text style={styles.sectionHeader}>Legal</Text>
-          <TouchableOpacity style={styles.legalMenuItem} onPress={() => navigation.navigate('TermsOfService')}>
-            <Text style={styles.legalMenuText}>Terms of Service</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.legalMenuItem} onPress={() => navigation.navigate('PrivacyPolicy')}>
-            <Text style={styles.legalMenuText}>Privacy Policy</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
+          {/* Admin Tools - Check is_admin flag */}
+          {profile?.is_admin && (
+            <>
+              <Text style={styles.sectionHeader}>Admin Tools</Text>
+              <TouchableOpacity 
+                style={styles.legalMenuItem} 
+                onPress={() => navigation.navigate('AdminCategoryRequests')}
+              >
+                <Text style={styles.legalMenuText}>📋 Manage Category Requests</Text>
+                <Text style={styles.arrow}>›</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
-          {/* Contact & Support */}
-          <Text style={styles.sectionHeader}>Contact & Support</Text>
-          <TouchableOpacity 
-            style={styles.legalMenuItem} 
-            onPress={() => openEmail('support@gozipmarket.com', 'Support Request - ZipService')}
-          >
-            <Text style={styles.legalMenuText}>📧 Contact Support</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.legalMenuItem} 
-            onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - ZipService')}
-          >
-            <Text style={styles.legalMenuText}>💼 Business Inquiries</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.legalMenuItem} 
-            onPress={() => openEmail('info@gozipmarket.com', 'Information Request - ZipService')}
-          >
-            <Text style={styles.legalMenuText}>ℹ️ General Information</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.legalMenuItem} 
-            onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - ZipService')}
-          >
-            <Text style={styles.legalMenuText}>🐛 Report a Bug</Text>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
+         {/* Legal */}
+<Text style={styles.sectionHeader}>Legal</Text>
+<TouchableOpacity 
+  style={styles.legalMenuItem} 
+  onPress={() => navigation.navigate('TermsOfService')}
+>
+  <Text style={styles.legalMenuText}>Terms of Service</Text>
+  <Text style={styles.arrow}>›</Text>
+</TouchableOpacity>
+<TouchableOpacity 
+  style={styles.legalMenuItem} 
+  onPress={() => navigation.navigate('PrivacyPolicy')}
+>
+  <Text style={styles.legalMenuText}>Privacy Policy</Text>
+  <Text style={styles.arrow}>›</Text>
+</TouchableOpacity>
 
-          <View style={{ marginTop: 20 }}>
-            <Button title="⬅ Back" onPress={() => navigation.goBack()} />
-          </View>
+{/* Contact & Support - DISABLED FOR PHASE 1 */}
+{/* <ContactSupportSection showTitle={true} compact={false} /> */}
 
-          <View style={{ marginTop: 20, marginBottom: 40 }}>
-            <Button title="🚪 Logout" onPress={handleLogout} color="#ef4444" />
-          </View>
+<View style={{ marginTop: 20 }}>
+  <Button title="⬅ Back" onPress={() => navigation.goBack()} />
+</View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
-
+};    
 const styles = createResponsiveStyles({
   contentContainer: { padding: 20 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },

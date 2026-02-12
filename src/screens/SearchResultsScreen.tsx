@@ -49,6 +49,7 @@ import Header from "../components/SearchHeader";
 import SearchForm from "../components/SearchForm";
 import CategoryTiles from "../components/SearchCategoryTiles";
 import SearchResultsList from "../components/SearchResultsList";
+import { ContactSupportSection } from '../components/ContactSupportSection';
 
 import {
   ServicePost,
@@ -646,23 +647,26 @@ useFocusEffect(
           onZipChange={handleZipChange}
         />
 
-        {/* Popular category tiles for quick access */}
-        <CategoryTiles
-          categories={popularCategories}
-          onCategoryPress={handleCategoryPress}
-          isZipValid={isZipValid}
-        />
-        {/* ✅ ADD FOOTER HERE - At the bottom */}
-      <Footer />
+      {/* Popular category tiles for quick access */}
+<CategoryTiles
+  categories={popularCategories}
+  onCategoryPress={handleCategoryPress}
+  isZipValid={isZipValid}
+/>
+
+{/* Contact Support Section - DISABLED FOR PHASE 1 */}
+{/* <View style={styles.footer}>
+  <ContactSupportSection showTitle={false} compact={true} />
+</View> */}
+
+{/* Footer - DISABLED FOR PHASE 1 */}
+{/* <Footer /> */}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// ============================================================================
-// STYLES
-// ============================================================================
-
+// Add footer style to your StyleSheet
 const styles = createResponsiveStyles({
   container: {
     flex: 1,
@@ -676,6 +680,9 @@ const styles = createResponsiveStyles({
     justifyContent: "center",
     alignItems: "center",
   },
-});
-
+  footer: {
+    marginTop: 40,
+    marginBottom: 20,
+  },
+});  
 export default SearchResultsScreen;
