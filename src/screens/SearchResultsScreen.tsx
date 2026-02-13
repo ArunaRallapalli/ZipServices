@@ -657,7 +657,7 @@ useFocusEffect(
 {/* Help & Support */} 
 
   <Text style={[styles.subtitle, { fontWeight: 'bold' }]}>
-  For questions or support, please contact us at zipmarket333@gmail.com
+  For questions or support, please contact us at support@gozipmarket.com
 </Text>
 
 {/* Contact Support Section - DISABLED FOR PHASE 1 */}
