@@ -1,8 +1,10 @@
 /**
  * EditListing Component
  * 
- * Last Updated: January 5, 2026
- * Changes: Migrated from fetch to api client for automatic token handling
+ * Last Updated: February 19, 2026
+ * Changes: Added photo upload/delete functionality (matching PostServiceScreen)
+ * 
+ * Previous: January 5, 2026 - Migrated from fetch to api client for automatic token handling
  * 
  * This screen allows users to edit their existing service listings/posts.
  * It loads the current post data, displays it in editable form fields, validates inputs,
@@ -24,6 +26,7 @@
  * - Cancel button to go back without saving
  * - Keyboard-aware scrolling for better UX
  * - Fallback categories if API fails
+ * - View/add/delete photos (up to 10 per post, HEIC auto-converted by backend)
  */
 
 import React, { useState, useEffect } from "react";
@@ -38,6 +41,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,                  // ADDED: February 19, 2026
 } from "react-native";
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Alert } from "../Utils/Alert";
@@ -46,7 +50,10 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { Picker } from "@react-native-picker/picker";
-import api from '../api'; // ADDED: January 5, 2026
+import api from '../api';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ADDED: February 19, 2026
+import * as ImagePicker from 'expo-image-picker';                     // ADDED: February 19, 2026
+import API_URL from '../config/apiConfig';                             // ADDED: February 19, 2026
 
 // Navigation type definitions for type safety
 type EditListingNavProp = NativeStackNavigationProp<RootStackParamList, "EditListing">;
@@ -67,6 +74,7 @@ interface ServicePost {
   zip_code?: string;
   city?: string;
   state?: string;
+  photos?: string[];                    // ADDED: February 19, 2026 - array of photo URLs
 }
 
 const EditListing: React.FC = () => {
@@ -98,6 +106,14 @@ const EditListing: React.FC = () => {
   const [contactEmail, setContactEmail] = useState("");
   const [zipCode, setZipCode] = useState("");
 
+  // ADDED: February 19, 2026 - Photo states
+  // existingPhotos: URLs already saved on the post (loaded from backend)
+  // selectedPhotos: new photos the user picks before saving
+  // uploadingPhotos: true while photos are being uploaded after save
+  const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+
   // State: Validation errors object - stores error messages for each field
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -109,6 +125,7 @@ const EditListing: React.FC = () => {
     if (postId) {
       // Fetch both categories and post data in parallel
       Promise.all([fetchServiceCategories(), fetchPostData()]);
+      requestPhotoPermissions(); // ADDED: February 19, 2026
     } else {
       console.error("No postId provided in route params");
       Alert.alert("Error", "No post ID provided", [
@@ -117,6 +134,192 @@ const EditListing: React.FC = () => {
       setLoading(false);
     }
   }, [postId]);
+
+  // ============================================================================
+  // ADDED: February 19, 2026 - Photo helper functions
+  // ============================================================================
+
+  /**
+   * Request media library permissions needed to pick photos
+   */
+  const requestPhotoPermissions = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please allow access to your photos to upload images.');
+    }
+  };
+
+  /**
+   * Open image picker so user can select new photos to add
+   * Respects the 10-photo limit across existing + newly selected photos
+   */
+  const pickPhotos = async () => {
+    const totalPhotos = existingPhotos.length + selectedPhotos.length;
+    if (totalPhotos >= 10) {
+      Alert.alert('Limit Reached', 'You can have a maximum of 10 photos per post.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        selectionLimit: 10 - totalPhotos,
+      });
+      if (!result.canceled && result.assets) {
+        setSelectedPhotos([...selectedPhotos, ...result.assets]);
+        console.log(`📸 Selected ${result.assets.length} new photos`);
+      }
+    } catch (error) {
+      console.error('Error picking photos:', error);
+      Alert.alert('Error', 'Failed to pick photos. Please try again.');
+    }
+  };
+
+  /**
+   * Remove a newly selected photo (not yet uploaded) by index
+   */
+  const removeNewPhoto = (index: number) => {
+    setSelectedPhotos(selectedPhotos.filter((_, i) => i !== index));
+  };
+
+  /**
+   * Delete an existing photo from the backend by its index in the photos array
+   * Calls DELETE /api/service-posts/:postId/photos/:photoIndex
+   */
+  const removeExistingPhoto = async (index: number) => {
+    try {
+      console.log(`🗑️ Deleting existing photo at index ${index} from post ${postId}`);
+      await api.delete(`/api/service-posts/${postId}/photos/${index}`);
+      setExistingPhotos(existingPhotos.filter((_, i) => i !== index));
+      console.log('✅ Existing photo deleted');
+    } catch (error) {
+      console.error('Error deleting photo:', error);
+      Alert.alert('Error', 'Failed to remove photo. Please try again.');
+    }
+  };
+
+  /**
+   * Upload all newly selected photos to the backend after a successful save
+   * Mirrors the uploadPhotos function in PostServiceScreen exactly:
+   * - Web: Base64 JSON upload
+   * - Mobile: FormData XHR upload
+   */
+  const uploadPhotos = async (postId: string | number) => {
+    if (selectedPhotos.length === 0) return;
+
+    setUploadingPhotos(true);
+    console.log(`📤 Uploading ${selectedPhotos.length} new photos for post ${postId}`);
+
+    let uploadedCount = 0;
+    let failedCount = 0;
+
+    for (const photo of selectedPhotos) {
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        if (!token) throw new Error('No authentication token');
+
+        const uri = photo.uri;
+        let mimeType = 'image/jpeg';
+        let fileExtension = 'jpg';
+        let blob: Blob | null = null;
+
+        if (Platform.OS === 'web') {
+          const response = await fetch(uri);
+          blob = await response.blob();
+          mimeType = blob.type || 'image/jpeg';
+          const extensionMap: { [key: string]: string } = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp',
+            'image/heic': 'heic',
+            'image/heif': 'heic',
+          };
+          fileExtension = extensionMap[mimeType] || 'jpg';
+        } else {
+          fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
+          if (fileExtension === 'png') mimeType = 'image/png';
+          else if (fileExtension === 'webp') mimeType = 'image/webp';
+          else if (fileExtension === 'heic' || fileExtension === 'heif') mimeType = 'image/heic';
+        }
+
+        console.log(`📤 Uploading photo ${uploadedCount + 1}/${selectedPhotos.length}`);
+
+        if (Platform.OS === 'web') {
+          if (!blob) throw new Error('Blob not available for web upload');
+
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          const uploadResponse = await fetch(`${API_URL}/api/service-posts/${postId}/upload-photo`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              photo: base64,
+              filename: `photo_${Date.now()}.${fileExtension}`,
+              mimetype: mimeType,
+            }),
+          });
+
+          if (!uploadResponse.ok) {
+            const errText = await uploadResponse.text();
+            console.error('❌ Web upload failed:', errText);
+            throw new Error(`Upload failed with status ${uploadResponse.status}`);
+          }
+          console.log('✅ Web upload successful');
+        } else {
+          const formData = new FormData();
+          formData.append('photo', {
+            uri,
+            type: mimeType,
+            name: `photo.${fileExtension}`,
+          } as any);
+
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_URL}/api/service-posts/${postId}/upload-photo`);
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            xhr.onload = () => {
+              if (xhr.status === 200) {
+                console.log('✅ Mobile upload successful');
+                resolve();
+              } else {
+                console.error('❌ Mobile upload failed:', xhr.responseText);
+                reject(new Error(`Upload failed with status ${xhr.status}`));
+              }
+            };
+            xhr.onerror = () => reject(new Error('Network error'));
+            xhr.ontimeout = () => reject(new Error('Upload timeout'));
+            xhr.send(formData);
+          });
+        }
+
+        uploadedCount++;
+      } catch (error) {
+        failedCount++;
+        console.error(`❌ Photo upload failed:`, error);
+      }
+    }
+
+    setUploadingPhotos(false);
+
+    if (failedCount > 0) {
+      Alert.alert('Upload Complete', `${uploadedCount} photos uploaded successfully. ${failedCount} failed.`);
+    }
+
+    console.log(`✅ Photo upload complete: ${uploadedCount} succeeded, ${failedCount} failed`);
+  };
+
+  // ============================================================================
+  // END: Added photo helper functions
+  // ============================================================================
 
   /**
    * Fetch available service categories from the API
@@ -180,6 +383,7 @@ const EditListing: React.FC = () => {
    * Fetch the existing post data from the backend by postId
    * Populates all form fields with the current post data
    * UPDATED: January 5, 2026 - Using api.get() instead of fetch
+   * UPDATED: February 19, 2026 - Also loads existing photos from post.photos
    */
   const fetchPostData = async () => {
     try {
@@ -203,6 +407,13 @@ const EditListing: React.FC = () => {
         setPhoneNumber(post.phone_number || "");
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
+
+        // ADDED: February 19, 2026 - Load existing photos from the post data
+        if (Array.isArray(post.photos) && post.photos.length > 0) {
+          setExistingPhotos(post.photos);
+          console.log(`✅ Loaded ${post.photos.length} existing photos`);
+        }
+
         console.log("Form fields set successfully");
       } else {
         throw new Error("Invalid data format received from server");
@@ -264,6 +475,7 @@ const EditListing: React.FC = () => {
    * Handle save button press
    * Validates form, then sends PUT request to update the post
    * UPDATED: January 5, 2026 - Using api.put() instead of fetch
+   * UPDATED: February 19, 2026 - Uploads any newly selected photos after save
    */
   const handleSave = async () => {
     console.log("Save button pressed");
@@ -299,6 +511,12 @@ const EditListing: React.FC = () => {
 
       // Show success message and navigate back if update successful
       if (data.success) {
+        // ADDED: February 19, 2026 - Upload any new photos before navigating back
+        if (selectedPhotos.length > 0) {
+          console.log(`📸 Uploading ${selectedPhotos.length} new photos...`);
+          await uploadPhotos(postId);
+        }
+
         Alert.alert("Success", "Your listing has been updated successfully!", [
           {
             text: "OK",
@@ -582,15 +800,107 @@ const EditListing: React.FC = () => {
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
           </View>
 
-          {/* Save Button - Disabled during save operation */}
+          {/* ====================================================================
+            ADDED: February 19, 2026 - Photos section
+            Shows existing photos (deletable) + newly selected photos + add button
+            Uses the same upload logic as PostServiceScreen
+          ==================================================================== */}
+          <View style={styles.section}>
+            {/* Header row: label + total count */}
+            <View style={styles.photoHeader}>
+              <Text style={styles.label}>Photos</Text>
+              <Text style={styles.photoCount}>
+                {existingPhotos.length + selectedPhotos.length}/10
+              </Text>
+            </View>
+
+            {/* Existing photos already saved on the post */}
+            {existingPhotos.length > 0 && (
+              <View style={styles.photoGrid}>
+                {existingPhotos.map((uri, index) => (
+                  <View key={`existing-${index}`} style={styles.photoPreview}>
+                    <Image source={{ uri }} style={styles.photoImage} />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={() => removeExistingPhoto(index)}
+                      disabled={saving}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Newly selected photos (not yet uploaded) */}
+            {selectedPhotos.length > 0 && (
+              <View style={styles.photoGrid}>
+                {selectedPhotos.map((photo, index) => (
+                  <View key={`new-${index}`} style={styles.photoPreview}>
+                    <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={() => removeNewPhoto(index)}
+                      disabled={saving}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Add Photos button - disabled at 10-photo limit or while saving */}
+            <TouchableOpacity
+              style={[
+                styles.addPhotoButton,
+                (existingPhotos.length + selectedPhotos.length >= 10 || saving) && styles.addPhotoButtonDisabled,
+              ]}
+              onPress={pickPhotos}
+              disabled={existingPhotos.length + selectedPhotos.length >= 10 || saving}
+            >
+              <Ionicons
+                name="camera-outline"
+                size={22}
+                color={existingPhotos.length + selectedPhotos.length >= 10 ? "#ccc" : "#4A90E2"}
+              />
+              <Text
+                style={[
+                  styles.addPhotoText,
+                  (existingPhotos.length + selectedPhotos.length >= 10 || saving) && styles.addPhotoTextDisabled,
+                ]}
+              >
+                {existingPhotos.length + selectedPhotos.length >= 10
+                  ? "Maximum photos reached"
+                  : "Add Photos"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Hint shown when new photos are staged for upload */}
+            {selectedPhotos.length > 0 && (
+              <Text style={styles.photoHint}>
+                📸 {selectedPhotos.length} photo{selectedPhotos.length > 1 ? 's' : ''} will be uploaded when you save.
+                iPhone photos (HEIC) are automatically converted.
+              </Text>
+            )}
+          </View>
+          {/* END: Photos section */}
+
+          {/* Save Button - Disabled during save or photo upload operation */}
           <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            style={[styles.saveButton, (saving || uploadingPhotos) && styles.saveButtonDisabled]}
             onPress={handleSave}
-            disabled={saving}
+            disabled={saving || uploadingPhotos}
           >
-            {/* Show spinner while saving, otherwise show icon and text */}
-            {saving ? (
-              <ActivityIndicator color="#fff" />
+            {/* Show spinner while saving/uploading, otherwise show icon and text */}
+            {saving || uploadingPhotos ? (
+              <>
+                <ActivityIndicator color="#fff" />
+                {/* UPDATED: February 19, 2026 - Show contextual saving message */}
+                <Text style={styles.saveButtonText}>
+                  {uploadingPhotos ? "Uploading Photos..." : "Saving..."}
+                </Text>
+              </>
             ) : (
               <>
                 <Ionicons name="checkmark-circle-outline" size={24} color="#fff" />
@@ -795,6 +1105,74 @@ const styles = createResponsiveStyles({
     fontSize: 16,
     fontWeight: "600",
   },
+
+  // ADDED: February 19, 2026 - Photo styles (match PostServiceScreen)
+  photoHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  photoCount: {
+    fontSize: 14,
+    color: "#999",
+    fontWeight: "600",
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  photoPreview: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  photoImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  removePhotoButton: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 12,
+  },
+  addPhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#4A90E2",
+    borderStyle: "dashed",
+    borderRadius: 8,
+    paddingVertical: 14,
+  },
+  addPhotoButtonDisabled: {
+    borderColor: "#ccc",
+  },
+  addPhotoText: {
+    fontSize: 16,
+    color: "#4A90E2",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  addPhotoTextDisabled: {
+    color: "#ccc",
+  },
+  photoHint: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+  // END: Added photo styles
 });
 
 export default EditListing;

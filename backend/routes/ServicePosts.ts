@@ -25,7 +25,7 @@
  * ============================================================================
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { supabase } from "../config/Supabase";
 import { createClient } from '@supabase/supabase-js';
 import { calculateDistance } from '../utils/Distancecalculator';
@@ -40,6 +40,9 @@ import { SUPABASE_ERROR } from '../Constants/supabase';
 import { getZipCoordinates, getZipLocation } from '../services/zipCodeService';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
 import { sendCategoryRequestNotification } from '../services/emailServices';
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import heicConvert from 'heic-convert';
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
@@ -202,16 +205,16 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
         }
 
         return {
-          ...post,
-          post_id: post.id,
-          distance: roundedDistance,
-          poster_name: post.users?.business_owners?.business_name ||
-                       post.users?.email,
-          business_name: post.users?.business_owners?.business_name,
-          average_rating: post.users?.business_owners?.average_rating || 0,
-          review_count: post.users?.business_owners?.review_count || 0
-        };
-        
+  ...post,
+  post_id: post.id,
+  distance: roundedDistance,
+  poster_name: post.users?.business_owners?.business_name ||
+               post.users?.email,
+  business_name: post.users?.business_owners?.business_name,
+  average_rating: post.users?.business_owners?.average_rating || 0,
+  review_count: post.users?.business_owners?.review_count || 0,
+  photos: post.photos || []  // ← ADD THIS LINE
+};
       })
     );
 
@@ -1063,5 +1066,368 @@ router.patch('/api/service-posts/category-request/:requestId/status', authentica
     });
   }
 });
+// ============================================================================
+// PHOTO UPLOAD ROUTES - AUTO-CONVERT HEIC TO JPEG
+// ADD THIS CODE BEFORE: export default router;
+// ============================================================================
+
+// Configuration
+const ACCEPTED_FORMATS = [
+  'image/jpeg',
+  'image/png', 
+  'image/webp',
+  'image/heic',
+  'image/heif'
+];
+
+const OUTPUT_FORMATS: { [key: string]: string } = {
+  'image/jpeg': 'jpeg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'jpeg',
+  'image/heif': 'jpeg'
+};
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_PHOTOS_PER_POST = 10;
+
+// Multer configuration
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+  },
+  fileFilter: (req, file, cb) => {
+    console.log('📸 Received file:', {
+      name: file.originalname,
+      type: file.mimetype,
+      size: `${(file.size / 1024).toFixed(2)} KB`
+    });
+
+    if (!ACCEPTED_FORMATS.includes(file.mimetype)) {
+      console.error('❌ Unsupported format:', file.mimetype);
+      return cb(new Error(`Unsupported image format: ${file.mimetype}`));
+    }
+
+    console.log('✅ File format accepted');
+    cb(null, true);
+  },
+});
+// ============================================================================
+// CORRECTED HEIC CONVERSION FUNCTION
+// Replace the existing convertHeicToJpeg function with this version
+// ============================================================================
+// HEIC to JPEG conversion helper
+async function convertHeicToJpeg(buffer: Buffer): Promise<Buffer> {
+  console.log('🔄 Converting HEIC to JPEG...');
+  
+  try {
+    // Convert Buffer to Uint8Array, then get its ArrayBuffer
+    const inputArray = new Uint8Array(buffer);
     
+    // heicConvert expects ArrayBuffer
+    const outputBuffer = await heicConvert({
+      buffer: inputArray.buffer,  // ← FIX: Use .buffer property
+      format: 'JPEG',
+      quality: 0.9,
+    });
+
+    // Convert ArrayBuffer back to Buffer
+    const resultBuffer = Buffer.from(new Uint8Array(outputBuffer as ArrayBuffer));
+
+    console.log('✅ HEIC conversion successful:', {
+      originalSize: `${(buffer.length / 1024).toFixed(2)} KB`,
+      convertedSize: `${(resultBuffer.length / 1024).toFixed(2)} KB`
+    });
+
+    return resultBuffer;
+  } catch (error) {
+    console.error('❌ HEIC conversion failed:', error);
+    throw new Error('Failed to convert HEIC image. Please try a different photo.');
+  }
+}
+// ============================================================================
+// ENDPOINT 11: UPLOAD PHOTO - SUPPORTS BASE64 (WEB) AND FORMDATA (MOBILE)
+// ============================================================================
+interface AuthenticatedRequest extends AuthRequest {
+  file?: Express.Multer.File;
+}
+
+router.post(
+  '/api/service-posts/:postId/upload-photo',
+  authenticateToken,
+  (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    // Check if it's JSON (base64) or FormData (mobile)
+    const contentType = req.headers['content-type'] || '';
+    
+    if (contentType.includes('application/json')) {
+      // Base64 upload from web - skip multer
+      console.log('📦 Detected JSON body - Base64 upload');
+      next();
+    } else {
+      // FormData upload from mobile - use multer
+      console.log('📱 Detected FormData - Mobile upload');
+      upload.single('photo')(req, res, next);
+    }
+  },
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { postId } = req.params;
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      console.log('📸 Processing upload for post:', postId);
+
+      // Verify post ownership
+      const { data: post, error: postError } = await supabase
+        .from('service_posts')
+        .select('user_id, photos')
+        .eq('id', postId)
+        .single();
+
+      if (postError || !post) {
+        res.status(404).json({ error: 'Service post not found' });
+        return;
+      }
+
+      if (String(post.user_id) !== String(userId)) {
+        res.status(403).json({ error: 'You can only upload photos to your own posts' });
+        return;
+      }
+
+      const currentPhotos = post.photos || [];
+      if (currentPhotos.length >= MAX_PHOTOS_PER_POST) {
+        res.status(400).json({ 
+          error: `Maximum ${MAX_PHOTOS_PER_POST} photos allowed per post` 
+        });
+        return;
+      }
+
+      let fileBuffer: Buffer;
+      let fileName: string;
+      let mimeType: string;
+
+      // ============================================================
+      // HANDLE BASE64 UPLOAD (WEB)
+      // ============================================================
+      if (req.body.photo && typeof req.body.photo === 'string') {
+        console.log('📦 Processing Base64 upload from web');
+        
+        fileBuffer = Buffer.from(req.body.photo, 'base64');
+        fileName = req.body.filename || `photo_${Date.now()}.jpg`;
+        mimeType = req.body.mimetype || 'image/jpeg';
+        
+        console.log('✅ Base64 decoded:', Math.round(fileBuffer.length / 1024), 'KB');
+      }
+      // ============================================================
+      // HANDLE FORMDATA UPLOAD (MOBILE)
+      // ============================================================
+      else if (req.file) {
+        console.log('📱 Processing FormData upload from mobile');
+        
+        fileBuffer = req.file.buffer;
+        fileName = `photo_${Date.now()}.${req.file.mimetype.split('/')[1]}`;
+        mimeType = req.file.mimetype;
+      } else {
+        res.status(400).json({ error: 'No photo provided' });
+        return;
+      }
+
+      // Check file size (10MB limit)
+      if (fileBuffer.length > MAX_FILE_SIZE) {
+        res.status(400).json({ error: 'File too large (max 10MB)' });
+        return;
+      }
+
+      // ============================================================
+      // CONVERT HEIC TO JPEG IF NEEDED
+      // ============================================================
+      if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+        console.log('🔄 Converting HEIC to JPEG...');
+        
+        try {
+          fileBuffer = await convertHeicToJpeg(fileBuffer);
+          fileName = fileName.replace(/\.(heic|heif)$/i, '.jpg');
+          mimeType = 'image/jpeg';
+          console.log('✅ HEIC converted to JPEG');
+        } catch (conversionError) {
+          console.error('❌ HEIC conversion failed:', conversionError);
+          res.status(500).json({ error: 'Failed to convert HEIC image' });
+          return;
+        }
+      }
+
+      // ============================================================
+      // UPLOAD TO SUPABASE STORAGE
+      // ============================================================
+      const filePath = `${userId}/${uuidv4()}.${fileName.split('.').pop()}`;
+      
+      console.log('📁 Uploading to Supabase:', filePath);
+      
+      const { error: uploadError } = await supabase.storage
+        .from('service-photos')
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('❌ Supabase upload error:', uploadError);
+        res.status(500).json({ error: 'Failed to upload photo to storage' });
+        return;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('service-photos')
+        .getPublicUrl(filePath);
+
+      const photoUrl = urlData.publicUrl;
+      console.log('✅ Photo uploaded:', photoUrl);
+
+      // ============================================================
+      // UPDATE DATABASE
+      // ============================================================
+      const updatedPhotos = [...currentPhotos, photoUrl];
+      
+      const { error: updateError } = await supabase
+        .from('service_posts')
+        .update({ photos: updatedPhotos })
+        .eq('id', postId);
+
+      if (updateError) {
+        console.error('❌ Database update error:', updateError);
+        // Cleanup uploaded file
+        await supabase.storage.from('service-photos').remove([filePath]);
+        res.status(500).json({ error: 'Failed to save photo reference' });
+        return;
+      }
+
+      console.log('✅ Photo upload complete');
+
+      res.status(200).json({
+        success: true,
+        photoUrl: photoUrl,
+        totalPhotos: updatedPhotos.length
+      });
+
+    } catch (error: any) {
+      console.error('❌ Photo upload error:', error);
+      res.status(500).json({ 
+        error: error.message || 'Failed to upload photo' 
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// ENDPOINT 12: DELETE PHOTO (PROTECTED)
+// ============================================================================
+router.delete(
+  '/api/service-posts/:postId/photos/:photoIndex',
+  authenticateToken,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { postId, photoIndex } = req.params;
+      const index = parseInt(photoIndex);
+
+      console.log(`🗑️ Deleting photo ${index} from post ${postId}`);
+
+      const { data: post, error: fetchError } = await supabase
+        .from('service_posts')
+        .select('user_id, photos')
+        .eq('id', postId)
+        .single();
+
+      if (fetchError || !post) {
+        res.status(404).json({
+          success: false,
+          error: 'Service post not found',
+        });
+        return;
+      }
+
+      if (String(post.user_id) !== String(req.user?.user_id)) {
+        res.status(403).json({
+          success: false,
+          error: 'You can only delete photos from your own posts',
+        });
+        return;
+      }
+
+      if (!post.photos || post.photos.length === 0) {
+        res.status(404).json({
+          success: false,
+          error: 'No photos on this post',
+        });
+        return;
+      }
+
+      if (index < 0 || index >= post.photos.length) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid photo index',
+        });
+        return;
+      }
+
+      const photoUrl = post.photos[index];
+      const urlParts = photoUrl.split('/service-photos/');
+      
+      if (urlParts.length < 2) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid photo URL',
+        });
+        return;
+      }
+      
+      const filePath = urlParts[1];
+
+      const { error: storageError } = await supabase.storage
+        .from('service-photos')
+        .remove([filePath]);
+
+      if (storageError) {
+        console.warn('⚠️ Storage deletion warning:', storageError);
+      }
+
+      const updatedPhotos = post.photos.filter((_, i) => i !== index);
+
+      const { error: updateError } = await supabase
+        .from('service_posts')
+        .update({ photos: updatedPhotos.length > 0 ? updatedPhotos : null })
+        .eq('id', postId);
+
+      if (updateError) {
+        console.error('❌ Database update error:', updateError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to update post',
+        });
+        return;
+      }
+
+      console.log('✅ Photo deleted');
+
+      res.status(200).json({
+        success: true,
+        message: 'Photo deleted successfully',
+        remainingPhotos: updatedPhotos,
+      });
+
+    } catch (error: unknown) {
+      console.error('❌ Photo deletion error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to delete photo',
+      });
+    }
+  }
+);
 export default router;

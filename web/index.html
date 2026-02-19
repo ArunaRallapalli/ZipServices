@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1.00001,viewport-fit=cover" />
+  
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#4A90E2" />
+  
+  <!-- iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GoZipMarket" />
+  <link rel="apple-touch-icon" href="/apple-icon-180.png" />
+  
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  
+  <!-- Description -->
+  <meta name="description" content="Connect with local service providers in your area" />
+  
+  <title>GoZipMarket - Local Services</title>
+  
+  <!-- ✅ FORCE MANIFEST LINK VIA JAVASCRIPT -->
+  <script>
+    // Wait for DOM to load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', addManifest);
+    } else {
+      addManifest();
+    }
+    
+    function addManifest() {
+      // Remove any existing manifest links
+      const existing = document.querySelectorAll('link[rel="manifest"]');
+      existing.forEach(link => link.remove());
+      
+      // Add manifest link
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/manifest.json';
+      document.head.appendChild(link);
+      
+      console.log('✅ Manifest link added:', link.href);
+      
+      // Verify it loads
+      fetch('/manifest.json')
+        .then(r => r.json())
+        .then(data => console.log('✅ Manifest loaded:', data.name))
+        .catch(e => console.error('❌ Manifest error:', e));
+    }
+  </script>
+</head>
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+</body>
+</html>

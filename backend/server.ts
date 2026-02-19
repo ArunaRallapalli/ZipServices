@@ -8,10 +8,12 @@ import {pool} from './config/database';
 import { supabase } from "./config/Supabase";
 import zipCodeRoutes from './routes/zipCode';
 
+
 // ✅ ADDED: Debugging and logging infrastructure
 import logger from './utils/logger';
 import { requestTracking, errorLogger, performanceMonitor } from './middleware/requestTracking';
 import { debugEnv } from './utils/debug';
+
 
 // Routers
 import reviewsRoutes from './routes/reviews';
@@ -39,39 +41,35 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
-// ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Make pool accessible in all routes
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  (req as any).pool = pool;
-  next();
-});
-// ✅ Middleware must be BEFORE routes
-//added the below on top to avoid CORS issues
+// ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ✅ ADD THIS - Allowed origins for CORS
 const allowedOrigins = [
-  'http://localhost:8081',        // ← ADD THIS
+  'http://localhost:8081',
   'http://localhost:19006',
   'https://gozipmarket.com',
   'https://www.gozipmarket.com',
-  'https://arunarallapalli.github.io'  // ← Remove trailing slash
+  'https://arunarallapalli.github.io'
 ];
 
+// ✅ CORS Configuration
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log('Blocked by CORS:', origin);
-      callback(null, false); // ← FIX THIS
+      callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
   credentials: true
 }));
 

@@ -13,11 +13,47 @@
  * 
  * Body: { userId: number, email: string, fullName?: string }
  */
-import { Router, Request, Response } from 'express';
+
 import { Resend } from 'resend';
 import crypto from 'crypto';
 import pool from '../config/pool';
 import dotenv from 'dotenv';
+import { Router, Request, Response } from 'express';
+// ... other imports ...
+
+// ✅ ADD THIS HELPER FUNCTION HERE (before any routes)
+const getFrontendUrl = (req: Request): string => {
+  // Production: always use the real domain
+  if (process.env.RENDER || process.env.NODE_ENV === 'production') {
+    return 'https://gozipmarket.com';
+  }
+
+  // Development: detect from request origin or referer
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  if (origin && origin.includes('localhost')) {
+    return origin; // e.g. http://localhost:8081
+  }
+
+  if (origin && (origin.includes('192.168') || origin.includes('10.0'))) {
+    return origin; // e.g. http://192.168.0.195:8081
+  }
+
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      // Invalid URL, fall through to default
+    }
+  }
+
+  // Fallback to .env or localhost
+  return process.env.FRONTEND_URL || 'http://localhost:8081';
+};
+
+// ... rest of your code (routes, etc.)
 dotenv.config();
 
 const router = Router();
@@ -88,17 +124,14 @@ router.post('/send', async (req: Request, res: Response) => {
 
     // ✅ FIXED - Create verification link based on environment
 // Check for Render environment OR explicit NODE_ENV setting
-const isProduction = process.env.RENDER || process.env.NODE_ENV === 'production';
-const frontendUrl = isProduction
-  ? 'https://gozipmarket.com'
-  : 'http://localhost:8081';
+// ✅ NEW:
+const frontendUrl = getFrontendUrl(req);
 
+// ✅ NEW:
 const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
 
-console.log('🌍 Environment:', isProduction ? 'PRODUCTION' : 'DEVELOPMENT');
-console.log('🌍 RENDER env var:', process.env.RENDER);
-console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
-console.log('🔗 Verification link created');
+// ✅ REPLACE WITH:
+console.log('🔗 Verification link created:', verificationLink);
   // Send verification email via Resend
 const emailResult = await resend.emails.send({
  // To this:

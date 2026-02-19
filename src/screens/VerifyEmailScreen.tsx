@@ -26,53 +26,30 @@ const VerifyEmailScreen: React.FC = () => {
 
   // Extract token and email from URL parameters
   const params = route.params as { token?: string; email?: string } | undefined;
-  const [token, setToken] = useState(params?.token || '');
-  const [email, setEmail] = useState(params?.email || '');
 
   // Verification state
+  const [token, setToken] = useState('');
+  const [email, setEmail] = useState('');
   const [verifying, setVerifying] = useState(true);
   const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error' | 'already-verified'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Parse URL parameters on web
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlToken = urlParams.get('token');
-      const urlEmail = urlParams.get('email');
-      
-      if (urlToken) setToken(urlToken);
-      if (urlEmail) setEmail(decodeURIComponent(urlEmail));
-    }
-  }, []);
-
-  // Auto-verify when component mounts
-  useEffect(() => {
-    if (token && email) {
-      handleVerifyEmail();
-    } else {
-      setVerifying(false);
-      setVerificationStatus('error');
-      setErrorMessage('Invalid verification link. Missing token or email.');
-    }
-  }, [token, email]);
-   /**
+  /**
    * Handle email verification
-   * ✅ FIXED: Uses api client for correct production URL
    */
-  const handleVerifyEmail = async () => {
+  const handleVerifyEmail = async (verifyToken: string, verifyEmail: string) => {
     setVerifying(true);
     setVerificationStatus('loading');
 
     console.log('🔐 Starting email verification...');
-    console.log('   Email:', email);
-    console.log('   Token (first 10 chars):', token.substring(0, 10));
+    console.log('   Email:', verifyEmail);
+    console.log('   Token (first 10 chars):', verifyToken.substring(0, 10));
 
     try {
       // ✅ Use api client (automatically uses correct URL)
       const data = await api.post('/api/email-verification/verify', {
-        email,
-        token,
+        email: verifyEmail,
+        token: verifyToken,
       });
 
       console.log('✅ Verification response:', data);
@@ -106,6 +83,72 @@ const VerifyEmailScreen: React.FC = () => {
       setVerifying(false);
     }
   };
+
+  // Parse URL parameters and auto-verify on mount
+  // Parse URL parameters and auto-verify on mount
+useEffect(() => {
+  let urlToken = '';
+  let urlEmail = '';
+
+  console.log('📧 ===== Email Verification Page Loaded =====');
+  console.log('Platform:', Platform.OS);
+  
+  // Method 1: Try route params first (React Navigation)
+  if (params?.token && params?.email) {
+    urlToken = params.token;
+    urlEmail = params.email;
+    console.log('✅ Got params from React Navigation');
+  }
+  
+  // Method 2: Parse URL directly on web (more reliable)
+  if (Platform.OS === 'web') {
+    try {
+      // Get full URL
+      const fullUrl = window.location.href;
+      console.log('🌐 Full URL:', fullUrl);
+      
+      // Parse URL
+      const url = new URL(fullUrl);
+      const searchParams = new URLSearchParams(url.search);
+      
+      const tokenFromUrl = searchParams.get('token');
+      const emailFromUrl = searchParams.get('email');
+      
+      console.log('🔍 URL Search Params:', {
+        search: url.search,
+        token: tokenFromUrl ? `${tokenFromUrl.substring(0, 10)}...` : 'missing',
+        email: emailFromUrl
+      });
+      
+      if (tokenFromUrl) urlToken = tokenFromUrl;
+      if (emailFromUrl) urlEmail = decodeURIComponent(emailFromUrl);
+      
+    } catch (urlError) {
+      console.error('❌ Error parsing URL:', urlError);
+    }
+  }
+
+  console.log('📊 Final params:', { 
+    hasToken: !!urlToken, 
+    hasEmail: !!urlEmail,
+    email: urlEmail 
+  });
+
+  // Update state
+  setToken(urlToken);
+  setEmail(urlEmail);
+
+  // Verify if we have both token and email
+  if (urlToken && urlEmail) {
+    console.log('✅ Token and email found, starting verification...');
+    handleVerifyEmail(urlToken, urlEmail);
+  } else {
+    console.log('❌ Missing required parameters');
+    setVerifying(false);
+    setVerificationStatus('error');
+    setErrorMessage('Invalid verification link. Missing token or email.');
+  }
+}, []); // Only run once on mount
   /**
    * Navigate to sign in
    */

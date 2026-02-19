@@ -42,8 +42,20 @@
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/favicon.png",
-      "publicPath": "/"
+      "favicon": "./web/favicon-32x32.png",
+      "publicPath": "/",
+      "template": "./web/index.html",
+      "name": "GoZipMarket - Local Services Marketplace",
+      "shortName": "GoZipMarket",
+      "description": "Connect with local service providers in your area",
+      "themeColor": "#4A90E2",
+      "backgroundColor": "#1e3a5f",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "lang": "en",
+      "scope": "/",
+      "crossorigin": "use-credentials"
     },
     "assetBundlePatterns": [
       "**/*"

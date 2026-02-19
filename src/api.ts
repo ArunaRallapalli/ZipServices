@@ -318,4 +318,7 @@ export type BookingPayload = {
  * Export the API client as default
  */
 
-export default api;
+export default {
+  ...api,
+  baseURL: API_URL,  // ← ADD THIS LINE
+};

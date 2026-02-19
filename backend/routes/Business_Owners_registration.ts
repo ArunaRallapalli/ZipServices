@@ -11,7 +11,7 @@
  * - Email verification sending
  */
 
-import { Router, Request, Response } from "express";
+
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/Supabase";
@@ -19,7 +19,42 @@ import crypto from 'crypto';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
+import { Router, Request, Response } from 'express';
+// ... other imports ...
 
+// ✅ ADD THIS HELPER FUNCTION HERE (before any routes)
+const getFrontendUrl = (req: Request): string => {
+  // Production: always use the real domain
+  if (process.env.RENDER || process.env.NODE_ENV === 'production') {
+    return 'https://gozipmarket.com';
+  }
+
+  // Development: detect from request origin or referer
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  if (origin && origin.includes('localhost')) {
+    return origin; // e.g. http://localhost:8081
+  }
+
+  if (origin && (origin.includes('192.168') || origin.includes('10.0'))) {
+    return origin; // e.g. http://192.168.0.195:8081
+  }
+
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      // Invalid URL, fall through to default
+    }
+  }
+
+  // Fallback to .env or localhost
+  return process.env.FRONTEND_URL || 'http://localhost:8081';
+};
+
+// ... rest of your code (routes, etc.)
 
 dotenv.config();
 // 🔍 ADD THIS DEBUG SECTION HERE
@@ -48,7 +83,8 @@ const generateToken = (user_id: string, business_id: number): string => {
 };
 
 // Helper function to send verification email
-const sendVerificationEmail = async (userId: number, email: string, fullName?: string) => {
+
+const sendVerificationEmail = async (req: Request, userId: number, email: string, fullName?: string) => {
     // ✅ ADD THIS - Entry point logging
   console.log('📧 ===== ENTERING sendVerificationEmail =====');
   console.log('📧 User ID:', userId);
@@ -79,12 +115,12 @@ if (verificationError) {
     console.log('✅ Token saved to database successfully');
 
     // Create verification link based on environment
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const frontendUrl = isDevelopment 
-      ? 'http://localhost:8081' 
-      : 'https://gozipmarket.com';
+    // ✅ NEW:
+const frontendUrl = getFrontendUrl(req);
 
-    const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+   // ✅ NEW:
+
+const verificationLink = `${frontendUrl}/verify-email.html?token=${verificationToken}&email=${encodeURIComponent(email)}`;
     
     // ✅ ADD THIS - Show the link
 console.log('🔗 Verification link created:', verificationLink);
@@ -288,7 +324,8 @@ router.post("/register", async (req: Request, res: Response) => {
 
     // 5️⃣ Send verification email
     console.log("📧 Sending verification email...");
-    await sendVerificationEmail(newUser.user_id, email, name);
+    // ✅ NEW:
+await sendVerificationEmail(req, newUser.user_id, email, name);
 
     // 6️⃣ Generate JWT token for automatic login
     const token = generateToken(newUser.user_id, businessOwner.business_id);

@@ -1,11 +1,17 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 
+
 /**
  * Configuration
+ * 
  */
 const DEV_PORT = 5000;
-const DEV_LAN_IP = "192.168.4.48";  // Your computer's LAN IP
+// Automatically get the Metro bundler host
+const metroHost = Constants.expoConfig?.hostUri?.split(':')[0] || 'localhost';
+
+const DEV_LAN_IP = metroHost; // ← Always correct!
+
 const PROD_URL = "https://gozipmarket-api.onrender.com"; // Production URL
 
 /**

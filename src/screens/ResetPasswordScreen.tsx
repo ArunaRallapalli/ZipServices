@@ -11,22 +11,21 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Alert } from '../Utils/Alert';  // ← Add this instead
+import { Alert } from '../Utils/Alert';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import API_URL from '../config/apiConfig'
+import API_URL from '../config/apiConfig';
 import { createResponsiveStyles } from '../Utils/globalStyles';
 
 const ResetPasswordScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
 
-  // Extract token and email from URL parameters
+  // Extract token and email from route params (mobile deep links)
   const params = route.params as { token?: string; email?: string } | undefined;
   const [token, setToken] = useState(params?.token || '');
   const [email, setEmail] = useState(params?.email || '');
@@ -47,13 +46,14 @@ const ResetPasswordScreen: React.FC = () => {
     hasSpecialChar: false,
   });
 
-  // Parse URL parameters on web
+  // ✅ FIXED: Safely get URL params on web only, inside useEffect
+  // window.location does not exist on mobile (iOS/Android)
   useEffect(() => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
       const urlParams = new URLSearchParams(window.location.search);
       const urlToken = urlParams.get('token');
       const urlEmail = urlParams.get('email');
-      
+
       if (urlToken) setToken(urlToken);
       if (urlEmail) setEmail(decodeURIComponent(urlEmail));
     }
@@ -77,7 +77,6 @@ const ResetPasswordScreen: React.FC = () => {
    * Handle password reset submission
    */
   const handleResetPassword = async () => {
-    // Validation
     if (!token || !email) {
       Alert.alert('Error', 'Invalid reset link. Please request a new password reset.');
       return;
@@ -142,11 +141,9 @@ const ResetPasswordScreen: React.FC = () => {
           <Text style={styles.subtitle}>
             Enter your new password below
           </Text>
-          {email && (
-            <Text style={styles.emailText}>
-              for {email}
-            </Text>
-          )}
+          {email ? (
+            <Text style={styles.emailText}>for {email}</Text>
+          ) : null}
         </View>
 
         {/* New Password Input */}
@@ -178,76 +175,28 @@ const ResetPasswordScreen: React.FC = () => {
         {/* Password Requirements */}
         <View style={styles.requirementsContainer}>
           <Text style={styles.requirementsTitle}>Password must contain:</Text>
-          
-          <View style={styles.requirementRow}>
-            <Ionicons
-              name={passwordValidation.minLength ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={passwordValidation.minLength ? '#4CAF50' : '#999'}
-            />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.minLength && styles.requirementMet
-            ]}>
-              At least 8 characters
-            </Text>
-          </View>
 
-          <View style={styles.requirementRow}>
-            <Ionicons
-              name={passwordValidation.hasUpperCase ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={passwordValidation.hasUpperCase ? '#4CAF50' : '#999'}
-            />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.hasUpperCase && styles.requirementMet
-            ]}>
-              One uppercase letter (A-Z)
-            </Text>
-          </View>
-
-          <View style={styles.requirementRow}>
-            <Ionicons
-              name={passwordValidation.hasLowerCase ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={passwordValidation.hasLowerCase ? '#4CAF50' : '#999'}
-            />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.hasLowerCase && styles.requirementMet
-            ]}>
-              One lowercase letter (a-z)
-            </Text>
-          </View>
-
-          <View style={styles.requirementRow}>
-            <Ionicons
-              name={passwordValidation.hasNumber ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={passwordValidation.hasNumber ? '#4CAF50' : '#999'}
-            />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.hasNumber && styles.requirementMet
-            ]}>
-              One number (0-9)
-            </Text>
-          </View>
-
-          <View style={styles.requirementRow}>
-            <Ionicons
-              name={passwordValidation.hasSpecialChar ? 'checkmark-circle' : 'ellipse-outline'}
-              size={20}
-              color={passwordValidation.hasSpecialChar ? '#4CAF50' : '#999'}
-            />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.hasSpecialChar && styles.requirementMet
-            ]}>
-              One special character (!@#$%^&*)
-            </Text>
-          </View>
+          {[
+            { key: 'minLength', label: 'At least 8 characters' },
+            { key: 'hasUpperCase', label: 'One uppercase letter (A-Z)' },
+            { key: 'hasLowerCase', label: 'One lowercase letter (a-z)' },
+            { key: 'hasNumber', label: 'One number (0-9)' },
+            { key: 'hasSpecialChar', label: 'One special character (!@#$%^&*)' },
+          ].map(({ key, label }) => (
+            <View key={key} style={styles.requirementRow}>
+              <Ionicons
+                name={passwordValidation[key as keyof typeof passwordValidation] ? 'checkmark-circle' : 'ellipse-outline'}
+                size={20}
+                color={passwordValidation[key as keyof typeof passwordValidation] ? '#4CAF50' : '#999'}
+              />
+              <Text style={[
+                styles.requirementText,
+                passwordValidation[key as keyof typeof passwordValidation] && styles.requirementMet
+              ]}>
+                {label}
+              </Text>
+            </View>
+          ))}
         </View>
 
         {/* Confirm Password Input */}

@@ -1,66 +1,44 @@
 /**
- * ServiceCard Component
- * 
- * Displays a single service post in a card format with all relevant details.
- * This is a PRESENTATIONAL component - it receives data and callbacks as props.
- * 
- * Used by: SearchResultsList component (renders one card per search result)
- * 
- * Features:
- * - Visual distinction between OFFER and REQUEST posts with colored badges
- * - "Your Post" banner for posts created by the current user
- * - Star rating display showing provider's average rating
- * - Comprehensive post information display (title, description, price, location)
- * - "Contact Provider" button that triggers chat navigation
- * - Disabled state for user's own posts (can't contact yourself)
- * - Icons for better visual hierarchy and scannability
- * 
- * @component
+ * ServiceCard Component - With Custom Photo Zoom
  */
 
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Modal, Dimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import StarRating from "./StarRating";
-import ReviewsModal from "./Reviewsmodal";  // ← NEW IMPORT
+import ReviewsModal from "./Reviewsmodal";
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
 
-/**
- * ServicePost Interface
- * Represents all data for a single service listing
- * Matches the backend API response structure
- */
 interface ServicePost {
-  post_id: number;           // Unique identifier for the post
-  user_id: number;           // ID of the user who created the post
-  poster_type: string;       // Type of poster (e.g., "business_owner", "customer")
-  post_type: string;         // Either "offer" (providing service) or "request" (seeking service)
-  title: string;             // Post headline/title
-  description?: string;      // Optional detailed description
-  service_category: string;  // Category (e.g., "Plumbing", "Catering")
-  price_range?: string;      // Optional price or budget range
-  phone_number?: string;     // Optional contact phone
-  contact_email?: string;    // Optional contact email
-  zip_code?: string;         // Optional ZIP code
-  city?: string;             // Optional city name
-  state?: string;            // Optional state abbreviation
-  poster_name?: string;      // Optional full name of poster
-  business_name?: string;    // Optional business name (for business owners)
-  average_rating?: number;   // ← NEW: Average star rating (0-5)
-  review_count?: number;     // ← NEW: Number of reviews received
+  post_id: number;
+  user_id: number;
+  poster_type: string;
+  post_type: string;
+  title: string;
+  description?: string;
+  service_category: string;
+  price_range?: string;
+  phone_number?: string;
+  contact_email?: string;
+  zip_code?: string;
+  city?: string;
+  state?: string;
+  poster_name?: string;
+  business_name?: string;
+  average_rating?: number;
+  review_count?: number;
+  photos?: string[];
 }
 
-/**
- * ServiceCardProps Interface
- * Props required by the ServiceCard component
- */
 interface ServiceCardProps {
-  item: ServicePost;                           // The service post data to display
-  isOwnPost: boolean;                          // True if this post belongs to the current user
-  onChatPress: (item: ServicePost) => void;    // Callback when "Contact Provider" is pressed
+  item: ServicePost;
+  isOwnPost: boolean;
+  onChatPress: (item: ServicePost) => void;
 }
 
 // ============================================================================
@@ -72,38 +50,43 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
   isOwnPost,
   onChatPress,
 }) => {
-  // State for showing reviews modal
   const [showReviewsModal, setShowReviewsModal] = useState(false);
+  
+  // ✅ Photo viewer state
+  const [photoModalVisible, setPhotoModalVisible] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+
+  const openPhotoViewer = (index: number) => {
+    setSelectedPhotoIndex(index);
+    setPhotoModalVisible(true);
+  };
+
+  const closePhotoViewer = () => {
+    setPhotoModalVisible(false);
+  };
+
+  const goToNextPhoto = () => {
+    if (item.photos && selectedPhotoIndex < item.photos.length - 1) {
+      setSelectedPhotoIndex(selectedPhotoIndex + 1);
+    }
+  };
+
+  const goToPreviousPhoto = () => {
+    if (selectedPhotoIndex > 0) {
+      setSelectedPhotoIndex(selectedPhotoIndex - 1);
+    }
+  };
 
   return (
     <View style={styles.card}>
-      {/* 
-        "Your Post" Banner
-        - Only visible when isOwnPost === true
-        - Helps user quickly identify their own posts in search results
-        - Orange color scheme for visibility
-      */}
       {isOwnPost && (
         <View style={styles.ownPostBanner}>
           <Text style={styles.ownPostText}>Your Post</Text>
         </View>
       )}
 
-      {/* 
-        Card Header
-        - Contains title and post type badge
-        - Flexbox layout: title takes remaining space, badge is fixed width
-      */}
       <View style={styles.cardHeader}>
-        {/* Service title - main headline of the post */}
         <Text style={styles.serviceTitle}>{item.title}</Text>
-        
-        {/* 
-          Post Type Badge
-          - Green badge for "offer" posts (someone providing a service)
-          - Blue badge for "request" posts (someone seeking a service)
-          - Helps users quickly identify post type
-        */}
         <View
           style={[
             styles.badge,
@@ -116,92 +99,82 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
         </View>
       </View>
 
-      {/* 
-        Business Name
-        - Only shown if business_name exists
-        - Displayed in italic style as a subtitle
-        - Format: "by [Business Name]"
-      */}
       {item.business_name && (
         <Text style={styles.posterName}>by {item.business_name}</Text>
       )}
 
-      {/* 
-        ========================================================================
-        STAR RATING DISPLAY - TAPPABLE!
-        ========================================================================
-        - Shows provider's average rating and review count
-        - Only displayed if provider has reviews (review_count > 0)
-        - Format: ⭐⭐⭐⭐☆ 4.5 (24 reviews)
-        - Tappable: Opens ReviewsModal to see all reviews
-      */}
-      {/* Always show rating section if review data exists (even if 0 reviews) */}
-{item.review_count !== undefined && (
-  <TouchableOpacity 
-    style={styles.ratingContainer}
-    onPress={() => setShowReviewsModal(true)}
-    activeOpacity={0.7}
-  >
-    <StarRating
-      rating={item.average_rating || 0}
-      size={16}
-      showCount={true}
-      reviewCount={item.review_count}
-    />
-    <Ionicons name="chevron-forward" size={16} color="#999" style={{ marginLeft: 4 }} />
-  </TouchableOpacity>
-)}
+      {item.review_count !== undefined && (
+        <TouchableOpacity 
+          style={styles.ratingContainer}
+          onPress={() => setShowReviewsModal(true)}
+          activeOpacity={0.7}
+        >
+          <StarRating
+            rating={item.average_rating || 0}
+            size={16}
+            showCount={true}
+            reviewCount={item.review_count}
+          />
+          <Ionicons name="chevron-forward" size={16} color="#999" style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+      )}
 
-      {/* 
-        Service Category
-        - Shows which category this service belongs to
-        - Includes briefcase icon for visual context
-        - Blue color to indicate it's a category/tag
-      */}
       <Text style={styles.categoryText}>
         <Ionicons name="briefcase" size={14} color="#4A90E2" />{" "}
         {item.service_category}
       </Text>
 
-      {/* 
-        Description
-        - Full description of the service or request
-        - Limited to 3 lines with ellipsis if too long
-        - Only shown if description exists
-      */}
       {item.description && (
         <Text style={styles.descriptionText} numberOfLines={3}>
           {item.description}
         </Text>
       )}
-
-      {/* 
-        Price Range
-        - Shows price (for offers) or budget (for requests)
-        - Includes cash icon
-        - Green color to indicate financial information
-        - Only shown if price_range exists
-      */}
+     
+      {/* ========== PHOTO DISPLAY WITH ZOOM ========== */}
+      {item.photos && item.photos.length > 0 && (
+        <View style={styles.photosContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.photoScroll}
+          >
+            {item.photos.map((photoUrl, index) => (
+              <TouchableOpacity 
+                key={index} 
+                style={styles.photoWrapper}
+                onPress={() => openPhotoViewer(index)}
+                activeOpacity={0.8}
+              >
+                <Image 
+                  source={{ uri: photoUrl }} 
+                  style={styles.photoImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.zoomIndicator}>
+                  <Ionicons name="expand" size={20} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <Text style={styles.photoCount}>
+            📸 {item.photos.length} photo{item.photos.length > 1 ? 's' : ''} • Tap to zoom
+          </Text>
+        </View>
+      )}
+      {/* ========== END PHOTO DISPLAY ========== */}
+      
       {item.price_range && (
         <Text style={styles.priceText}>
           <Ionicons name="cash" size={14} color="#2E7D32" /> {item.price_range}
         </Text>
       )}
 
-      {/* 
-        Location Information
-        - Displays ZIP code and/or city, state
-        - Flexbox wrapping for responsive layout
-        - Uses location icon for visual context
-      */}
       <View style={styles.locationContainer}>
-        {/* ZIP Code */}
         {item.zip_code && (
           <Text style={styles.locationText}>
             <Ionicons name="location" size={12} color="#666" /> {item.zip_code}
           </Text>
         )}
-        {/* City, State */}
         {item.city && item.state && (
           <Text style={styles.locationText}>
             {item.city}, {item.state}
@@ -209,19 +182,6 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
         )}
       </View>
 
-      {/* 
-        Action Section - Conditional rendering based on post ownership
-        
-        Case 1: Not user's own post
-        - Shows "Contact Provider" button
-        - Clicking navigates to ChatScreen with provider
-        - Blue background, prominent call-to-action
-        
-        Case 2: User's own post
-        - Shows disabled state message
-        - Gray background to indicate inactive state
-        - Prevents user from contacting themselves
-      */}
       {!isOwnPost ? (
         <TouchableOpacity
           style={styles.chatButton}
@@ -238,13 +198,84 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
         </View>
       )}
 
-      {/* Reviews Modal */}
       <ReviewsModal
         visible={showReviewsModal}
         providerId={item.user_id}
         providerName={item.business_name || item.poster_name || 'Provider'}
         onClose={() => setShowReviewsModal(false)}
       />
+
+      {/* ✅ CUSTOM PHOTO VIEWER MODAL */}
+      <Modal
+        visible={photoModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closePhotoViewer}
+      >
+        <View style={styles.photoModalContainer}>
+          <TouchableOpacity 
+            style={styles.photoModalOverlay}
+            activeOpacity={1}
+            onPress={closePhotoViewer}
+          >
+            <View style={styles.photoModalContent}>
+              {/* Close Button */}
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={closePhotoViewer}
+              >
+                <Ionicons name="close" size={32} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Photo Counter */}
+              <View style={styles.photoCounter}>
+                <Text style={styles.photoCounterText}>
+                  {selectedPhotoIndex + 1} / {item.photos?.length}
+                </Text>
+              </View>
+
+              {/* Main Photo */}
+              <ScrollView
+                style={styles.photoScrollView}
+                contentContainerStyle={styles.photoScrollContent}
+                maximumZoomScale={3}
+                minimumZoomScale={1}
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+              >
+                <Image
+                  source={{ uri: item.photos?.[selectedPhotoIndex] }}
+                  style={styles.fullPhoto}
+                  resizeMode="contain"
+                />
+              </ScrollView>
+
+              {/* Navigation Arrows */}
+              {item.photos && item.photos.length > 1 && (
+                <>
+                  {selectedPhotoIndex > 0 && (
+                    <TouchableOpacity 
+                      style={[styles.navButton, styles.prevButton]}
+                      onPress={goToPreviousPhoto}
+                    >
+                      <Ionicons name="chevron-back" size={32} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  
+                  {selectedPhotoIndex < item.photos.length - 1 && (
+                    <TouchableOpacity 
+                      style={[styles.navButton, styles.nextButton]}
+                      onPress={goToNextPhoto}
+                    >
+                      <Ionicons name="chevron-forward" size={32} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -254,7 +285,6 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
 // ============================================================================
 
 const styles = StyleSheet.create({
-  // Main card container - light gray background with border and shadow
   card: {
     borderWidth: 1,
     borderColor: "#e0e0e0",
@@ -263,109 +293,174 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#fafafa",
   },
-  
-  // Header section - contains title and badge
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 8,
   },
-  
-  // Service title - bold, large text
   serviceTitle: {
-    flex: 1,                  // Take remaining space
+    flex: 1,
     fontWeight: "bold",
     fontSize: 18,
     color: "#333",
-    marginRight: 10,          // Space between title and badge
+    marginRight: 10,
   },
-  
-  // Badge container - base styles for both offer and request badges
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
-  
-  // Green badge for "offer" posts
   offerBadge: {
     backgroundColor: "#4CAF50",
   },
-  
-  // Blue badge for "request" posts
   requestBadge: {
     backgroundColor: "#2196F3",
   },
-  
-  // Badge text - white, small, bold
   badgeText: {
     color: "#ffffff",
     fontSize: 10,
     fontWeight: "bold",
   },
-  
-  // Business name - italic, gray, subtitle style
   posterName: {
     fontSize: 14,
     color: "#666",
     marginBottom: 4,
     fontStyle: "italic",
   },
-  
-  // ========================================================================
-  // RATING CONTAINER - TAPPABLE
-  // ========================================================================
-  // Container for star rating display
-  // Shows between business name and category
-  // Now tappable to open reviews modal
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
     marginTop: 2,
   },
-  
-  // Category text - blue to indicate it's a tag/category
   categoryText: {
     fontSize: 14,
     color: "#4A90E2",
     marginBottom: 8,
     fontWeight: "600",
   },
-  
-  // Description text - gray, multi-line
   descriptionText: {
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
-    lineHeight: 20,          // Better readability for multi-line text
+    lineHeight: 20,
   },
   
-  // Price text - green to indicate financial information
+  // Photo Thumbnails
+  photosContainer: {
+    marginBottom: 12,
+  },
+  photoScroll: {
+    marginBottom: 4,
+  },
+  photoWrapper: {
+    marginRight: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+  },
+  zoomIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  photoCount: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+
+  // ✅ Photo Modal Styles
+  photoModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  photoModalOverlay: {
+    flex: 1,
+  },
+  photoModalContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+  },
+  photoCounter: {
+    position: 'absolute',
+    top: 50,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  photoCounterText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  photoScrollView: {
+    flex: 1,
+    width: SCREEN_WIDTH,
+  },
+  photoScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullPhoto: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.8,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 12,
+    borderRadius: 24,
+    zIndex: 10,
+  },
+  prevButton: {
+    left: 20,
+  },
+  nextButton: {
+    right: 20,
+  },
+  
   priceText: {
     fontSize: 14,
     color: "#2E7D32",
     fontWeight: "600",
     marginBottom: 8,
   },
-  
-  // Location container - wrapping flex row for responsive layout
   locationContainer: {
     flexDirection: "row",
-    flexWrap: "wrap",        // Allow items to wrap to next line if needed
+    flexWrap: "wrap",
     marginBottom: 8,
   },
-  
-  // Location text - gray, with spacing
   locationText: {
     fontSize: 13,
     color: "#666",
-    marginRight: 15,         // Space between multiple location items
+    marginRight: 15,
     marginBottom: 4,
   },
-  
-  // "Contact Provider" button - blue, prominent call-to-action
   chatButton: {
     marginTop: 12,
     backgroundColor: "#4A90E2",
@@ -376,41 +471,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  
-  // Button text - white, bold
   chatButtonText: {
     color: "#ffffff",
     fontWeight: "bold",
     fontSize: 16,
   },
-  
-  // "Your Post" banner - orange theme for visibility
   ownPostBanner: {
-    backgroundColor: "#FFF4E5",   // Light orange background
+    backgroundColor: "#FFF4E5",
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
     marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: "#FF8C00",   // Orange accent border
+    borderLeftColor: "#FF8C00",
   },
-  
-  // "Your Post" banner text - orange, bold
   ownPostText: {
     color: "#FF8C00",
     fontSize: 13,
     fontWeight: "600",
   },
-  
-  // Disabled state container for own posts
   ownPostActions: {
-    backgroundColor: "#f0f0f0",   // Light gray to indicate disabled
+    backgroundColor: "#f0f0f0",
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
   },
-  
-  // Disabled state text - gray, centered, italic
   ownPostActionText: {
     color: "#666",
     fontSize: 13,
@@ -420,53 +505,3 @@ const styles = StyleSheet.create({
 });
 
 export default ServiceCard;
-
-/**
- * ============================================================================
- * COMPONENT USAGE EXAMPLE
- * ============================================================================
- * 
- * <ServiceCard
- *   item={{
- *     post_id: 123,
- *     user_id: 456,
- *     post_type: "offer",
- *     title: "Professional Plumbing Services",
- *     description: "Licensed plumber with 10 years experience...",
- *     service_category: "Plumbing",
- *     price_range: "$50-$150/hour",
- *     business_name: "John's Plumbing",
- *     city: "Phoenix",
- *     state: "AZ",
- *     zip_code: "85001",
- *     average_rating: 4.8,        // ← NEW
- *     review_count: 24,            // ← NEW
- *     // ... other fields
- *   }}
- *   isOwnPost={false}
- *   onChatPress={(item) => {
- *     // Navigate to chat screen
- *     navigation.navigate("ChatScreen", {
- *       otherUserId: item.user_id,
- *       otherUserName: item.business_name || item.poster_name
- *     });
- *   }}
- * />
- * 
- * ============================================================================
- * DATA FLOW
- * ============================================================================
- * 
- * SearchResultsScreen (parent)
- *   └─> Performs search and gets results
- *   └─> Passes results to SearchResultsList
- *       └─> Maps over results array
- *           └─> Renders ServiceCard for each result
- *               └─> Displays star rating if reviews exist
- *               └─> User clicks "Contact Provider"
- *                   └─> onChatPress callback
- *                       └─> Bubbles up to SearchResultsScreen
- *                           └─> Navigates to ChatScreen
- * 
- * ============================================================================
- */

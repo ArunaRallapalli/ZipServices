@@ -319,7 +319,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
         .insert({
           sender_id: customerId,
           receiver_id: serviceProviderId,
-          message_text: `🔔 New booking request for ${bookingDate}. Go to Calendar in Listings tab to confirm or decline.`,
+          message_text: `Message and email sent to provider ->🔔 New booking request for ${bookingDate}. Go to Calendar in Listings tab to confirm or decline.`,
           is_read: false,
           created_at: new Date().toISOString()
         });
@@ -466,9 +466,9 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
       
       if (status === 'confirmed') {
         const bookingDate = data.booking_date.split('T')[0];
-        chatMessage = `✅ Your booking for ${bookingDate} has been confirmed! See you then!`;
+        chatMessage = `✅ Message and email  sent to customer: Your booking for ${bookingDate} has been confirmed! See you then!`;
       } else if (status === 'completed') {
-        chatMessage = `🎉 Your service has been completed! Please leave a review. Thank you!`;
+        chatMessage = `🎉 Message sent to customer: Your service has been completed! Please leave a review. Thank you!`;
         
         messageMetadata = {
           type: 'booking_completed',
@@ -479,7 +479,7 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
         };
       } else if (status === 'cancelled') {
         const bookingDate = data.booking_date.split('T')[0];
-        chatMessage = `❌ Your booking for ${bookingDate} has been cancelled by the provider.`;
+        chatMessage = `❌ Message sent to customer:Your booking for ${bookingDate} has been cancelled by the provider.`;
       }
 
       // Send the message with optional metadata
