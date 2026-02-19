@@ -1149,8 +1149,10 @@ async function convertHeicToJpeg(buffer: Buffer): Promise<Buffer> {
 // ============================================================================
 // ENDPOINT 11: UPLOAD PHOTO - SUPPORTS BASE64 (WEB) AND FORMDATA (MOBILE)
 // ============================================================================
+// AFTER
+// AFTER
 interface AuthenticatedRequest extends AuthRequest {
-  file?: Express.Multer.File;
+  file?: any;
 }
 
 router.post(
