@@ -1,9 +1,10 @@
 /**
  * EditListing Component
  * 
- * Last Updated: February 19, 2026
- * Changes: Added photo upload/delete functionality (matching PostServiceScreen)
+ * Last Updated: February 24, 2026
+ * Changes: Premium users get 10 photos vs 5 for free users
  * 
+ * Previous: February 19, 2026 - Added photo upload/delete functionality (matching PostServiceScreen)
  * Previous: January 5, 2026 - Migrated from fetch to api client for automatic token handling
  * 
  * This screen allows users to edit their existing service listings/posts.
@@ -26,7 +27,7 @@
  * - Cancel button to go back without saving
  * - Keyboard-aware scrolling for better UX
  * - Fallback categories if API fails
- * - View/add/delete photos (up to 10 per post, HEIC auto-converted by backend)
+ * - View/add/delete photos (up to 5 for free users, 10 for premium, HEIC auto-converted and compressed by backend)
  */
 
 import React, { useState, useEffect } from "react";
@@ -51,6 +52,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { Picker } from "@react-native-picker/picker";
 import api from '../api';
+import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ADDED: February 19, 2026
 import * as ImagePicker from 'expo-image-picker';                     // ADDED: February 19, 2026
 import API_URL from '../config/apiConfig';                             // ADDED: February 19, 2026
@@ -83,7 +85,10 @@ const EditListing: React.FC = () => {
   
   console.log("EditListing screen mounted");
   console.log("Route params:", route.params);
-  
+
+  const { userInfo } = useAuth();
+  const maxPhotos = userInfo?.is_premium ? 10 : 5;
+
   // Extract postId from route parameters - used to fetch and update the specific post
   const { postId } = route.params || {};
 
@@ -151,12 +156,12 @@ const EditListing: React.FC = () => {
 
   /**
    * Open image picker so user can select new photos to add
-   * Respects the 10-photo limit across existing + newly selected photos
+   * Respects the photo limit (5 free, 10 premium) across existing + newly selected photos
    */
   const pickPhotos = async () => {
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    if (totalPhotos >= 5) {
-      Alert.alert('Limit Reached', 'You can have a maximum of 5 photos per post.');
+    if (totalPhotos >= maxPhotos) {
+      Alert.alert('Limit Reached', `You can have a maximum of ${maxPhotos} photos per post.`);
       return;
     }
     try {
@@ -164,7 +169,7 @@ const EditListing: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
-        selectionLimit: 5 - totalPhotos,
+        selectionLimit: maxPhotos - totalPhotos,
       });
       if (!result.canceled && result.assets) {
         setSelectedPhotos([...selectedPhotos, ...result.assets]);
@@ -810,7 +815,7 @@ const EditListing: React.FC = () => {
             <View style={styles.photoHeader}>
               <Text style={styles.label}>Photos</Text>
               <Text style={styles.photoCount}>
-                {existingPhotos.length + selectedPhotos.length}/5
+                {existingPhotos.length + selectedPhotos.length}/{maxPhotos}
               </Text>
             </View>
 
@@ -850,27 +855,27 @@ const EditListing: React.FC = () => {
               </View>
             )}
 
-            {/* Add Photos button - disabled at 10-photo limit or while saving */}
+            {/* Add Photos button - disabled at limit or while saving */}
             <TouchableOpacity
               style={[
                 styles.addPhotoButton,
-                (existingPhotos.length + selectedPhotos.length >= 5 || saving) && styles.addPhotoButtonDisabled,
+                (existingPhotos.length + selectedPhotos.length >= maxPhotos || saving) && styles.addPhotoButtonDisabled,
               ]}
               onPress={pickPhotos}
-              disabled={existingPhotos.length + selectedPhotos.length >= 5 || saving}
+              disabled={existingPhotos.length + selectedPhotos.length >= maxPhotos || saving}
             >
               <Ionicons
                 name="camera-outline"
                 size={22}
-                color={existingPhotos.length + selectedPhotos.length >= 5 ? "#ccc" : "#4A90E2"}
+                color={existingPhotos.length + selectedPhotos.length >= maxPhotos ? "#ccc" : "#4A90E2"}
               />
               <Text
                 style={[
                   styles.addPhotoText,
-                  (existingPhotos.length + selectedPhotos.length >= 5 || saving) && styles.addPhotoTextDisabled,
+                  (existingPhotos.length + selectedPhotos.length >= maxPhotos || saving) && styles.addPhotoTextDisabled,
                 ]}
               >
-                {existingPhotos.length + selectedPhotos.length >= 5
+                {existingPhotos.length + selectedPhotos.length >= maxPhotos
                   ? "Maximum photos reached"
                   : "Add Photos"}
               </Text>

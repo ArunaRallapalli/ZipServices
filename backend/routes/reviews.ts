@@ -3,11 +3,12 @@
  * routes/reviews.ts - Review Management API
  * ============================================================================
  * 
- * Last Updated: January 15, 2026
- * Changes: Fixed can-review endpoint to return all unreviewed bookings
- * Reason: Previous version only returned 1 booking without checking if already 
- *         reviewed, causing wrong booking to be reviewed when customer had 
- *         multiple completed bookings with same provider
+ * Last Updated: February 24, 2026
+ * Changes: Made bookingId optional in POST /api/reviews
+ * Reason: Allow any logged-in customer to leave a review from search results,
+ *         not just customers with completed bookings. Both flows supported:
+ *         1. From chat after booking completes (bookingId provided)
+ *         2. From search/provider profile (bookingId null)
  * 
  * OVERVIEW:
  * Handles all review operations for the service marketplace.
@@ -15,10 +16,10 @@
  * Reviews are public and visible to all users.
  * 
  * FEATURES:
- * - Create review (only for completed bookings)
+ * - Create review (booking optional)
  * - Get provider's reviews
  * - Check if booking has been reviewed
- * - Check which bookings can be reviewed (FIXED)
+ * - Check which bookings can be reviewed
  * - Auto-calculate provider's average rating
  * 
  * ENDPOINTS:
@@ -29,7 +30,6 @@
  * 
  * SECURITY:
  * - ✅ Authentication required to create reviews
- * - ✅ Only customers who completed bookings can review
  * - ✅ One review per booking (enforced by unique constraint)
  * - ✅ Cannot review your own services
  * - ✅ Cannot create reviews for other users' bookings
@@ -38,34 +38,22 @@
 
 import express from 'express';
 import { supabase } from '../config/Supabase';
-// ADDED: January 5, 2026 - Import authentication middleware
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
 /**
  * POST /api/reviews
- * Create a new review for a completed booking
+ * Create a new review — booking is now optional
  * 
  * Security:
  * - ✅ Requires authentication
- * - ✅ User can only review bookings they were part of
+ * - ✅ If bookingId provided: validates booking is completed and owned by customer
+ * - ✅ If no bookingId: skips booking validation (review from search flow)
  * 
- * REQUIREMENTS:
- * - Booking must exist and be completed
- * - Customer must be the one who made the booking
- * - Booking cannot already have a review
- * - Rating must be 1-5
- * 
- * FLOW:
- * 1. Validate booking exists and is completed
- * 2. Verify customer owns the booking
- * 3. Create review
- * 4. Update provider's average rating
- * 
- * CHANGED: January 5, 2026 - Added authenticateToken middleware
- * CHANGED: January 5, 2026 - Added verification that customerId matches authenticated user
- * Reason: Prevent fake reviews and review spoofing
+ * CHANGED: February 24, 2026 - bookingId is now optional
+ * - bookingId provided → existing chat flow, full booking validation runs
+ * - bookingId null/missing → new search flow, booking validation skipped
  */
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -73,15 +61,15 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 
     console.log('📝 [Reviews] Creating review:', { bookingId, providerId, customerId, rating });
 
-    // Validate required fields
-    if (!bookingId || !providerId || !customerId || !rating) {
+    // Validate required fields (bookingId is now optional)
+    if (!providerId || !customerId || !rating) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: bookingId, providerId, customerId, rating'
+        error: 'Missing required fields: providerId, customerId, rating'
       });
     }
 
-    // ADDED: January 5, 2026 - Security check to prevent review spoofing
+    // Security check to prevent review spoofing
     if (customerId.toString() !== req.user?.user_id) {
       return res.status(403).json({
         success: false,
@@ -98,47 +86,50 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // ====================================================================
-    // STEP 1: Verify booking exists and is completed
+    // BOOKING VALIDATION — only runs if bookingId is provided
+    // (chat flow after booking completes)
+    // Skipped when bookingId is null/missing (search/profile flow)
     // ====================================================================
-    const { data: booking, error: bookingError } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('booking_id', bookingId)
-      .single();
+    if (bookingId) {
+      // STEP 1: Verify booking exists and is completed
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('booking_id', bookingId)
+        .single();
 
-    if (bookingError || !booking) {
-      console.error('❌ [Reviews] Booking not found:', bookingError);
-      return res.status(404).json({
-        success: false,
-        error: 'Booking not found'
-      });
+      if (bookingError || !booking) {
+        console.error('❌ [Reviews] Booking not found:', bookingError);
+        return res.status(404).json({
+          success: false,
+          error: 'Booking not found'
+        });
+      }
+
+      // Check if booking is completed
+      if (booking.status !== 'completed') {
+        return res.status(400).json({
+          success: false,
+          error: 'Can only review completed bookings'
+        });
+      }
+
+      // STEP 2: Verify customer owns the booking
+      if (parseInt(booking.customer_user_id) !== parseInt(customerId)) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only review your own bookings'
+        });
+      }
     }
 
-    // Check if booking is completed
-    if (booking.status !== 'completed') {
-      return res.status(400).json({
-        success: false,
-        error: 'Can only review completed bookings'
-      });
-    }
-
     // ====================================================================
-    // STEP 2: Verify customer owns the booking
-    // ====================================================================
-    if (parseInt(booking.customer_user_id) !== parseInt(customerId)) {
-      return res.status(403).json({
-        success: false,
-        error: 'You can only review your own bookings'
-      });
-    }
-
-    // ====================================================================
-    // STEP 3: Create the review
+    // CREATE THE REVIEW
     // ====================================================================
     const { data: review, error: reviewError } = await supabase
       .from('reviews')
       .insert({
-        booking_id: bookingId,
+        booking_id: bookingId || null,   // null when coming from search flow
         provider_user_id: providerId,
         customer_user_id: customerId,
         rating: rating,
@@ -151,7 +142,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 
     if (reviewError) {
       console.error('❌ [Reviews] Error creating review:', reviewError);
-      
+
       // Check for duplicate review
       if (reviewError.code === '23505') {
         return res.status(400).json({
@@ -159,15 +150,13 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
           error: 'You have already reviewed this booking'
         });
       }
-      
+
       throw reviewError;
     }
 
     console.log('✅ [Reviews] Review created:', review.review_id);
 
-    // ====================================================================
-    // STEP 4: Update provider's average rating
-    // ====================================================================
+    // Update provider's average rating
     await updateProviderRating(providerId);
 
     res.status(201).json({
@@ -190,9 +179,8 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
  * 
  * Security: PUBLIC - Anyone can view reviews
  * 
- * Returns reviews with customer information and service names
- * 
  * UPDATED: January 15, 2026 - Added service_name from bookings table
+ * UPDATED: February 24, 2026 - Handle null booking_id (reviews without bookings)
  */
 router.get('/provider/:providerId', async (req, res) => {
   try {
@@ -219,16 +207,16 @@ router.get('/provider/:providerId', async (req, res) => {
 
     if (error) throw error;
 
-    // Format reviews with customer name and service name
+    // Format reviews — booking may be null for reviews from search flow
     const reviews = (data || []).map((review: any) => ({
       review_id: parseInt(review.review_id, 10),
-      booking_id: parseInt(review.booking_id, 10),
+      booking_id: review.booking_id ? parseInt(review.booking_id, 10) : null,
       rating: review.rating,
       review_text: review.review_text,
       created_at: review.created_at,
-      service_name: review.booking?.service_name || 'Service',
-      customer_name: review.customer?.business_owners?.[0]?.business_name || 
-                     review.customer?.email?.split('@')[0] || 
+      service_name: review.booking?.service_name || 'General Review',
+      customer_name: review.customer?.business_owners?.[0]?.business_name ||
+                     review.customer?.email?.split('@')[0] ||
                      'Anonymous'
     }));
 
@@ -253,10 +241,7 @@ router.get('/provider/:providerId', async (req, res) => {
  * Check if a booking has been reviewed
  * 
  * Security: PUBLIC - Used to show/hide "Leave Review" button
- * 
- * Used to determine if "Leave Review" button should be shown
- * 
- * UNCHANGED: January 5, 2026 - Kept public for UI functionality
+ * UNCHANGED
  */
 router.get('/booking/:bookingId', async (req, res) => {
   try {
@@ -295,15 +280,12 @@ router.get('/booking/:bookingId', async (req, res) => {
 
 /**
  * Helper function to update provider's average rating
- * Calculates average from all reviews and updates business_owners table
- * 
- * UNCHANGED: January 5, 2026 - Helper function, no security changes needed
+ * UNCHANGED
  */
 async function updateProviderRating(providerId: number) {
   try {
     console.log(`📊 [Reviews] Updating rating for provider ${providerId}`);
 
-    // Get all reviews for this provider
     const { data: reviews, error } = await supabase
       .from('reviews')
       .select('rating')
@@ -312,73 +294,46 @@ async function updateProviderRating(providerId: number) {
     if (error) throw error;
 
     if (!reviews || reviews.length === 0) {
-      // No reviews yet
       await supabase
         .from('business_owners')
-        .update({
-          average_rating: 0,
-          review_count: 0
-        })
+        .update({ average_rating: 0, review_count: 0 })
         .eq('user_id', providerId);
-      
+
       console.log(`✅ [Reviews] Reset rating for provider ${providerId} (no reviews)`);
       return;
     }
 
-    // Calculate average rating
     const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
     const averageRating = totalRating / reviews.length;
-    const roundedAverage = Math.round(averageRating * 10) / 10; // Round to 1 decimal
+    const roundedAverage = Math.round(averageRating * 10) / 10;
 
-    // Update business_owners table
     await supabase
       .from('business_owners')
-      .update({
-        average_rating: roundedAverage,
-        review_count: reviews.length
-      })
+      .update({ average_rating: roundedAverage, review_count: reviews.length })
       .eq('user_id', providerId);
 
     console.log(`✅ [Reviews] Updated provider ${providerId}: ${roundedAverage} stars (${reviews.length} reviews)`);
 
   } catch (error) {
     console.error('❌ [Reviews] Error updating provider rating:', error);
-    // Don't throw - this is a helper function, main operation already succeeded
   }
 }
 
 /**
  * GET /api/reviews/can-review/:providerId
- * 
  * Check if authenticated user can review this provider
- * Requirements: Must have at least one COMPLETED booking with this provider that hasn't been reviewed
- * 
- * Security:
- * - ✅ Requires authentication
- * - ✅ Only checks current user's bookings (not all bookings)
- * 
- * Returns:
- * - canReview: boolean
- * - unreviewedBookings: array of bookings that can be reviewed (with service names)
- * 
- * FIXED: January 15, 2026 - Now excludes already-reviewed bookings and returns all eligible bookings
- * Previous bug: Only returned most recent booking without checking if it was already reviewed,
- *               causing wrong booking to be reviewed when customer had multiple completed 
- *               bookings with same provider
- * 
- * Use case: Frontend checks if "Leave Review" button should be enabled and which bookings can be reviewed
+ * Still used by the chat/booking flow — UNCHANGED
  */
 router.get('/can-review/:providerId', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { providerId } = req.params;
     const customerId = req.user?.user_id;
 
-    console.log(`🔍 [Reviews] Checking review eligibility:`, { 
-      customer: customerId, 
-      provider: providerId 
+    console.log(`🔍 [Reviews] Checking review eligibility:`, {
+      customer: customerId,
+      provider: providerId
     });
 
-    // STEP 1: Get ALL completed bookings for this customer with this provider
     const { data: completedBookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('booking_id, booking_date, status, service_name')
@@ -393,35 +348,22 @@ router.get('/can-review/:providerId', authenticateToken, async (req: AuthRequest
     }
 
     if (!completedBookings || completedBookings.length === 0) {
-      console.log('📋 [Reviews] No completed bookings found');
-      return res.json({
-        success: true,
-        canReview: false,
-        unreviewedBookings: []
-      });
+      return res.json({ success: true, canReview: false, unreviewedBookings: [] });
     }
 
-    console.log(`📋 [Reviews] Found ${completedBookings.length} completed booking(s)`);
-
-    // STEP 2: Check which bookings have NOT been reviewed yet
     const bookingIds = completedBookings.map(b => b.booking_id);
-    
+
     const { data: existingReviews, error: reviewsError } = await supabase
       .from('reviews')
       .select('booking_id')
       .in('booking_id', bookingIds);
 
-    if (reviewsError) {
-      console.error('❌ [Reviews] Error checking existing reviews:', reviewsError);
-      throw reviewsError;
-    }
+    if (reviewsError) throw reviewsError;
 
-    // Create a Set of reviewed booking IDs for fast lookup
     const reviewedBookingIds = new Set(
       (existingReviews || []).map(r => parseInt(r.booking_id, 10))
     );
 
-    // STEP 3: Filter out bookings that already have reviews
     const unreviewedBookings = completedBookings
       .filter(booking => !reviewedBookingIds.has(parseInt(booking.booking_id, 10)))
       .map(booking => ({
@@ -434,24 +376,12 @@ router.get('/can-review/:providerId', authenticateToken, async (req: AuthRequest
     const canReview = unreviewedBookings.length > 0;
 
     console.log(`✅ [Reviews] Found ${unreviewedBookings.length} unreviewed booking(s)`);
-    if (canReview) {
-      console.log(`📝 [Reviews] Unreviewed bookings:`, unreviewedBookings.map(b => 
-        `${b.bookingId} (${b.serviceName})`
-      ));
-    }
 
-    res.json({
-      success: true,
-      canReview: canReview,
-      unreviewedBookings: unreviewedBookings
-    });
+    res.json({ success: true, canReview, unreviewedBookings });
 
   } catch (error) {
     console.error('❌ [Reviews] Error checking review eligibility:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to check review eligibility'
-    });
+    res.status(500).json({ success: false, error: 'Failed to check review eligibility' });
   }
 });
 

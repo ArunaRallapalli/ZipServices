@@ -46,7 +46,7 @@ import { Alert } from '../Utils/Alert';
 import api from '../api'; // ADDED: January 5, 2026
 
 interface Booking {
-  booking_id: number;
+  booking_id: number | null;
   provider_user_id: number;
   customer_user_id: number;
   booking_date: string;
@@ -107,7 +107,7 @@ const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
 
       // UPDATED: Using api client instead of fetch
       const data = await api.post('/api/reviews', {
-        bookingId: booking.booking_id,
+        bookingId: booking.booking_id || null, 
         providerId: booking.provider_user_id,
         customerId: booking.customer_user_id,
         rating: rating,
