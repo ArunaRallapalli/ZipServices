@@ -11,7 +11,7 @@
  * - `useAuthFocus` helper refreshes auth each time a screen gains focus.
  * - Restores auth state on app launch
  * - Exposes helper methods for login, logout, refresh, and auth checks
- * AuthContext is a shared place that stores login details (who the user is, whether they’re logged in,
+ * AuthContext is a shared place that stores login details (who the user is, whether they're logged in,
  *  and their token) so every screen can access them. 
  * AuthProvider is the manager that handles login and logout updates 
  * and shares this information with all screens.
@@ -30,7 +30,8 @@ import { useFocusEffect } from '@react-navigation/native';
 interface UserInfo {
   user_id: number;
   user_type?: 'customer' | 'business_owner';
-  is_admin?: boolean;  // ✅ CORRECT - moved and made optional
+  is_admin?: boolean;
+  is_premium?: boolean;
   full_name?: string;
   phone_number?: string;
   zip_code?: string;
@@ -171,7 +172,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           user_id: parseInt(userId),
           user_type: userType as 'customer' | 'business_owner',
           email: userEmail || undefined,
-            is_admin: false // Default to false if not provided
+          is_admin: false,
+          is_premium: false,
         };
       }
     }
@@ -240,7 +242,8 @@ const signIn = useCallback(async (
     const finalUserInfo = userInfo ? { ...userInfo, user_id: userId } : {
       user_id: userId,
       user_type: userType as 'customer' | 'business_owner',
-      email
+      email,
+      is_premium: false,
     };
 
     authData.push(['userInfo', JSON.stringify(finalUserInfo)]);

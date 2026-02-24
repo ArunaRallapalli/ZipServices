@@ -1,14 +1,14 @@
 /**
  * PostServiceScreen Component - WITH PHOTO UPLOAD
  * 
- * Last Updated: February 15, 2026
- * Changes: Added photo upload functionality
+ * Last Updated: February 24, 2026
+ * Changes: Added photo upload functionality, premium users get 10 photos vs 5 for free users
  * 
  * Purpose: Allows users to OFFER their services with optional photos
  * 
  * Key Features:
  * - Post service offers (title, description, category, price, contact info)
- * - Upload up to 10 photos per post (HEIC auto-converted to JPEG)
+ * - Upload up to 5 photos per post for free users, 10 for premium (HEIC auto-converted, compressed by backend)
  * - Photo preview and removal before posting
  * - Orange banner links to RequestServiceCategoryScreen for new categories
  * - Auto-populates user profile data (email, zip, phone)
@@ -40,7 +40,8 @@ import * as ImagePicker from 'expo-image-picker';
 import API_URL from '../config/apiConfig';
 
 const PostServiceScreen: React.FC = () => {
-  const { isAuthenticated, userId, userType } = useAuth();
+  const { isAuthenticated, userId, userType, userInfo } = useAuth();
+  const maxPhotos = userInfo?.is_premium ? 10 : 5;
   const navigation = useNavigation();
   
   // Form state
@@ -93,8 +94,8 @@ const PostServiceScreen: React.FC = () => {
    */
   const pickPhotos = async () => {
     try {
-      if (selectedPhotos.length >= 5) {
-        Alert.alert('Limit Reached', 'You can upload a maximum of 5 photos per post.');
+      if (selectedPhotos.length >= maxPhotos) {
+        Alert.alert('Limit Reached', `You can upload a maximum of ${maxPhotos} photos per post.`);
         return;
       }
 
@@ -102,7 +103,7 @@ const PostServiceScreen: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
-        selectionLimit: 5 - selectedPhotos.length,
+        selectionLimit: maxPhotos - selectedPhotos.length,
       });
 
       if (!result.canceled && result.assets) {
@@ -653,17 +654,17 @@ const uploadPhotos = async (postId: string) => {
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>Photos (Optional)</Text>
-              <Text style={styles.photoCount}>{selectedPhotos.length}/5</Text>
+              <Text style={styles.photoCount}>{selectedPhotos.length}/{maxPhotos}</Text>
             </View>
             
             <TouchableOpacity
               style={styles.addPhotoButton}
               onPress={pickPhotos}
-              disabled={selectedPhotos.length >= 5}
+              disabled={selectedPhotos.length >= maxPhotos}
             >
-              <Ionicons name="camera-outline" size={24} color={selectedPhotos.length >= 5 ? "#ccc" : "#4A90E2"} />
-              <Text style={[styles.addPhotoText, selectedPhotos.length >= 5 && styles.disabledText]}>
-                {selectedPhotos.length >= 5 ? 'Maximum photos reached' : 'Add Photos'}
+              <Ionicons name="camera-outline" size={24} color={selectedPhotos.length >= maxPhotos ? "#ccc" : "#4A90E2"} />
+              <Text style={[styles.addPhotoText, selectedPhotos.length >= maxPhotos && styles.disabledText]}>
+                {selectedPhotos.length >= maxPhotos ? 'Maximum photos reached' : 'Add Photos'}
               </Text>
             </TouchableOpacity>
 

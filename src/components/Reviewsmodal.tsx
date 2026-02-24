@@ -72,7 +72,7 @@ interface UnreviewedBooking {
 }
 
 interface BookingForReview {
-  booking_id: number;
+ booking_id: number | null;
   booking_date: string;
   provider_user_id: number;
   customer_user_id: number;
@@ -120,32 +120,21 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
    * Load current user and check if they're eligible to leave a review
    */
   const loadUserAndCheckEligibility = async () => {
-    try {
-      setCheckingEligibility(true);
-      
-      // Get current user ID
-      const storedUserId = await AsyncStorage.getItem('userId');
-      if (!storedUserId) {
-        setCurrentUserId(null);
-        setUnreviewedBookings([]);
-        setCheckingEligibility(false);
-        return;
-      }
-
-      const uid = parseInt(storedUserId);
-      setCurrentUserId(uid);
-
-      // Check if user has unreviewed completed bookings with this provider
-      await checkReviewEligibility(uid);
-      
-    } catch (error) {
-      console.error('Error loading user:', error);
-      setUnreviewedBookings([]);
-    } finally {
+  try {
+    setCheckingEligibility(true);
+    const storedUserId = await AsyncStorage.getItem('userId');
+    if (!storedUserId) {
+      setCurrentUserId(null);
       setCheckingEligibility(false);
+      return;
     }
-  };
-
+    setCurrentUserId(parseInt(storedUserId));
+  } catch (error) {
+    console.error('Error loading user:', error);
+  } finally {
+    setCheckingEligibility(false);
+  }
+};
   /**
    * Check if user has any unreviewed completed bookings with this provider
    * 
@@ -204,23 +193,16 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
    * If user has only one booking, directly open write review modal
    */
   const handleWriteReviewPress = () => {
-    if (unreviewedBookings.length === 1) {
-      // Only one booking - directly open write review modal
-      const booking = unreviewedBookings[0];
-      setSelectedBooking({
-        booking_id: booking.bookingId,
-        booking_date: booking.bookingDate,
-        provider_user_id: providerId,
-        customer_user_id: currentUserId!,
-        provider_name: providerName,
-        service_name: booking.serviceName
-      });
-      setShowWriteReview(true);
-    } else {
-      // Multiple bookings - show selection modal
-      setShowBookingSelection(true);
-    }
-  };
+  setSelectedBooking({
+    booking_id: null,
+    booking_date: new Date().toISOString(),
+    provider_user_id: providerId,
+    customer_user_id: currentUserId!,
+    provider_name: providerName,
+    service_name: ''
+  });
+  setShowWriteReview(true);
+};
 
   /**
    * Handle booking selection from the list
@@ -324,32 +306,20 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
 
           {/* Write Review Button */}
           {checkingEligibility ? (
-            <View style={styles.checkingContainer}>
-              <ActivityIndicator size="small" color="#4A90E2" />
-              <Text style={styles.checkingText}>Checking eligibility...</Text>
-            </View>
-          ) : unreviewedBookings.length > 0 ? (
-            <View style={styles.writeReviewContainer}>
-              <TouchableOpacity
-                style={styles.writeReviewButton}
-                onPress={handleWriteReviewPress}
-              >
-                <Ionicons name="create" size={20} color="#fff" />
-                <Text style={styles.writeReviewButtonText}>
-                  {unreviewedBookings.length === 1 
-                    ? 'Write a Review'
-                    : `Write a Review (${unreviewedBookings.length} bookings)`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : currentUserId ? (
-            <View style={styles.infoContainer}>
-              <Ionicons name="information-circle-outline" size={20} color="#999" />
-              <Text style={styles.infoText}>
-                Complete a booking to leave a review
-              </Text>
-            </View>
-          ) : null}
+  <View style={styles.checkingContainer}>
+    <ActivityIndicator size="small" color="#4A90E2" />
+  </View>
+) : currentUserId ? (
+  <View style={styles.writeReviewContainer}>
+    <TouchableOpacity
+      style={styles.writeReviewButton}
+      onPress={handleWriteReviewPress}
+    >
+      <Ionicons name="create" size={20} color="#fff" />
+      <Text style={styles.writeReviewButtonText}>Write a Review</Text>
+    </TouchableOpacity>
+  </View>
+) : null}
         </SafeAreaView>
       </Modal>
 
