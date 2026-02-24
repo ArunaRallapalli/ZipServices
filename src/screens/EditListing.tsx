@@ -155,8 +155,8 @@ const EditListing: React.FC = () => {
    */
   const pickPhotos = async () => {
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    if (totalPhotos >= 10) {
-      Alert.alert('Limit Reached', 'You can have a maximum of 10 photos per post.');
+    if (totalPhotos >= 5) {
+      Alert.alert('Limit Reached', 'You can have a maximum of 5 photos per post.');
       return;
     }
     try {
@@ -164,7 +164,7 @@ const EditListing: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
-        selectionLimit: 10 - totalPhotos,
+        selectionLimit: 5 - totalPhotos,
       });
       if (!result.canceled && result.assets) {
         setSelectedPhotos([...selectedPhotos, ...result.assets]);
@@ -810,7 +810,7 @@ const EditListing: React.FC = () => {
             <View style={styles.photoHeader}>
               <Text style={styles.label}>Photos</Text>
               <Text style={styles.photoCount}>
-                {existingPhotos.length + selectedPhotos.length}/10
+                {existingPhotos.length + selectedPhotos.length}/5
               </Text>
             </View>
 
@@ -854,23 +854,23 @@ const EditListing: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.addPhotoButton,
-                (existingPhotos.length + selectedPhotos.length >= 10 || saving) && styles.addPhotoButtonDisabled,
+                (existingPhotos.length + selectedPhotos.length >= 5 || saving) && styles.addPhotoButtonDisabled,
               ]}
               onPress={pickPhotos}
-              disabled={existingPhotos.length + selectedPhotos.length >= 10 || saving}
+              disabled={existingPhotos.length + selectedPhotos.length >= 5 || saving}
             >
               <Ionicons
                 name="camera-outline"
                 size={22}
-                color={existingPhotos.length + selectedPhotos.length >= 10 ? "#ccc" : "#4A90E2"}
+                color={existingPhotos.length + selectedPhotos.length >= 5 ? "#ccc" : "#4A90E2"}
               />
               <Text
                 style={[
                   styles.addPhotoText,
-                  (existingPhotos.length + selectedPhotos.length >= 10 || saving) && styles.addPhotoTextDisabled,
+                  (existingPhotos.length + selectedPhotos.length >= 5 || saving) && styles.addPhotoTextDisabled,
                 ]}
               >
-                {existingPhotos.length + selectedPhotos.length >= 10
+                {existingPhotos.length + selectedPhotos.length >= 5
                   ? "Maximum photos reached"
                   : "Add Photos"}
               </Text>

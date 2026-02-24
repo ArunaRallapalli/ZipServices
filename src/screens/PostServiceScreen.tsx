@@ -93,8 +93,8 @@ const PostServiceScreen: React.FC = () => {
    */
   const pickPhotos = async () => {
     try {
-      if (selectedPhotos.length >= 10) {
-        Alert.alert('Limit Reached', 'You can upload a maximum of 10 photos per post.');
+      if (selectedPhotos.length >= 5) {
+        Alert.alert('Limit Reached', 'You can upload a maximum of 5 photos per post.');
         return;
       }
 
@@ -102,7 +102,7 @@ const PostServiceScreen: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
-        selectionLimit: 10 - selectedPhotos.length,
+        selectionLimit: 5 - selectedPhotos.length,
       });
 
       if (!result.canceled && result.assets) {
@@ -653,17 +653,17 @@ const uploadPhotos = async (postId: string) => {
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>Photos (Optional)</Text>
-              <Text style={styles.photoCount}>{selectedPhotos.length}/10</Text>
+              <Text style={styles.photoCount}>{selectedPhotos.length}/5</Text>
             </View>
             
             <TouchableOpacity
               style={styles.addPhotoButton}
               onPress={pickPhotos}
-              disabled={selectedPhotos.length >= 10}
+              disabled={selectedPhotos.length >= 5}
             >
-              <Ionicons name="camera-outline" size={24} color={selectedPhotos.length >= 10 ? "#ccc" : "#4A90E2"} />
-              <Text style={[styles.addPhotoText, selectedPhotos.length >= 10 && styles.disabledText]}>
-                {selectedPhotos.length >= 10 ? 'Maximum photos reached' : 'Add Photos'}
+              <Ionicons name="camera-outline" size={24} color={selectedPhotos.length >= 5 ? "#ccc" : "#4A90E2"} />
+              <Text style={[styles.addPhotoText, selectedPhotos.length >= 5 && styles.disabledText]}>
+                {selectedPhotos.length >= 5 ? 'Maximum photos reached' : 'Add Photos'}
               </Text>
             </TouchableOpacity>
 

@@ -1089,7 +1089,7 @@ const OUTPUT_FORMATS: { [key: string]: string } = {
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_PHOTOS_PER_POST = 10;
+const MAX_PHOTOS_PER_POST = 5;
 
 // Multer configuration
 const upload = multer({

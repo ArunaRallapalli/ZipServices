@@ -187,15 +187,21 @@ const ListingsScreen: React.FC = () => {
       if (data.success && Array.isArray(data.posts)) {
         setListings(data.posts);
         setFilteredListings(data.posts);
-      } else {
+   } else {
         setListings([]);
         setFilteredListings([]);
       }
-    } catch (error) {
-      console.error("Error fetching user listings:", error);
-      Alert.alert("Error", "Failed to load your listings. Please try again.");
-      setListings([]);
-      setFilteredListings([]);
+    } catch (error: any) {
+  console.error("Error fetching user listings:", error);
+  if (error.status === 401 || error.message === 'Unauthorized') {
+    // Session expired - the !isAuthenticated check above will show Sign In UI
+    setListings([]);
+    setFilteredListings([]);
+    return;
+  }
+  Alert.alert("Error", "Failed to load your listings. Please try again.");
+  setListings([]);
+  setFilteredListings([]);
     } finally {
       setLoading(false);
     }
