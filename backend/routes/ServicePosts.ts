@@ -3,13 +3,15 @@
  * SERVICE POSTS ROUTES
  * ============================================================================
  * 
- * Last Updated: February 8, 2026
+ * Last Updated: February 24, 2026
  * Changes: 
  * - Added GET /api/service-posts endpoint with query filtering for category requests
  * - Added JWT authentication to protect sensitive endpoints and user data
  * - FIXED: Type comparison bugs in authorization checks (String() wrapper added)
  * - FIXED: Missing route handler for ENDPOINT 9
  * - FIXED: Admin check using database is_admin flag
+ * - Added sharp image compression (1200x1200 max, JPEG 80%) on photo upload
+ * - Premium users get 10 photos per post, free users get 5
  * 
  * ENDPOINTS PROVIDED:
  * 1. GET  /api/service-posts/search          - Radius-based search (PUBLIC)
@@ -22,6 +24,7 @@
  * 8. DELETE /api/service-posts/:postId       - Delete post (PROTECTED)
  * 9. PATCH /api/service-posts/:postId/inactivate - Soft delete (PROTECTED)
  * 10. PATCH /api/service-posts/category-request/:requestId/status - Admin approve/reject (PROTECTED)
+ * 11. POST /api/service-posts/:postId/photos   - Upload photo (PROTECTED) and Compression with sharp
  * ============================================================================
  */
 
@@ -43,6 +46,7 @@ import { sendCategoryRequestNotification } from '../services/emailServices';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import heicConvert from 'heic-convert';
+import sharp from 'sharp';
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
@@ -1089,7 +1093,8 @@ const OUTPUT_FORMATS: { [key: string]: string } = {
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_PHOTOS_PER_POST = 5;
+const MAX_PHOTOS_FREE = 5;
+const MAX_PHOTOS_PREMIUM = 10;
 
 // Multer configuration
 const upload = multer({
@@ -1182,6 +1187,14 @@ router.post(
         return;
       }
 
+      // Determine photo limit based on user's subscription tier
+      const { data: userTier } = await supabase
+        .from('users')
+        .select('is_premium')
+        .eq('user_id', userId)
+        .single();
+      const MAX_PHOTOS_PER_POST = userTier?.is_premium ? MAX_PHOTOS_PREMIUM : MAX_PHOTOS_FREE;
+
       console.log('📸 Processing upload for post:', postId);
 
       // Verify post ownership
@@ -1198,6 +1211,7 @@ router.post(
 
       if (String(post.user_id) !== String(userId)) {
         res.status(403).json({ error: 'You can only upload photos to your own posts' });
+        
         return;
       }
 
@@ -1246,22 +1260,42 @@ router.post(
       }
 
       // ============================================================
-      // CONVERT HEIC TO JPEG IF NEEDED
-      // ============================================================
-      if (mimeType === 'image/heic' || mimeType === 'image/heif') {
-        console.log('🔄 Converting HEIC to JPEG...');
-        
-        try {
-          fileBuffer = await convertHeicToJpeg(fileBuffer);
-          fileName = fileName.replace(/\.(heic|heif)$/i, '.jpg');
-          mimeType = 'image/jpeg';
-          console.log('✅ HEIC converted to JPEG');
-        } catch (conversionError) {
-          console.error('❌ HEIC conversion failed:', conversionError);
-          res.status(500).json({ error: 'Failed to convert HEIC image' });
-          return;
-        }
-      }
+// CONVERT HEIC TO JPEG IF NEEDED
+// ============================================================
+if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+  try {
+    fileBuffer = await convertHeicToJpeg(fileBuffer);
+    fileName = fileName.replace(/\.(heic|heif)$/i, '.jpg');
+    mimeType = 'image/jpeg';
+    console.log('✅ HEIC converted to JPEG');
+  } catch (conversionError) {
+    console.error('❌ HEIC conversion failed:', conversionError);
+    res.status(500).json({ error: 'Failed to convert HEIC image' });
+    return;
+  }
+}
+
+// ============================================================
+// COMPRESS & RESIZE ALL IMAGES
+// ============================================================
+try {
+  const originalSize = fileBuffer.length;
+  fileBuffer = await sharp(fileBuffer)
+    .resize(1200, 1200, {
+      fit: 'inside',           // preserves aspect ratio
+      withoutEnlargement: true // don't upscale small images
+    })
+    .jpeg({ quality: 80 })     // normalize everything to JPEG
+    .toBuffer();
+  
+  mimeType = 'image/jpeg';
+  fileName = fileName.replace(/\.(png|webp|heic|heif)$/i, '.jpg');
+  
+  console.log(`✅ Image compressed: ${Math.round(originalSize / 1024)}KB → ${Math.round(fileBuffer.length / 1024)}KB`);
+} catch (compressionError) {
+  console.error('⚠️ Compression failed, using original:', compressionError);
+  // Non-blocking - continue with original if sharp fails
+}
 
       // ============================================================
       // UPLOAD TO SUPABASE STORAGE
