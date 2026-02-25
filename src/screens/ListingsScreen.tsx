@@ -371,12 +371,29 @@ const ListingsScreen: React.FC = () => {
         <Text style={styles.categoryText}>{item.service_category}</Text>
       </View>
 
-      {/* Description (truncated to 3 lines) */}
-      {item.description && (
-        <Text style={styles.descriptionText} numberOfLines={3}>
-          {item.description}
-        </Text>
+ {/* Description - parse admin response for category requests */}
+{item.description && (() => {
+  const parts = item.description.split('\n\n--- Admin Response ---\n');
+  const originalDesc = parts[0];
+  const adminResponse = parts[1];
+  return (
+    <>
+      <Text style={styles.descriptionText} numberOfLines={3}>
+        {originalDesc}
+      </Text>
+      {adminResponse && (
+        <View style={styles.adminResponseBox}>
+          <Text style={styles.adminResponseLabel}>
+            {item.request_status === 'approved' ? '✅ Approved' : 
+             item.request_status === 'rejected' ? '❌ Rejected' : 
+             '⏳ Admin Response'}
+          </Text>
+          <Text style={styles.adminResponseText}>{adminResponse}</Text>
+        </View>
       )}
+    </>
+  );
+})()}
 
       {/* Price/Budget with icon */}
       {item.price_range && (
@@ -681,6 +698,25 @@ const styles = createResponsiveStyles({
     width: 40,
     alignItems: 'center',
   },
+  adminResponseBox: { 
+  backgroundColor: '#F0F7FF', 
+  borderLeftWidth: 3, 
+  borderLeftColor: '#4A90E2', 
+  padding: 8, 
+  borderRadius: 4, 
+  marginTop: 6 
+},
+adminResponseLabel: { 
+  fontSize: 12, 
+  fontWeight: '700', 
+  color: '#4A90E2', 
+  marginBottom: 4 
+},
+adminResponseText: { 
+  fontSize: 13, 
+  color: '#555', 
+  lineHeight: 18 
+},
 });
 
 export default ListingsScreen;

@@ -510,7 +510,7 @@ export async function sendCategoryRequestNotification({
 from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
 replyTo: 'support@gozipmarket.com',
   to: adminEmail,
-  subject: '📋 New Category Request - Admin Review Needed',
+subject: `New Category Request: ${categoryName} - Admin Review Needed`,
       html: `
         <!DOCTYPE html>
         <html>

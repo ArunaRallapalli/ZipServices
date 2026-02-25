@@ -78,12 +78,20 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Validate rating range
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json({
-        success: false,
-        error: 'Rating must be between 1 and 5'
-      });
-    }
+if (rating < 1 || rating > 5) {
+  return res.status(400).json({
+    success: false,
+    error: 'Rating must be between 1 and 5'
+  });
+}
+
+// You cannot review your own services  ← old
+if (customerId.toString() === providerId.toString()) {
+  return res.status(403).json({
+    success: false,
+    error: 'This is your post - You cannot provide a review for yourself'  // ← change this
+  });
+}
 
     // ====================================================================
     // BOOKING VALIDATION — only runs if bookingId is provided
