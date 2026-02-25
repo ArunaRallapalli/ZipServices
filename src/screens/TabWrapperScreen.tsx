@@ -110,7 +110,7 @@ const PostStackNavigator: React.FC = () => {
 
 const BottomTabs: React.FC = () => {
   // Get user information from auth context
-  const { userType, userInfo } = useAuth();
+ const { userType, userInfo, loading } = useAuth();
   
   // Local state for unread message count (displayed as badge)
   const [unreadCount, setUnreadCount] = useState(0);
@@ -236,17 +236,19 @@ const BottomTabs: React.FC = () => {
    * Screen Component Selection
    * Conditionally select which components to use based on auth status
    * ================================================================ */
-  const MessageScreenComponent = userType === "business_owner"
-    ? BusinessOwnerChatScreen
-    : MessagesPlaceholder;
+ const isAuthenticated = !loading && userType === "business_owner" && !!userInfo?.user_id;
 
-   const ProfileScreenComponent = userType === "business_owner"
-  ? BusinessOwnerProfileScreen  // ← Direct profile with all sections
+const MessageScreenComponent = isAuthenticated
+  ? BusinessOwnerChatScreen
+  : MessagesPlaceholder;
+
+const ProfileScreenComponent = isAuthenticated
+  ? BusinessOwnerProfileScreen
   : ProfilePlaceholder;
 
-  const PostScreenComponent = userType === "business_owner"
-    ? PostStackNavigator
-    : PostPlaceholder;
+const PostScreenComponent = isAuthenticated
+  ? PostStackNavigator
+  : PostPlaceholder;
 
   /* ================================================================
    * Tab Navigator Render

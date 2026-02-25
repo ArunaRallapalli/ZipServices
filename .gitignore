@@ -47,3 +47,4 @@ backend/.env.production
 # Environment files - NEVER commit these
 .env
 backend/.env
+backend/logs/
