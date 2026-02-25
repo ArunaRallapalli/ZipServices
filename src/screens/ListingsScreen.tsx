@@ -65,6 +65,7 @@ interface ServicePost {
   business_name?: string;
   created_at?: string;
   is_active?: boolean;                  // Whether listing is active/visible
+  request_status?: 'pending' | 'approved' | 'rejected';
 }
 
 // CustomerInfo interface: represents the current user's information
