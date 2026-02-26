@@ -106,10 +106,15 @@ const PostServiceScreen: React.FC = () => {
         selectionLimit: maxPhotos - selectedPhotos.length,
       });
 
-      if (!result.canceled && result.assets) {
-        setSelectedPhotos([...selectedPhotos, ...result.assets]);
-        console.log(`📸 Selected ${result.assets.length} photos`);
-      }
+     if (!result.canceled && result.assets) {
+  const available = maxPhotos - selectedPhotos.length;
+  const trimmed = result.assets.slice(0, available);
+  if (result.assets.length > trimmed.length) {
+    Alert.alert('Limit Reached', `Only ${trimmed.length} photo(s) added. Maximum is ${maxPhotos} per post.`);
+  }
+  setSelectedPhotos([...selectedPhotos, ...trimmed]);
+  console.log(`📸 Selected ${trimmed.length} photos`);
+}
     } catch (error) {
       console.error('Error picking photos:', error);
       Alert.alert('Error', 'Failed to pick photos. Please try again.');
