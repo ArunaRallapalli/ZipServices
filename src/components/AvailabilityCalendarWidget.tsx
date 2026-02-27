@@ -5,15 +5,33 @@
  * 
  * Last Updated: January 15, 2026
  * Changes: Added auto-refresh polling to keep calendar updated
+ * 
+ * Updated: Added time slot booking (booking_time field)
+ * Changes: handleDayPress now opens time slot modal instead of Alert confirm
+ *          createBooking now accepts and sends bookingTime param
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+// ✅ CHANGE 1: Added Modal, ScrollView to imports
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from '../Utils/Alert';
 import api from '../api';
+
+// ✅ CHANGE 2: Time slot config
+const TIME_SLOTS = [
+  '09:00', '10:00', '11:00', '12:00',
+  '13:00', '14:00', '15:00', '16:00', '17:00',
+];
+
+const formatTimeSlot = (time: string) => {
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+};
 
 interface AvailabilityCalendarWidgetProps {
   otherUserId: number;
@@ -38,6 +56,9 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  // ✅ CHANGE 3: New state for time slot modal
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showTimeModal, setShowTimeModal] = useState(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -132,13 +153,14 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
     setRefreshing(false);
   };
 
-  const handleDayPress = async (day: any) => {
+  // ✅ CHANGE 4: handleDayPress — opens time slot modal instead of Alert confirm
+  const handleDayPress = (day: any) => {
     const dateStr = day.dateString;
-    
+
     console.log(`📅 Date pressed: ${dateStr}`);
-    
+
     if (markedDates[dateStr]?.disabled) {
-      Alert.alert('Date Unavailable', 'This date is already booked');
+      Alert.alert('Date Unavailable', 'This date is already booked or blocked');
       return;
     }
 
@@ -152,43 +174,27 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
       return;
     }
 
-    const [year, month, dayNum] = dateStr.split('-').map(Number);
-    const selectedDate = new Date(year, month - 1, dayNum);
-
-    Alert.alert(
-      'Book This Date?',
-      `${selectedDate.toLocaleDateString('en-US', { 
-        weekday: 'long',
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      })}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Book', 
-          onPress: () => createBooking(dateStr)
-        }
-      ]
-    );
+    // Open time picker instead of immediate confirm
+    setSelectedDate(dateStr);
+    setShowTimeModal(true);
   };
 
-  /**
-   * Create a new booking
-   */
-  const createBooking = async (bookingDate: string) => {
+  // ✅ CHANGE 5: createBooking now accepts bookingTime and sends it to backend
+  const createBooking = async (bookingDate: string, bookingTime: string) => {
+    setShowTimeModal(false);
     try {
       const data = await api.post('/api/availability/book', {
         serviceProviderId: otherUserId,
         customerId: currentUserId,
         bookingDate: bookingDate,
+        bookingTime: bookingTime,   // ✅ NEW FIELD
       });
 
       if (data.success) {
         Alert.alert(
-          'Booking Pending!', 
-          data.emailSent 
-            ? 'Thank you! The service provider has been notified to confirm or decline your request. Please use this chat to coordinate timing and other details.' 
+          'Booking Pending!',
+          data.emailSent
+            ? 'Thank you! The service provider has been notified to confirm or decline your request. Please use this chat to coordinate timing and other details.'
             : 'Booking created',
           [{ text: 'OK', onPress: fetchAvailability }]
         );
@@ -201,10 +207,53 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
     }
   };
 
+  // ✅ CHANGE 6: Time slot modal component
+  const TimeSlotModal = () => {
+    if (!selectedDate) return null;
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const displayDate = new Date(year, month - 1, day).toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+
+    return (
+      <Modal
+        visible={showTimeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTimeModal(false)}
+      >
+        <View style={tsStyles.overlay}>
+          <View style={tsStyles.sheet}>
+            <Text style={tsStyles.title}>Select a Time</Text>
+            <Text style={tsStyles.subtitle}>{displayDate}</Text>
+            <ScrollView>
+              {TIME_SLOTS.map(slot => (
+                <TouchableOpacity
+                  key={slot}
+                  style={tsStyles.slotBtn}
+                  onPress={() => createBooking(selectedDate, slot)}
+                >
+                  <Ionicons name="time-outline" size={16} color="#4A90E2" />
+                  <Text style={tsStyles.slotTxt}>{formatTimeSlot(slot)}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={tsStyles.cancelBtn}
+              onPress={() => setShowTimeModal(false)}
+            >
+              <Text style={tsStyles.cancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Minimalist Header */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.header}
         onPress={() => setIsExpanded(!isExpanded)}
         activeOpacity={0.7}
@@ -212,16 +261,16 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
         <View style={styles.headerLeft}>
           <Ionicons name="calendar-outline" size={16} color="#4A90E2" />
           <Text style={styles.headerTitle}>Book Date</Text>
-          <Ionicons 
-            name={isExpanded ? 'chevron-up' : 'chevron-down'} 
-            size={14} 
-            color="#999" 
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color="#999"
           />
         </View>
         <View style={styles.headerRight}>
           {isExpanded && (
-            <TouchableOpacity 
-              onPress={(e) => { e.stopPropagation(); handleRefresh(); }} 
+            <TouchableOpacity
+              onPress={(e) => { e.stopPropagation(); handleRefresh(); }}
               style={styles.btn}
               disabled={refreshing}
             >
@@ -257,7 +306,7 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
                 }}
                 style={styles.calendar}
               />
-              
+
               {/* UPDATED: Legend with better spacing */}
               <View style={styles.legendContainer}>
                 <View style={styles.legend}>
@@ -270,17 +319,20 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
                     <Text style={styles.legendTxt}>Booked</Text>
                   </View>
                 </View>
-                
+
                 {/* ADDED: Note on separate line */}
-               <Text style={[styles.noteText, { fontWeight: 'bold' }]}>
-  Note: For booking specific time, please chat with Service Provider
-</Text>
+                <Text style={[styles.noteText, { fontWeight: 'bold' }]}>
+                  Note: For booking specific time, please chat with Service Provider
+                </Text>
 
               </View>
             </>
           )}
         </View>
       )}
+
+      {/* ✅ CHANGE 7: Time slot modal rendered outside the isExpanded block */}
+      <TimeSlotModal />
     </View>
   );
 };
@@ -377,6 +429,60 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 14,
+  },
+});
+
+// ✅ CHANGE 8: Styles for the time slot modal (separate StyleSheet)
+const tsStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  slotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  slotTxt: {
+    fontSize: 15,
+    color: '#333',
+  },
+  cancelBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  cancelTxt: {
+    fontSize: 15,
+    color: '#666',
+    fontWeight: '600',
   },
 });
 

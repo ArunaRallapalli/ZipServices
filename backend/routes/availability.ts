@@ -199,7 +199,7 @@ router.delete('/:userId/:date', authenticateToken, authorizeUser, async (req: Au
  */
 router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { serviceProviderId, customerId, bookingDate } = req.body;
+    const { serviceProviderId, customerId, bookingDate, bookingTime } = req.body;
 
     console.log(`📅 [Booking] Creating booking:`, {
       providerUserId: serviceProviderId,
@@ -207,7 +207,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
       bookingDate
     });
 
-    if (!serviceProviderId || !customerId || !bookingDate) {
+    if (!serviceProviderId || !customerId || !bookingDate || !bookingTime) {
       return res.status(400).json({
         success: false,
         error: 'serviceProviderId, customerId, and bookingDate are required'
@@ -244,35 +244,21 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
 
     // Create the booking
     const { data: bookingData, error: bookingError } = await supabase
-      .from('bookings')
-      .insert({
-        provider_user_id: serviceProviderId,
-        customer_user_id: customerId,
-        booking_date: bookingDate,
-        status: 'pending',
-        created_at: new Date().toISOString()
-      })
+  .from('bookings')
+  .insert({
+    provider_user_id: serviceProviderId,
+    customer_user_id: customerId,
+    booking_date: bookingDate,
+    booking_time: bookingTime,   // ✅ NEW FIELD
+    status: 'pending',
+    created_at: new Date().toISOString()
+  })
       .select()
       .single();
 
     if (bookingError) {
       console.error('❌ [Booking] Error creating booking:', bookingError);
       throw bookingError;
-    }
-
-    // Mark the date as unavailable
-    const { error: updateError } = await supabase
-      .from('availability')
-      .upsert({
-        user_id: serviceProviderId,
-        date: bookingDate,
-        is_available: false,
-        notes: `Booked by user ${customerId}`,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,date' });
-
-    if (updateError) {
-      console.error('⚠️ [Booking] Warning: Could not update availability:', updateError);
     }
 
     // Get provider details for email notification
@@ -384,17 +370,18 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
 
     // Convert bigint IDs and format data
     const bookings = (data || []).map((booking: any) => ({
-      booking_id: parseInt(booking.booking_id, 10),
-      provider_user_id: parseInt(booking.provider_user_id, 10),
-      customer_user_id: parseInt(booking.customer_user_id, 10),
-      booking_date: booking.booking_date,
-      status: booking.status,
-      notes: booking.notes,
-      created_at: booking.created_at,
-      customer_name: booking.customer?.business_owners?.[0]?.business_name || booking.customer?.email,
-      customer_phone: booking.customer?.business_owners?.[0]?.phone_number,
-      customer_email: booking.customer?.email
-    }));
+  booking_id: parseInt(booking.booking_id, 10),
+  provider_user_id: parseInt(booking.provider_user_id, 10),
+  customer_user_id: parseInt(booking.customer_user_id, 10),
+  booking_date: booking.booking_date,
+  booking_time: booking.booking_time || null,   // ✅ NEW
+  status: booking.status,
+  notes: booking.notes,
+  created_at: booking.created_at,
+  customer_name: booking.customer?.business_owners?.[0]?.business_name || booking.customer?.email,
+  customer_phone: booking.customer?.business_owners?.[0]?.phone_number,
+  customer_email: booking.customer?.email
+}));
 
     console.log(`✅ [Bookings] Found ${bookings.length} bookings for provider ${userId}`);
 

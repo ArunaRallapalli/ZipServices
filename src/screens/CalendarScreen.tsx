@@ -6,6 +6,8 @@
  * Last Updated: January 15, 2026
  * Changes: Filter bookings to only show ACTIVE bookings (not cancelled/completed)
  * 
+ * Updated: Added booking_time field to Booking interface and modal display
+ * 
  * IMPORTANT NOTE ABOUT 403 ERRORS:
  * If you see "You can only set your own availability" error, it's because:
  * 1. Your auth token is expired → Log out and log back in
@@ -83,6 +85,7 @@ interface Booking {
   provider_user_id: number;
   customer_user_id: number;
   booking_date: string;
+  booking_time?: string;   // ✅ CHANGE 1: Added — optional for backwards compat with existing bookings
   status: string;
   notes?: string;
   created_at: string;
@@ -434,6 +437,24 @@ const CalendarScreen: React.FC = () => {
                   </Text>
                 </View>
               </View>
+
+              {/* ✅ CHANGE 2: Show booking_time if present — hidden for old bookings without it */}
+              {selectedBooking.booking_time && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="time-outline" size={20} color="#4A90E2" />
+                  <View style={styles.detailText}>
+                    <Text style={styles.detailLabel}>Time</Text>
+                    <Text style={styles.detailValue}>
+                      {(() => {
+                        const [h, m] = selectedBooking.booking_time!.split(':').map(Number);
+                        const period = h >= 12 ? 'PM' : 'AM';
+                        const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+                        return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+                      })()}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               <View style={styles.detailRow}>
                 <Ionicons name="person" size={20} color="#4A90E2" />
