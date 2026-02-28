@@ -6,19 +6,9 @@
  * Last Updated: January 15, 2026
  * Changes: Filter bookings to only return ACTIVE bookings (pending/confirmed)
  * Reason: Cancelled bookings should not appear as "booked" on calendars
- * 
- * This module handles all availability and booking-related endpoints including:
- * - Provider availability calendar management
- * - Customer booking appointments
- * - Booking status updates (confirm, cancel, complete)
- * - Email notifications for new bookings
- * 
- * SECURITY:
- * - ✅ PROTECTED routes require JWT authentication
- * - ✅ Authorization enforced (users can only manage their own data)
- * - ⚠️  Some routes allow viewing but restrict modifications
- * 
- * BASE PATH: /api/availability
+ *
+ * Updated: Added booking_time to GET /:userId select (for partial booking
+ * yellow dot logic on customer calendar), passed bookingTime to email functions
  * ============================================================================
  */
 
@@ -40,7 +30,8 @@ const router = express.Router();
  * Purpose: Get availability calendar for a service provider
  * 
  * ✅ FIXED: January 15, 2026 - Only return ACTIVE bookings (pending/confirmed)
- * This prevents cancelled bookings from showing as red dots on customer calendars
+ * ✅ UPDATED: Now includes booking_time so customer calendar can count booked
+ *    slots per date and show yellow (partial) vs red (fully booked) dots
  */
 router.get('/:userId', async (req, res) => {
   try {
@@ -67,12 +58,12 @@ router.get('/:userId', async (req, res) => {
     }
 
     // ✅ FIXED: Only fetch ACTIVE bookings (pending or confirmed)
-    // Exclude cancelled and completed bookings from calendar display
+    // ✅ UPDATED: Added booking_time to select — needed for partial booking dot logic
     const { data: bookingsData, error: bookingsError } = await supabase
       .from('bookings')
-      .select('booking_id, booking_date, status, customer_user_id')
+      .select('booking_id, booking_date, booking_time, status, customer_user_id') // ✅ added booking_time
       .eq('provider_user_id', userId)
-      .in('status', ['pending', 'confirmed'])  // ✅ FILTER: Only active bookings
+      .in('status', ['pending', 'confirmed'])
       .gte('booking_date', start)
       .lte('booking_date', end)
       .order('booking_date', { ascending: true });
@@ -85,6 +76,7 @@ router.get('/:userId', async (req, res) => {
     const bookings = (bookingsData || []).map((booking: any) => ({
       booking_id: parseInt(booking.booking_id, 10),
       booking_date: booking.booking_date,
+      booking_time: booking.booking_time || null, // ✅ NEW
       status: booking.status,
       customer_user_id: parseInt(booking.customer_user_id, 10)
     }));
@@ -92,12 +84,12 @@ router.get('/:userId', async (req, res) => {
     console.log(`✅ Found ${availabilityData?.length || 0} availability records`);
     console.log(`✅ Found ${bookings.length} active bookings (pending/confirmed only)`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       availability: availabilityData || [],
       bookings: bookings
     });
-    
+
   } catch (error) {
     console.error('❌ Error in availability GET:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch availability' });
@@ -204,13 +196,14 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
     console.log(`📅 [Booking] Creating booking:`, {
       providerUserId: serviceProviderId,
       customerUserId: customerId,
-      bookingDate
+      bookingDate,
+      bookingTime
     });
 
     if (!serviceProviderId || !customerId || !bookingDate || !bookingTime) {
       return res.status(400).json({
         success: false,
-        error: 'serviceProviderId, customerId, and bookingDate are required'
+        error: 'serviceProviderId, customerId, bookingDate, and bookingTime are required'
       });
     }
 
@@ -222,7 +215,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
       });
     }
 
-    // Check if the date is available
+    // Check if the date is explicitly blocked by provider
     const { data: availabilityData, error: availabilityError } = await supabase
       .from('availability')
       .select('*')
@@ -242,17 +235,34 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
       });
     }
 
+    // ✅ Check if this specific time slot is already booked
+    const { data: existingSlot, error: slotError } = await supabase
+      .from('bookings')
+      .select('booking_id')
+      .eq('provider_user_id', serviceProviderId)
+      .eq('booking_date', bookingDate)
+      .eq('booking_time', bookingTime)
+      .in('status', ['pending', 'confirmed'])
+      .single();
+
+    if (existingSlot) {
+      return res.status(400).json({
+        success: false,
+        error: 'This time slot is already booked. Please choose a different time.'
+      });
+    }
+
     // Create the booking
     const { data: bookingData, error: bookingError } = await supabase
-  .from('bookings')
-  .insert({
-    provider_user_id: serviceProviderId,
-    customer_user_id: customerId,
-    booking_date: bookingDate,
-    booking_time: bookingTime,   // ✅ NEW FIELD
-    status: 'pending',
-    created_at: new Date().toISOString()
-  })
+      .from('bookings')
+      .insert({
+        provider_user_id: serviceProviderId,
+        customer_user_id: customerId,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      })
       .select()
       .single();
 
@@ -291,7 +301,8 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
         providerName: providerData.business_owners?.[0]?.business_name || providerData.full_name || 'Provider',
         customerName: customerData.business_owners?.[0]?.business_name || customerData.full_name || 'Customer',
         bookingDate: bookingDate,
-        bookingId: parseInt(bookingData.booking_id, 10)
+        bookingId: parseInt(bookingData.booking_id, 10),
+        bookingTime: bookingTime // ✅ NEW
       });
 
       emailSent = emailResult.success;
@@ -305,7 +316,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
         .insert({
           sender_id: customerId,
           receiver_id: serviceProviderId,
-          message_text: `Message and email sent to provider ->🔔 New booking request for ${bookingDate}. Go to Calendar in Listings tab to confirm or decline.`,
+          message_text: `🔔 New booking request for ${bookingDate} at ${bookingTime}. Go to Calendar in Listings tab to confirm or decline. Please coordinate time through chat as needed.`,
           is_read: false,
           created_at: new Date().toISOString()
         });
@@ -328,7 +339,7 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
     };
 
     console.log(`✅ [Booking] Booking created successfully:`, booking);
-    
+
     res.json({
       success: true,
       booking,
@@ -344,9 +355,8 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
  * GET /api/availability/bookings/:userId
  * 
  * Purpose: Get all bookings for a service provider
- * 
- * Note: Returns ALL bookings (including cancelled/completed) for the provider's
- * full booking history view. The calendar filtering happens client-side.
+ * Returns ALL bookings (including cancelled/completed) for full history.
+ * Calendar filtering happens client-side.
  */
 router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: AuthRequest, res) => {
   try {
@@ -368,20 +378,19 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
 
     if (error) throw error;
 
-    // Convert bigint IDs and format data
     const bookings = (data || []).map((booking: any) => ({
-  booking_id: parseInt(booking.booking_id, 10),
-  provider_user_id: parseInt(booking.provider_user_id, 10),
-  customer_user_id: parseInt(booking.customer_user_id, 10),
-  booking_date: booking.booking_date,
-  booking_time: booking.booking_time || null,   // ✅ NEW
-  status: booking.status,
-  notes: booking.notes,
-  created_at: booking.created_at,
-  customer_name: booking.customer?.business_owners?.[0]?.business_name || booking.customer?.email,
-  customer_phone: booking.customer?.business_owners?.[0]?.phone_number,
-  customer_email: booking.customer?.email
-}));
+      booking_id: parseInt(booking.booking_id, 10),
+      provider_user_id: parseInt(booking.provider_user_id, 10),
+      customer_user_id: parseInt(booking.customer_user_id, 10),
+      booking_date: booking.booking_date,
+      booking_time: booking.booking_time || null,
+      status: booking.status,
+      notes: booking.notes,
+      created_at: booking.created_at,
+      customer_name: booking.customer?.business_owners?.[0]?.business_name || booking.customer?.email,
+      customer_phone: booking.customer?.business_owners?.[0]?.phone_number,
+      customer_email: booking.customer?.email
+    }));
 
     console.log(`✅ [Bookings] Found ${bookings.length} bookings for provider ${userId}`);
 
@@ -392,7 +401,6 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
   }
 });
 
-/**
 /**
  * PATCH /api/availability/bookings/:bookingId
  * 
@@ -412,51 +420,38 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
       });
     }
 
-    // Check if this booking belongs to the authenticated user
     const { data: existingBooking, error: fetchError } = await supabase
       .from('bookings')
-      .select('provider_user_id, booking_date, customer_user_id')
+      .select('provider_user_id, booking_date, booking_time, customer_user_id') // ✅ added booking_time
       .eq('booking_id', bookingId)
       .single();
 
     if (fetchError || !existingBooking) {
-      return res.status(404).json({
-        success: false,
-        error: 'Booking not found'
-      });
+      return res.status(404).json({ success: false, error: 'Booking not found' });
     }
 
     if (existingBooking.provider_user_id.toString() !== req.user?.user_id) {
-      return res.status(403).json({
-        success: false,
-        error: 'You can only update your own bookings'
-      });
+      return res.status(403).json({ success: false, error: 'You can only update your own bookings' });
     }
 
-    // Update booking status in database
     const { data, error } = await supabase
       .from('bookings')
-      .update({
-        status: status,
-        updated_at: new Date().toISOString()
-      })
+      .update({ status: status, updated_at: new Date().toISOString() })
       .eq('booking_id', bookingId)
       .select()
       .single();
 
     if (error) throw error;
 
-   // Send system message to customer when status changes
     try {
       let chatMessage = '';
       let messageMetadata: any = null;
-      
+
       if (status === 'confirmed') {
         const bookingDate = data.booking_date.split('T')[0];
-        chatMessage = `✅ Message and email  sent to customer: Your booking for ${bookingDate} has been confirmed! See you then!`;
+        chatMessage = `✅ Message and email sent to customer: Your booking for ${bookingDate}${data.booking_time ? ` at ${data.booking_time}` : ''} has been confirmed! See you then!`;
       } else if (status === 'completed') {
         chatMessage = `🎉 Message sent to customer: Your service has been completed! Please leave a review. Thank you!`;
-        
         messageMetadata = {
           type: 'booking_completed',
           booking_id: parseInt(bookingId, 10),
@@ -466,10 +461,9 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
         };
       } else if (status === 'cancelled') {
         const bookingDate = data.booking_date.split('T')[0];
-        chatMessage = `❌ Message sent to customer:Your booking for ${bookingDate} has been cancelled by the provider.`;
+        chatMessage = `❌ Message sent to customer: Your booking for ${bookingDate}${data.booking_time ? ` at ${data.booking_time}` : ''} has been cancelled by the provider.`;
       }
 
-      // Send the message with optional metadata
       if (chatMessage) {
         const messageData: any = {
           sender_id: data.provider_user_id,
@@ -478,24 +472,16 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
           is_read: false,
           created_at: new Date().toISOString()
         };
-
         if (messageMetadata) {
           messageData.metadata = messageMetadata;
         }
-
-        const { error: messageError } = await supabase
-          .from('messages')
-          .insert(messageData);
-
+        const { error: messageError } = await supabase.from('messages').insert(messageData);
         if (messageError) {
           console.error('⚠️ [Booking] Could not send chat notification:', messageError);
-        } else {
-          console.log(`✅ [Booking] Chat notification sent to customer (status: ${status})${messageMetadata ? ' with metadata' : ''}`);
         }
       }
-      
-      // ✅ SEND EMAIL NOTIFICATION
-      // Get customer and provider details for email
+
+      // Send email notification with booking_time
       const { data: customerData } = await supabase
         .from('users')
         .select('email, business_owners(business_name)')
@@ -516,32 +502,47 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
             providerName: providerData?.business_owners?.[0]?.business_name || 'Service Provider',
             bookingDate: data.booking_date.split('T')[0],
             bookingId: parseInt(bookingId, 10),
-            status: status as 'confirmed' | 'cancelled' | 'completed'
+            status: status as 'confirmed' | 'cancelled' | 'completed',
+            bookingTime: data.booking_time || undefined // ✅ NEW
           });
-
           console.log(`📧 [Booking] Email notification sent (${status}):`, emailResult);
         } catch (emailError) {
           console.error('⚠️ [Booking] Email send failed (non-blocking):', emailError);
         }
       }
-      
+
     } catch (msgError) {
       console.error('⚠️ [Booking] Error sending notifications:', msgError);
     }
-    // If cancelled, mark the date as available again
+
+    // If cancelled, mark the date as available again only if NO other active bookings remain on that date
     if (status === 'cancelled' && data) {
       const bookingDate = data.booking_date.split('T')[0];
-      await supabase
-        .from('availability')
-        .upsert({
-          user_id: data.provider_user_id,
-          date: bookingDate,
-          is_available: true,
-          notes: 'Booking cancelled',
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id,date' });
 
-      console.log(`✅ [Booking] Date ${bookingDate} marked as available again`);
+      // ✅ UPDATED: Only re-open the date if zero active bookings remain (supports multiple slots)
+      const { data: remainingBookings } = await supabase
+        .from('bookings')
+        .select('booking_id')
+        .eq('provider_user_id', data.provider_user_id)
+        .eq('booking_date', bookingDate)
+        .in('status', ['pending', 'confirmed'])
+        .neq('booking_id', bookingId);
+
+      if (!remainingBookings || remainingBookings.length === 0) {
+        await supabase
+          .from('availability')
+          .upsert({
+            user_id: data.provider_user_id,
+            date: bookingDate,
+            is_available: true,
+            notes: 'Booking cancelled',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,date' });
+
+        console.log(`✅ [Booking] Date ${bookingDate} marked as available again (no remaining bookings)`);
+      } else {
+        console.log(`✅ [Booking] Date ${bookingDate} kept as-is (${remainingBookings.length} other bookings remain)`);
+      }
     }
 
     console.log(`✅ [Booking] Booking ${bookingId} updated to ${status}`);
@@ -551,4 +552,5 @@ router.patch('/bookings/:bookingId', authenticateToken, async (req: AuthRequest,
     res.status(500).json({ success: false, error: 'Failed to update booking' });
   }
 });
+
 export default router;

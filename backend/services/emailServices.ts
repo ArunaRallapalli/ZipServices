@@ -3,6 +3,8 @@
  * 
  * Handles all email notifications using Resend
  * Reuses existing email configuration from email verification
+ * 
+ * Updated: Added booking_time, time range (+1hr), and timezone to email templates
  */
 
 import { Resend } from 'resend';
@@ -12,12 +14,39 @@ dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ✅ NEW: Shared time formatting helpers used across email templates
+
+
+/**
+ * Format "09:00" → "9:00 AM ET"
+ */
+function formatTime(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Format "09:00" → "9:00 AM - 10:00 AM ET" (1-hour slot)
+ */
+function formatTimeRange(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const endH = h + 1; // 1-hour slot duration
+  const startPeriod = h >= 12 ? 'PM' : 'AM';
+  const endPeriod = endH >= 12 ? 'PM' : 'AM';
+  const startHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  const endHour = endH > 12 ? endH - 12 : endH === 0 ? 12 : endH;
+  return `${startHour}:${m.toString().padStart(2, '0')} ${startPeriod} – ${endHour}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+}
+
 interface BookingNotificationParams {
   providerEmail: string;
   providerName: string;
   customerName: string;
   bookingDate: string;
   bookingId: number;
+  bookingTime?: string; // ✅ NEW — optional for backwards compat
 }
 
 /**
@@ -28,10 +57,10 @@ export async function sendBookingNotification({
   providerName,
   customerName,
   bookingDate,
-  bookingId
+  bookingId,
+  bookingTime // ✅ NEW
 }: BookingNotificationParams) {
   try {
-    // Format date nicely
     const [year, month, day] = bookingDate.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
     const formattedDate = dateObj.toLocaleDateString('en-US', {
@@ -41,14 +70,16 @@ export async function sendBookingNotification({
       day: 'numeric'
     });
 
+    // ✅ NEW: Format time range if provided
+    const formattedTime = bookingTime ? formatTimeRange(bookingTime) : null;
+
     console.log('📧 Sending booking notification to:', providerEmail);
 
-  const emailResult = await resend.emails.send({
-// To:
-from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
-replyTo: 'support@gozipmarket.com',
-  to: providerEmail,
-  subject: '📅 New Booking Request',
+    const emailResult = await resend.emails.send({
+      from: 'ZipService <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to: providerEmail,
+      subject: '📅 New Booking Request',
       html: `
         <!DOCTYPE html>
         <html>
@@ -72,9 +103,7 @@ replyTo: 'support@gozipmarket.com',
               </div>
               <div class="content">
                 <p>Hi ${providerName},</p>
-                
                 <p>Great news! You have received a new booking request.</p>
-                
                 <div class="booking-details">
                   <div class="detail-row">
                     <span class="label">Customer:</span>
@@ -84,6 +113,12 @@ replyTo: 'support@gozipmarket.com',
                     <span class="label">Date:</span>
                     <span class="value">${formattedDate}</span>
                   </div>
+                  ${formattedTime ? `
+                  <div class="detail-row">
+                    <span class="label">Time:</span>
+                    <span class="value">${formattedTime}</span>
+                  </div>
+                  ` : ''}
                   <div class="detail-row">
                     <span class="label">Booking ID:</span>
                     <span class="value">#${bookingId}</span>
@@ -93,7 +128,6 @@ replyTo: 'support@gozipmarket.com',
                     <span class="value">Pending Confirmation</span>
                   </div>
                 </div>
-                
                 <p><strong>Next Steps:</strong></p>
                 <ul>
                   <li>Log in to your ZipService account</li>
@@ -101,9 +135,7 @@ replyTo: 'support@gozipmarket.com',
                   <li>Confirm or decline the booking</li>
                   <li>Contact the customer if needed</li>
                 </ul>
-                
                 <p>Please respond to this booking request as soon as possible to provide the best customer experience.</p>
-                
                 <p>Best regards,<br><strong>The ZipService Team</strong></p>
               </div>
               <div class="footer">
@@ -117,21 +149,15 @@ replyTo: 'support@gozipmarket.com',
     });
 
     console.log('✅ Booking notification sent:', emailResult);
-
-    return {
-      success: true,
-      messageId: emailResult.data?.id
-    };
+    return { success: true, messageId: emailResult.data?.id };
 
   } catch (error) {
     console.error('❌ Error sending booking notification:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
-  }
-  // ============================================================================
+}
+
+// ============================================================================
 // CATEGORY REQUEST DECISION EMAIL
 // ============================================================================
 
@@ -143,9 +169,6 @@ interface CategoryRequestDecisionParams {
   adminNotes?: string;
 }
 
-/**
- * Send category request decision notification to user
- */
 export async function sendCategoryRequestDecision({
   userEmail,
   userName,
@@ -155,10 +178,10 @@ export async function sendCategoryRequestDecision({
 }: CategoryRequestDecisionParams) {
   try {
     const isApproved = requestStatus === 'approved';
-    const subject = isApproved 
-      ? '✅ Your Category Request has been Approved! and Completed!' 
+    const subject = isApproved
+      ? '✅ Your Category Request has been Approved! and Completed!'
       : 'Update on Your Category Request';
-    
+
     const statusColor = isApproved ? '#4CAF50' : '#FF9800';
     const statusIcon = isApproved ? '✅' : '📋';
     const statusText = isApproved ? 'Approved' : 'Under Review';
@@ -191,15 +214,12 @@ export async function sendCategoryRequestDecision({
               </div>
               <div class="content">
                 <p>Hi ${userName},</p>
-                
                 ${isApproved ? `
                   <p><strong>Great news!</strong> Your category request has been approved!</p>
-                  
                   <div class="status-box">
                     <p><strong>Approved Category:</strong></p>
                     <p class="category-name">${categoryName}</p>
                   </div>
-                  
                   <p><strong>What's Next?</strong></p>
                   <ul>
                     <li>You can now create service posts in this category</li>
@@ -208,21 +228,17 @@ export async function sendCategoryRequestDecision({
                   </ul>
                 ` : `
                   <p>Thank you for your interest in adding a new service category.</p>
-                  
                   <div class="status-box">
                     <p><strong>Requested Category:</strong></p>
                     <p class="category-name">${categoryName}</p>
                   </div>
-                  
                   <p>After careful review, we're unable to approve this category request at this time.</p>
-                  
                   ${adminNotes ? `
                     <div class="admin-notes">
                       <p><strong>Admin Response:</strong></p>
                       <p>${adminNotes}</p>
                     </div>
                   ` : ''}
-                  
                   <p><strong>What you can do:</strong></p>
                   <ul>
                     <li>Browse our existing categories for similar options</li>
@@ -230,9 +246,7 @@ export async function sendCategoryRequestDecision({
                     <li>Submit a revised request with more details</li>
                   </ul>
                 `}
-                
                 <p>Thank you for using ZipService!</p>
-                
                 <p>Best regards,<br><strong>The ZipService Team</strong></p>
               </div>
               <div class="footer">
@@ -246,18 +260,11 @@ export async function sendCategoryRequestDecision({
     });
 
     console.log(`✅ Category ${requestStatus} email sent:`, emailResult);
-
-    return {
-      success: true,
-      messageId: emailResult.data?.id
-    };
+    return { success: true, messageId: emailResult.data?.id };
 
   } catch (error) {
     console.error(`❌ Error sending category ${requestStatus} email:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -272,12 +279,10 @@ interface BookingStatusUpdateParams {
   bookingDate: string;
   bookingId: number;
   status: 'confirmed' | 'cancelled' | 'completed';
+  bookingTime?: string;        // ✅ NEW — optional for backwards compat
   cancellationReason?: string;
 }
 
-/**
- * Send booking status update notification to customer
- */
 export async function sendBookingStatusUpdate({
   customerEmail,
   customerName,
@@ -285,10 +290,10 @@ export async function sendBookingStatusUpdate({
   bookingDate,
   bookingId,
   status,
+  bookingTime,        // ✅ NEW
   cancellationReason
 }: BookingStatusUpdateParams) {
   try {
-    // Format date nicely
     const [year, month, day] = bookingDate.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
     const formattedDate = dateObj.toLocaleDateString('en-US', {
@@ -297,6 +302,9 @@ export async function sendBookingStatusUpdate({
       month: 'long',
       day: 'numeric'
     });
+
+    // ✅ NEW: Format time range if provided
+    const formattedTime = bookingTime ? formatTimeRange(bookingTime) : null;
 
     const statusConfig = {
       confirmed: {
@@ -320,6 +328,14 @@ export async function sendBookingStatusUpdate({
     };
 
     const config = statusConfig[status];
+
+    // ✅ NEW: Shared booking detail rows — reused in all 3 status blocks
+    const timeRow = formattedTime ? `
+      <div class="detail-row">
+        <span class="label">Time:</span>
+        <span class="value">${formattedTime}</span>
+      </div>
+    ` : '';
 
     console.log(`📧 Sending booking ${status} email to:`, customerEmail);
 
@@ -351,10 +367,9 @@ export async function sendBookingStatusUpdate({
               </div>
               <div class="content">
                 <p>Hi ${customerName},</p>
-                
+
                 ${status === 'confirmed' ? `
                   <p><strong>Great news!</strong> Your booking has been confirmed by the service provider.</p>
-                  
                   <div class="booking-details">
                     <div class="detail-row">
                       <span class="label">Provider:</span>
@@ -364,6 +379,7 @@ export async function sendBookingStatusUpdate({
                       <span class="label">Date:</span>
                       <span class="value">${formattedDate}</span>
                     </div>
+                    ${timeRow}
                     <div class="detail-row">
                       <span class="label">Booking ID:</span>
                       <span class="value">#${bookingId}</span>
@@ -373,18 +389,16 @@ export async function sendBookingStatusUpdate({
                       <span class="value" style="color: ${config.color}; font-weight: bold;">Confirmed</span>
                     </div>
                   </div>
-                  
                   <p><strong>What's Next?</strong></p>
                   <ul>
-                    <li>Mark your calendar for ${formattedDate}</li>
+                    <li>Mark your calendar for ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}</li>
                     <li>The provider will contact you if needed</li>
                     <li>Be ready at the scheduled time</li>
                   </ul>
-                  
                   <p>We look forward to serving you!</p>
+
                 ` : status === 'cancelled' ? `
                   <p>Unfortunately, your booking has been cancelled by the service provider.</p>
-                  
                   <div class="booking-details">
                     <div class="detail-row">
                       <span class="label">Provider:</span>
@@ -394,6 +408,7 @@ export async function sendBookingStatusUpdate({
                       <span class="label">Original Date:</span>
                       <span class="value">${formattedDate}</span>
                     </div>
+                    ${timeRow}
                     <div class="detail-row">
                       <span class="label">Booking ID:</span>
                       <span class="value">#${bookingId}</span>
@@ -403,23 +418,21 @@ export async function sendBookingStatusUpdate({
                       <span class="value" style="color: ${config.color}; font-weight: bold;">Cancelled</span>
                     </div>
                   </div>
-                  
                   ${cancellationReason ? `
                     <div class="warning-box">
                       <p><strong>Reason:</strong></p>
                       <p>${cancellationReason}</p>
                     </div>
                   ` : ''}
-                  
                   <p><strong>What you can do:</strong></p>
                   <ul>
                     <li>Book a different date with this provider</li>
                     <li>Search for other service providers</li>
                     <li>Contact support if you have questions</li>
                   </ul>
+
                 ` : `
                   <p><strong>Your service has been completed!</strong></p>
-                  
                   <div class="booking-details">
                     <div class="detail-row">
                       <span class="label">Provider:</span>
@@ -429,6 +442,7 @@ export async function sendBookingStatusUpdate({
                       <span class="label">Service Date:</span>
                       <span class="value">${formattedDate}</span>
                     </div>
+                    ${timeRow}
                     <div class="detail-row">
                       <span class="label">Booking ID:</span>
                       <span class="value">#${bookingId}</span>
@@ -438,19 +452,16 @@ export async function sendBookingStatusUpdate({
                       <span class="value" style="color: ${config.color}; font-weight: bold;">Completed</span>
                     </div>
                   </div>
-                  
                   <p><strong>Please leave a review!</strong></p>
                   <p>Your feedback helps other customers and service providers. Please take a moment to share your experience.</p>
-                  
                   <ul>
                     <li>Log in to your ZipService account</li>
                     <li>Go to your Messages</li>
                     <li>Click "Leave Review" in the completion message</li>
                   </ul>
-                  
                   <p>Thank you for using ZipService!</p>
                 `}
-                
+
                 <p>Best regards,<br><strong>The ZipService Team</strong></p>
               </div>
               <div class="footer">
@@ -464,20 +475,14 @@ export async function sendBookingStatusUpdate({
     });
 
     console.log(`✅ Booking ${status} email sent:`, emailResult);
-
-    return {
-      success: true,
-      messageId: emailResult.data?.id
-    };
+    return { success: true, messageId: emailResult.data?.id };
 
   } catch (error) {
     console.error(`❌ Error sending booking ${status} email:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
 // ============================================================================
 // CATEGORY REQUEST NOTIFICATION EMAIL (to Admin)
 // ============================================================================
@@ -491,9 +496,6 @@ interface CategoryRequestNotificationParams {
   justification?: string;
 }
 
-/**
- * Send new category request notification to admin
- */
 export async function sendCategoryRequestNotification({
   adminEmail,
   userName,
@@ -506,11 +508,10 @@ export async function sendCategoryRequestNotification({
     console.log('📧 Sending category request notification to admin:', adminEmail);
 
     const emailResult = await resend.emails.send({
-  // To:
-from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
-replyTo: 'support@gozipmarket.com',
-  to: adminEmail,
-subject: `New Category Request: ${categoryName} - Admin Review Needed`,
+      from: 'ZipService <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to: adminEmail,
+      subject: `New Category Request: ${categoryName} - Admin Review Needed`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -525,7 +526,6 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
               .label { font-weight: bold; color: #555; }
               .value { color: #333; }
               .justification-box { background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; }
-              .action-button { display: inline-block; background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
               .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
             </style>
           </head>
@@ -536,9 +536,7 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
               </div>
               <div class="content">
                 <p>Hi Admin,</p>
-                
                 <p>A new service category has been requested and requires your review.</p>
-                
                 <div class="request-details">
                   <div class="detail-row">
                     <span class="label">Requested Category:</span>
@@ -557,14 +555,12 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
                     <span class="value">#${requestId}</span>
                   </div>
                 </div>
-                
                 ${justification ? `
                   <div class="justification-box">
                     <p><strong>Justification:</strong></p>
                     <p>${justification}</p>
                   </div>
                 ` : ''}
-                
                 <p><strong>Next Steps:</strong></p>
                 <ul>
                   <li>Log in to your admin account</li>
@@ -572,11 +568,9 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
                   <li>Check if a similar category already exists</li>
                   <li>Approve or reject the request with notes</li>
                 </ul>
-                
                 <p style="text-align: center; margin-top: 30px;">
                   <strong>Please review this request at your earliest convenience.</strong>
                 </p>
-                
                 <p>Best regards,<br><strong>ZipService System</strong></p>
               </div>
               <div class="footer">
@@ -590,17 +584,10 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
     });
 
     console.log('✅ Admin notification sent:', emailResult);
-
-    return {
-      success: true,
-      messageId: emailResult.data?.id
-    };
+    return { success: true, messageId: emailResult.data?.id };
 
   } catch (error) {
     console.error('❌ Error sending admin notification:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
