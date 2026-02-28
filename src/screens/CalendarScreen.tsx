@@ -30,6 +30,11 @@ import { Alert } from '../Utils/Alert';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BackButton } from '../components/BackButton';
 import api from '../api';
+/** Returns today's date as YYYY-MM-DD in LOCAL time (not UTC) */
+const getLocalToday = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ============================================================================
 // CONSTANTS
@@ -165,13 +170,13 @@ const CalendarScreen: React.FC = () => {
       }
 
       const marked: MarkedDates = {};
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalToday();
 
       // Step 1: All future dates green
       for (let i = 0; i < 90; i++) {
         const date = new Date();
         date.setDate(date.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         marked[dateStr] = {
           marked: true,
           dotColor: '#4CAF50',
@@ -634,7 +639,7 @@ const CalendarScreen: React.FC = () => {
           <Calendar
             markedDates={markedDates}
             onDayPress={handleDayPress}
-            minDate={new Date().toISOString().split('T')[0]}
+            minDate={getLocalToday()}
             theme={{
               todayTextColor: '#4A90E2',
               arrowColor: '#4A90E2',

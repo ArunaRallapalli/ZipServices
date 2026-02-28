@@ -21,6 +21,11 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from '../Utils/Alert';
 import api from '../api';
+/** Returns today's date as YYYY-MM-DD in LOCAL time (not UTC) */
+const getLocalToday = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ============================================================================
 // CONSTANTS
@@ -131,21 +136,20 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
 
       if (data.success) {
         const marked: MarkedDates = {};
-        const today = new Date().toISOString().split('T')[0];
+       const today = getLocalToday();
 
         // Step 1: All future dates green by default
         for (let i = 0; i < 60; i++) {
-          const date = new Date();
-          date.setDate(date.getDate() + i);
-          const dateStr = date.toISOString().split('T')[0];
-          marked[dateStr] = {
-            marked: true,
-            dotColor: '#4CAF50',
-            disabled: false,
-            disableTouchEvent: false,
-          };
-        }
-
+  const d = new Date();
+  d.setDate(d.getDate() + i);
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  marked[dateStr] = {
+    marked: true,
+    dotColor: '#4CAF50',
+    disabled: false,
+    disableTouchEvent: false,
+  };
+}
         // Step 2: Provider-set availability overrides
         if (data.availability && Array.isArray(data.availability)) {
           data.availability.forEach((avail: any) => {
@@ -372,7 +376,7 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
               <Calendar
                 markedDates={markedDates}
                 onDayPress={handleDayPress}
-                minDate={new Date().toISOString().split('T')[0]}
+                minDate={getLocalToday()}
                 hideExtraDays={true}
                 theme={{
                   todayTextColor: '#4A90E2',
