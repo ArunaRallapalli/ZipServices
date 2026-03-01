@@ -443,14 +443,6 @@ const CalendarScreen: React.FC = () => {
                 </View>
               </View>
 
-              <View style={styles.detailRow}>
-                <Ionicons name="mail" size={20} color="#4A90E2" />
-                <View style={styles.detailText}>
-                  <Text style={styles.detailLabel}>Email</Text>
-                  <Text style={styles.detailValue}>{selectedBooking.customer_email}</Text>
-                </View>
-              </View>
-
               {selectedBooking.customer_phone && (
                 <View style={styles.detailRow}>
                   <Ionicons name="call" size={20} color="#4A90E2" />
