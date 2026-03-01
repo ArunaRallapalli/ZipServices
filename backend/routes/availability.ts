@@ -368,33 +368,54 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
 
     console.log(`📅 [Bookings] Fetching bookings for provider ${userId}`);
 
+    // Step 1: Get bookings with customer emails
     const { data, error } = await supabase
       .from('bookings')
       .select(`
         *,
-        customer:users!bookings_customer_user_id_fkey(
-  email,
-  business_owners(business_name, phone_number)
-)
+        customer:users!bookings_customer_user_id_fkey(email)
       `)
       .eq('provider_user_id', userId)
       .order('booking_date', { ascending: true });
 
     if (error) throw error;
 
-    // Convert bigint IDs and format data
-    const bookings = (data || []).map((booking: any) => ({
-      booking_id: parseInt(booking.booking_id, 10),
-      provider_user_id: parseInt(booking.provider_user_id, 10),
-      customer_user_id: parseInt(booking.customer_user_id, 10),
-      booking_date: booking.booking_date,
-      status: booking.status,
-      notes: booking.notes,
-      created_at: booking.created_at,
-      customer_name: booking.customer?.business_owners?.[0]?.business_name ||
-               booking.customer?.email?.split('@')[0] ||
-               booking.customer?.email
-    }));
+    // Step 2: Get business names and phone numbers for all customer IDs
+    const customerIds = [...new Set((data || []).map((b: any) => parseInt(b.customer_user_id, 10)))];
+    const { data: businessData } = await supabase
+      .from('business_owners')
+      .select('user_id, business_name, phone_number')
+      .in('user_id', customerIds);
+
+    // Build lookup map: user_id -> { business_name, phone_number }
+    const businessMap: Record<number, { business_name?: string; phone_number?: string }> = {};
+    (businessData || []).forEach((b: any) => {
+      businessMap[parseInt(b.user_id, 10)] = {
+        business_name: b.business_name,
+        phone_number: b.phone_number
+      };
+    });
+
+    // Step 3: Map bookings using the lookup
+    const bookings = (data || []).map((booking: any) => {
+      const custId = parseInt(booking.customer_user_id, 10);
+      const biz = businessMap[custId];
+      return {
+        booking_id: parseInt(booking.booking_id, 10),
+        provider_user_id: parseInt(booking.provider_user_id, 10),
+        customer_user_id: custId,
+        booking_date: booking.booking_date,
+        booking_time: booking.booking_time || null,
+        status: booking.status,
+        notes: booking.notes,
+        created_at: booking.created_at,
+        customer_name: biz?.business_name ||
+                       booking.customer?.email?.split('@')[0] ||
+                       booking.customer?.email,
+        customer_phone: biz?.phone_number,
+        customer_email: booking.customer?.email
+      };
+    });
 
     console.log(`✅ [Bookings] Found ${bookings.length} bookings for provider ${userId}`);
 
@@ -404,7 +425,6 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
     res.status(500).json({ success: false, error: 'Failed to fetch bookings' });
   }
 });
-
 /**
 /**
  * PATCH /api/availability/bookings/:bookingId

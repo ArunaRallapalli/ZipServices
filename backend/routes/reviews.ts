@@ -197,17 +197,13 @@ router.get('/provider/:providerId', async (req, res) => {
 
     console.log(`📋 [Reviews] Fetching reviews for provider ${providerId}`);
 
+    // Step 1: Get reviews with customer emails and booking service names
     const { data, error } = await supabase
       .from('reviews')
       .select(`
         *,
-customer:users!reviews_customer_user_id_fkey(
-  email,
-  business_owners(business_name)
-),
-        booking:bookings!reviews_booking_id_fkey(
-          service_name
-        )
+        customer:users!reviews_customer_user_id_fkey(email),
+        booking:bookings!reviews_booking_id_fkey(service_name)
       `)
       .eq('provider_user_id', providerId)
       .order('created_at', { ascending: false })
@@ -215,7 +211,20 @@ customer:users!reviews_customer_user_id_fkey(
 
     if (error) throw error;
 
-    // Format reviews — booking may be null for reviews from search flow
+    // Step 2: Get business names for all customer IDs in one query
+    const customerIds = [...new Set((data || []).map((r: any) => r.customer_user_id))];
+    const { data: businessData } = await supabase
+      .from('business_owners')
+      .select('user_id, business_name')
+      .in('user_id', customerIds);
+
+    // Build lookup map: user_id -> business_name
+    const businessMap: Record<number, string> = {};
+    (businessData || []).forEach((b: any) => {
+      if (b.business_name) businessMap[parseInt(b.user_id, 10)] = b.business_name;
+    });
+
+    // Step 3: Map reviews using the lookup
     const reviews = (data || []).map((review: any) => ({
       review_id: parseInt(review.review_id, 10),
       booking_id: review.booking_id ? parseInt(review.booking_id, 10) : null,
@@ -223,27 +232,20 @@ customer:users!reviews_customer_user_id_fkey(
       review_text: review.review_text,
       created_at: review.created_at,
       service_name: review.booking?.service_name || 'General Review',
-    customer_name: review.customer?.business_owners?.[0]?.business_name ||
-               review.customer?.email?.split('@')[0] ||
-               'Anonymous'
+      customer_name: businessMap[parseInt(review.customer_user_id, 10)] ||
+                     review.customer?.email?.split('@')[0] ||
+                     'Anonymous'
     }));
 
     console.log(`✅ [Reviews] Found ${reviews.length} reviews`);
 
-    res.json({
-      success: true,
-      reviews: reviews
-    });
+    res.json({ success: true, reviews });
 
   } catch (error) {
     console.error('❌ [Reviews] Error fetching provider reviews:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch reviews'
-    });
+    res.status(500).json({ success: false, error: 'Failed to fetch reviews' });
   }
 });
-
 /**
  * GET /api/reviews/booking/:bookingId
  * Check if a booking has been reviewed
