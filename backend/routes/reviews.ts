@@ -201,10 +201,10 @@ router.get('/provider/:providerId', async (req, res) => {
       .from('reviews')
       .select(`
         *,
-        customer:users!reviews_customer_user_id_fkey(
-          email,
-          business_owners(business_name)
-        ),
+customer:users!reviews_customer_user_id_fkey(
+  email,
+  business_owners(business_name)
+),
         booking:bookings!reviews_booking_id_fkey(
           service_name
         )
@@ -223,9 +223,9 @@ router.get('/provider/:providerId', async (req, res) => {
       review_text: review.review_text,
       created_at: review.created_at,
       service_name: review.booking?.service_name || 'General Review',
-      customer_name: review.customer?.business_owners?.[0]?.business_name ||
-                     review.customer?.email?.split('@')[0] ||
-                     'Anonymous'
+    customer_name: review.customer?.business_owners?.[0]?.business_name ||
+               review.customer?.email?.split('@')[0] ||
+               'Anonymous'
     }));
 
     console.log(`✅ [Reviews] Found ${reviews.length} reviews`);

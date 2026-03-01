@@ -373,9 +373,9 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
       .select(`
         *,
         customer:users!bookings_customer_user_id_fkey(
-          email,
-          business_owners(business_name, phone_number)
-        )
+  email,
+  business_owners(business_name, phone_number)
+)
       `)
       .eq('provider_user_id', userId)
       .order('booking_date', { ascending: true });
@@ -391,9 +391,9 @@ router.get('/bookings/:userId', authenticateToken, authorizeUser, async (req: Au
       status: booking.status,
       notes: booking.notes,
       created_at: booking.created_at,
-      customer_name: booking.customer?.business_owners?.[0]?.business_name || booking.customer?.email,
-      customer_phone: booking.customer?.business_owners?.[0]?.phone_number,
-      customer_email: booking.customer?.email
+      customer_name: booking.customer?.business_owners?.[0]?.business_name ||
+               booking.customer?.email?.split('@')[0] ||
+               booking.customer?.email
     }));
 
     console.log(`✅ [Bookings] Found ${bookings.length} bookings for provider ${userId}`);
