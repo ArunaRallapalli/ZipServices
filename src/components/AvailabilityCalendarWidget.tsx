@@ -185,13 +185,14 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
       });
 
       if (data.success) {
-        Alert.alert(
-          'Booking Pending!', 
-          data.emailSent 
-            ? 'Thank you! The service provider has been notified to confirm or decline your request. Please use this chat to coordinate timing and other details.' 
-            : 'Booking created',
-          [{ text: 'OK', onPress: fetchAvailability }]
-        );
+  fetchAvailability(); // ← Refresh immediately, don't wait for OK press
+  Alert.alert(
+    'Booking Pending!', 
+    data.emailSent 
+      ? 'Thank you! The service provider has been notified to confirm or decline your request. Please use this chat to coordinate timing and other details.' 
+      : 'Booking created',
+    [{ text: 'OK' }]
+  );
       } else {
         Alert.alert('Booking Failed', data.error || 'Unable to create booking');
       }

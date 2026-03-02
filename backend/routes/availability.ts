@@ -286,12 +286,17 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
       console.error('⚠️ [Booking] Warning: Could not fetch provider details:', providerError);
     }
 
-    // Get customer details for email notification
-    const { data: customerData, error: customerError } = await supabase
-      .from('users')
-      .select('full_name, business_owners(business_name)')
-      .eq('user_id', customerId)
-      .single();
+   const { data: customerData, error: customerError } = await supabase
+  .from('users')
+  .select('email')
+  .eq('user_id', customerId)
+  .single();
+
+const { data: customerBizData } = await supabase
+  .from('business_owners')
+  .select('business_name')
+  .eq('user_id', customerId)
+  .single();
 
     if (customerError) {
       console.error('⚠️ [Booking] Warning: Could not fetch customer details:', customerError);
@@ -303,7 +308,9 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
       const emailResult = await sendBookingNotification({
         providerEmail: providerData.email,
         providerName: providerData.business_owners?.[0]?.business_name || providerData.full_name || 'Provider',
-        customerName: customerData.business_owners?.[0]?.business_name || customerData.full_name || 'Customer',
+        customerName: customerBizData?.business_name || 
+              customerData?.email?.split('@')[0] || 
+              'Customer',
         bookingDate: bookingDate,
         bookingId: parseInt(bookingData.booking_id, 10)
       });
