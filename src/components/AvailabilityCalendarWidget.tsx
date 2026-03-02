@@ -78,7 +78,7 @@ const AvailabilityCalendarWidget: React.FC<AvailabilityCalendarWidgetProps> = ({
         const marked: MarkedDates = {};
         const today = new Date().toISOString().split('T')[0];
 
-        for (let i = 0; i < 60; i++) {
+        for (let i = 0; i < 120; i++) {
           const date = new Date();
           date.setDate(date.getDate() + i);
           const dateStr = date.toISOString().split('T')[0];

@@ -206,7 +206,7 @@ const CalendarScreen: React.FC = () => {
       // STEP 1: Mark all future dates as GREEN (available by default)
       // ====================================================================
       
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < 120; i++) {
         const date = new Date();
         date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];

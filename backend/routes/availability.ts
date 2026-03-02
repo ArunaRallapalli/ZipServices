@@ -50,7 +50,7 @@ router.get('/:userId', async (req, res) => {
     console.log(`📅 Fetching availability for user ${userId}`);
 
     const start = startDate || new Date().toISOString().split('T')[0];
-    const end = endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const end = endDate || new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];;
 
     // Fetch availability records
     const { data: availabilityData, error: availabilityError } = await supabase
@@ -276,11 +276,17 @@ router.post('/book', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Get provider details for email notification
-    const { data: providerData, error: providerError } = await supabase
-      .from('users')
-      .select('email, full_name, business_owners(business_name)')
-      .eq('user_id', serviceProviderId)
-      .single();
+   const { data: providerData, error: providerError } = await supabase
+  .from('users')
+  .select('email, full_name')
+  .eq('user_id', serviceProviderId)
+  .single();
+
+const { data: providerBizData } = await supabase
+  .from('business_owners')
+  .select('business_name')
+  .eq('user_id', serviceProviderId)
+  .single();
 
     if (providerError) {
       console.error('⚠️ [Booking] Warning: Could not fetch provider details:', providerError);
@@ -307,7 +313,7 @@ const { data: customerBizData } = await supabase
     if (providerData && customerData) {
       const emailResult = await sendBookingNotification({
         providerEmail: providerData.email,
-        providerName: providerData.business_owners?.[0]?.business_name || providerData.full_name || 'Provider',
+        providerName: providerBizData?.business_name || providerData.full_name || 'Provider',
         customerName: customerBizData?.business_name || 
               customerData?.email?.split('@')[0] || 
               'Customer',
