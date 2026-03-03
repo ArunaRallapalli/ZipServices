@@ -88,7 +88,7 @@ const BusinessOwnerHomeScreen: React.FC = () => {
       </TouchableOpacity>
 
       {/* Main Title */}
-      <Text style={styles.title}>Welcome to ZipService</Text>
+      <Text style={styles.title}>Welcome to GoZipMarket </Text>
 
       {/* Terms Agreement Checkbox */}
       <View style={styles.termsCheckboxContainer}>

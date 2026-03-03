@@ -45,7 +45,7 @@ export async function sendBookingNotification({
 
   const emailResult = await resend.emails.send({
 // To:
-from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
+from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← USE THIS
 replyTo: 'support@gozipmarket.com',
   to: providerEmail,
   subject: '📅 New Booking Request',
@@ -96,7 +96,7 @@ replyTo: 'support@gozipmarket.com',
                 
                 <p><strong>Next Steps:</strong></p>
                 <ul>
-                  <li>Log in to your ZipService account</li>
+                  <li>Log in to your GoZipMarket account</li>
                   <li>Review the booking details</li>
                   <li>Confirm or decline the booking</li>
                   <li>Contact the customer if needed</li>
@@ -104,10 +104,10 @@ replyTo: 'support@gozipmarket.com',
                 
                 <p>Please respond to this booking request as soon as possible to provide the best customer experience.</p>
                 
-                <p>Best regards,<br><strong>The ZipService Team</strong></p>
+                <p>Best regards,<br><strong>The GoZipMarket Team</strong></p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated notification, please do not reply to this email.</p>
               </div>
             </div>
@@ -166,7 +166,7 @@ export async function sendCategoryRequestDecision({
     console.log(`📧 Sending category ${requestStatus} email to:`, userEmail);
 
     const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
+      from: 'GoZipMarket <noreply@gozipmarket.com>',
       to: userEmail,
       subject: subject,
       html: `
@@ -231,12 +231,12 @@ export async function sendCategoryRequestDecision({
                   </ul>
                 `}
                 
-                <p>Thank you for using ZipService!</p>
+                <p>Thank you for using GoZipMarket!</p>
                 
-                <p>Best regards,<br><strong>The ZipService Team</strong></p>
+                <p>Best regards,<br><strong>The GoZipMarket Team</strong></p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated notification, please do not reply to this email.</p>
               </div>
             </div>
@@ -324,7 +324,7 @@ export async function sendBookingStatusUpdate({
     console.log(`📧 Sending booking ${status} email to:`, customerEmail);
 
     const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
+      from: 'GoZipMarket <noreply@gozipmarket.com>',
       to: customerEmail,
       subject: config.subject,
       html: `
@@ -443,18 +443,18 @@ export async function sendBookingStatusUpdate({
                   <p>Your feedback helps other customers and service providers. Please take a moment to share your experience.</p>
                   
                   <ul>
-                    <li>Log in to your ZipService account</li>
+                    <li>Log in to your GoZipMarket account</li>
                     <li>Go to your Messages</li>
                     <li>Click "Leave Review" in the completion message</li>
                   </ul>
                   
-                  <p>Thank you for using ZipService!</p>
+                  <p>Thank you for using GoZipMarket!</p>
                 `}
                 
-                <p>Best regards,<br><strong>The ZipService Team</strong></p>
+                <p>Best regards,<br><strong>The GoZipMarket Team</strong></p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated notification, please do not reply to this email.</p>
               </div>
             </div>
@@ -507,7 +507,7 @@ export async function sendCategoryRequestNotification({
 
     const emailResult = await resend.emails.send({
   // To:
-from: 'ZipService <noreply@gozipmarket.com>',  // ← USE THIS
+from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← USE THIS
 replyTo: 'support@gozipmarket.com',
   to: adminEmail,
 subject: `New Category Request: ${categoryName} - Admin Review Needed`,
@@ -577,10 +577,10 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
                   <strong>Please review this request at your earliest convenience.</strong>
                 </p>
                 
-                <p>Best regards,<br><strong>ZipService System</strong></p>
+                <p>Best regards,<br><strong>The GoZipMarket Team</strong></p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated notification, please do not reply to this email.</p>
               </div>
             </div>
