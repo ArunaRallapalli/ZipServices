@@ -92,7 +92,7 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
         <View style={styles.compactRow}>
           {Platform.OS === 'web' ? (
             <a 
-              href="mailto:support@gozipmarket.com?subject=Support%20Request%20-%20ZipService"
+              href="mailto:support@gozipmarket.com?subject=Support%20Request%20-%20GoZipMarket"
               style={{ flex: 1, textDecoration: 'none', marginRight: 8 }}
             >
               <View style={styles.compactButton}>
@@ -104,7 +104,7 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
               style={styles.compactButton}
               onPress={() => {
                 const Linking = require('react-native').Linking;
-                Linking.openURL('mailto:support@gozipmarket.com?subject=Support%20Request%20-%20ZipService');
+                Linking.openURL('mailto:support@gozipmarket.com?subject=Support%20Request%20-%20GoZipMarket');
               }}
             >
               <Text style={styles.compactButtonText}>📧 support@gozipmarket.com</Text>
@@ -122,7 +122,7 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
         <View style={styles.compactRow}>
           {Platform.OS === 'web' ? (
             <a 
-              href="mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20ZipService"
+              href="mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20GoZipMarket"
               style={{ flex: 1, textDecoration: 'none', marginRight: 8 }}
             >
               <View style={styles.compactButton}>
@@ -134,7 +134,7 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
               style={styles.compactButton}
               onPress={() => {
                 const Linking = require('react-native').Linking;
-                Linking.openURL('mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20ZipService');
+                Linking.openURL('mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20GoZipMarket');
               }}
             >
               <Text style={styles.compactButtonText}>💼 business@gozipmarket.com</Text>

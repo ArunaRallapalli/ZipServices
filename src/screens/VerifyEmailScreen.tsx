@@ -195,7 +195,7 @@ useEffect(() => {
               Your email has been successfully verified.
             </Text>
             <Text style={styles.statusText}>
-              You can now sign in and access all features of ZipService.
+              You can now sign in and access all features of GoZipMarket.
             </Text>
             
             <TouchableOpacity

@@ -1,7 +1,7 @@
 /**
  * PrivacyPolicyScreen Component
  * 
- * Displays the complete Privacy Policy for ZipService.
+ * Displays the complete Privacy Policy for GoZipMarket.
  * This screen is accessible from:
  * - Sign up/login screens (via legal agreement links)
  * - Settings/Profile screen
@@ -15,26 +15,26 @@ const PrivacyPolicyScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Privacy Policy for ZipService</Text>
+        <Text style={styles.title}>Privacy Policy for GoZipMarket</Text>
         
         <Text style={styles.date}>Effective Date: December 14, 2024</Text>
         <Text style={styles.date}>Last Updated: December 14, 2024</Text>
 
         <Text style={styles.sectionTitle}>1. Introduction</Text>
         <Text style={styles.paragraph}>
-          Welcome to ZipService, operated by Zip Market LLC ("we," "us," or "our"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and website (collectively, the "Service").
+          Welcome to GoZipMarket, operated by Zip Market LLC ("we," "us," or "our"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and website (collectively, the "Service").
         </Text>
 
         <Text style={styles.boldText}>Our Contact Information:</Text>
         <Text style={styles.paragraph}>
-          • Business Name: ZipService{'\n'}
+          • Business Name: GoZipMarket{'\n'}
           • Legal Entity: Zip Market LLC{'\n'}
           • Address: 30 N Gould St Ste N, Sheridan, WY 82801{'\n'}
           • Email: ZipMarket333@gmail.com
         </Text>
 
         <Text style={styles.paragraph}>
-          By using ZipService, you agree to the collection and use of information in accordance with this Privacy Policy. If you do not agree with our policies and practices, please do not use our Service.
+          By using GoZipMarket, you agree to the collection and use of information in accordance with this Privacy Policy. If you do not agree with our policies and practices, please do not use our Service.
         </Text>
 
         <Text style={styles.sectionTitle}>2. Information We Collect</Text>
@@ -181,7 +181,7 @@ const PrivacyPolicyScreen: React.FC = () => {
 
         <Text style={styles.sectionTitle}>7. Children's Privacy</Text>
         <Text style={styles.paragraph}>
-          ZipService is not intended for users under the age of 18. We do not knowingly collect personal information from children under 18. If we become aware that we have collected information from a child under 18, we will take steps to delete such information.
+          GoZipMarket is not intended for users under the age of 18. We do not knowingly collect personal information from children under 18. If we become aware that we have collected information from a child under 18, we will take steps to delete such information.
         </Text>
 
         <Text style={styles.sectionTitle}>8. Data Security</Text>
@@ -217,12 +217,12 @@ const PrivacyPolicyScreen: React.FC = () => {
 
         <Text style={styles.sectionTitle}>11. Consent</Text>
         <Text style={styles.paragraph}>
-          By using ZipService, you acknowledge that you have read and understood this Privacy Policy and consent to our collection, use, and disclosure of your information as described herein.
+          By using GoZipMarket, you acknowledge that you have read and understood this Privacy Policy and consent to our collection, use, and disclosure of your information as described herein.
         </Text>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Zip Market LLC</Text>
-          <Text style={styles.footerText}>Operating as: ZipService</Text>
+          <Text style={styles.footerText}>Operating as: GoZipMarket</Text>
           <Text style={styles.footerText}>Last Updated: December 14, 2024</Text>
         </View>
       </View>

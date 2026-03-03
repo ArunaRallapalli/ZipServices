@@ -127,9 +127,9 @@ console.log('🔗 Verification link created:', verificationLink);
 console.log('📤 Calling Resend API to send email...');
     // Send verification email
    const emailResult = await resend.emails.send({
-      from: 'ZipService <noreply@gozipmarket.com>',
+      from: 'GoZipMarket <noreply@gozipmarket.com>',
       to: email,
-      subject: 'Verify Your ZipService Email',
+      subject: 'Verify Your GoZipMarket Email',
       html: `
         <!DOCTYPE html>
         <html>
@@ -147,12 +147,12 @@ console.log('📤 Calling Resend API to send email...');
           <body>
             <div class="container">
               <div class="header">
-                <h1>Welcome to ZipService! 🎉</h1>
+                <h1>Welcome to GoZipMarket! 🎉</h1>
               </div>
               <div class="content">
                 <p>Hi ${fullName || 'there'},</p>
                 
-                <p>Thank you for signing up for ZipService! We're excited to have you join our community.</p>
+                <p>Thank you for signing up for GoZipMarket! We're excited to have you join our community.</p>
                 
                 <p>To complete your registration and start using all features, please verify your email address by clicking the button below:</p>
                 
@@ -182,10 +182,10 @@ console.log('📤 Calling Resend API to send email...');
                 </ul>
                 
                 <p>Welcome aboard!</p>
-                <p><strong>The ZipService Team</strong></p>
+                <p><strong>The GoZipMarket Team</strong></p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated email, please do not reply.</p>
               </div>
             </div>

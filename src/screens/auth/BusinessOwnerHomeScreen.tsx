@@ -2,7 +2,7 @@
  * BusinessOwnerHomeScreen Component - WITH TERMS CHECKBOX & USER-FRIENDLY ALERT
  * 
  * Overview:
- * This is the landing screen for business owners in the ZipService app.
+ * This is the landing screen for business owners in the GoZipMarket app.
  * It provides two main options:
  * 1. Sign Up - for new business owners to create an account (requires terms agreement)
  * 2. Sign In - for existing business owners to access their account

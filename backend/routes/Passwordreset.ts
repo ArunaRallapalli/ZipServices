@@ -101,10 +101,10 @@ const webResetLink = `${frontendUrl}/reset-password.html?token=${resetToken}&ema
    // Send email via Resend
 const emailResult = await resend.emails.send({
   // To this:
-from: 'ZipService <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
+from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
 replyTo: 'support@gozipmarket.com',  // Users can still reply to support@
   to: email,
-  subject: 'Reset Your ZipService Password',
+  subject: 'Reset Your GoZipMarket Password',
       html: `
         <!DOCTYPE html>
         <html>
@@ -127,7 +127,7 @@ replyTo: 'support@gozipmarket.com',  // Users can still reply to support@
               <div class="content">
                 <p>Hi ${user.full_name || 'there'},</p>
                 
-                <p>We received a request to reset your password for your ZipService account.</p>
+                <p>We received a request to reset your password for your GoZipMarket account.</p>
                 
                 <p>Click the button below to reset your password:</p>
                 
@@ -152,7 +152,7 @@ replyTo: 'support@gozipmarket.com',  // Users can still reply to support@
                 <p>If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
               </div>
               <div class="footer">
-                <p>© 2025 ZipService - Zip Market LLC</p>
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
                 <p>This is an automated email, please do not reply.</p>
               </div>
             </div>

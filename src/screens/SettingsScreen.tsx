@@ -176,22 +176,22 @@ export default function SettingsScreen() {
           <SettingItem
             icon="mail"
             label="Contact Support"
-            onPress={() => openEmail('support@gozipmarket.com', 'Support Request - ZipService')}
+            onPress={() => openEmail('support@gozipmarket.com', 'Support Request - GoZipMarket')}
           />
           <SettingItem
             icon="briefcase"
             label="Business Inquiries"
-            onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - ZipService')}
+            onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - GoZipMarket')}
           />
           <SettingItem
             icon="information-circle-outline"
             label="General Information"
-            onPress={() => openEmail('info@gozipmarket.com', 'Information Request - ZipService')}
+            onPress={() => openEmail('info@gozipmarket.com', 'Information Request - GoZipMarket')}
           />
           <SettingItem
             icon="bug-outline"
             label="Report a Bug"
-            onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - ZipService')}
+            onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - GoZipMarket')}
           />
           <SettingItem
             icon="help-circle-outline"
@@ -245,7 +245,7 @@ export default function SettingsScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>© 2025 ZipService - Zip Market LLC</Text>
+          <Text style={styles.footerText}>© 2025 GoZipMarket - Zip Market LLC</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,7 +1,7 @@
 /**
  * TermsOfServiceScreen Component
  * 
- * Displays the complete Terms of Service for ZipService.
+ * Displays the complete Terms of Service for GoZipMarket.
  * This screen is accessible from:
  * - Sign up/login screens (via legal agreement links)
  * - Settings/Profile screen
@@ -15,19 +15,19 @@ const TermsOfServiceScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Terms of Service for ZipService</Text>
+        <Text style={styles.title}>Terms of Service for GoZipMarket</Text>
         
         <Text style={styles.date}>Effective Date: December 14, 2024</Text>
         <Text style={styles.date}>Last Updated: December 14, 2024</Text>
 
         <Text style={styles.sectionTitle}>1. Agreement to Terms</Text>
         <Text style={styles.paragraph}>
-          These Terms of Service ("Terms") constitute a legally binding agreement between you and Zip Market LLC ("Company," "we," "us," or "our"), operating as ZipService, concerning your access to and use of our mobile application and website (collectively, the "Service").
+          These Terms of Service ("Terms") constitute a legally binding agreement between you and Zip Market LLC ("Company," "we," "us," or "our"), operating as GoZipMarket, concerning your access to and use of our mobile application and website (collectively, the "Service").
         </Text>
 
         <Text style={styles.boldText}>Our Contact Information:</Text>
         <Text style={styles.paragraph}>
-          • Business Name: ZipService{'\n'}
+          • Business Name: GoZipMarket{'\n'}
           • Legal Entity: Zip Market LLC{'\n'}
           • Address: 30 N Gould St Ste N, Sheridan, WY 82801{'\n'}
           • Email: ZipMarket333@gmail.com
@@ -41,7 +41,7 @@ const TermsOfServiceScreen: React.FC = () => {
         
         <Text style={styles.subSectionTitle}>2.1 Age Requirement</Text>
         <Text style={styles.paragraph}>
-          You must be at least 18 years of age to use ZipService. By using the Service, you represent and warrant that you are 18 years or older.
+          You must be at least 18 years of age to use GoZipMarket. By using the Service, you represent and warrant that you are 18 years or older.
         </Text>
 
         <Text style={styles.subSectionTitle}>2.2 Account Accuracy</Text>
@@ -56,7 +56,7 @@ const TermsOfServiceScreen: React.FC = () => {
 
         <Text style={styles.sectionTitle}>3. Description of Service</Text>
         <Text style={styles.paragraph}>
-          ZipService is a location-based marketplace platform that connects users seeking services ("Customers") with individuals and businesses offering services ("Service Providers"). The Service includes:{'\n\n'}
+          GoZipMarket is a location-based marketplace platform that connects users seeking services ("Customers") with individuals and businesses offering services ("Service Providers"). The Service includes:{'\n\n'}
           • Search Functionality: Finding nearby service providers based on ZIP code{'\n'}
           • Service Listings: Posting and browsing service offerings{'\n'}
           • Messaging: Communication between users{'\n'}
@@ -66,7 +66,7 @@ const TermsOfServiceScreen: React.FC = () => {
 
         <Text style={styles.subSectionTitle}>3.1 Platform Role</Text>
         <Text style={styles.warning}>
-          IMPORTANT: ZipService is a platform that facilitates connections between users. We are NOT:{'\n\n'}
+          IMPORTANT: GoZipMarket is a platform that facilitates connections between users. We are NOT:{'\n\n'}
           • A party to any agreements between Service Providers and Customers{'\n'}
           • Responsible for the quality, safety, or legality of services offered{'\n'}
           • An employer, agent, or representative of Service Providers{'\n'}
@@ -129,7 +129,7 @@ const TermsOfServiceScreen: React.FC = () => {
         
         <Text style={styles.subSectionTitle}>6.1 Independent Transactions</Text>
         <Text style={styles.warning}>
-          ALL TRANSACTIONS ARE BETWEEN USERS DIRECTLY. ZipService does not:{'\n\n'}
+          ALL TRANSACTIONS ARE BETWEEN USERS DIRECTLY. GoZipMarket does not:{'\n\n'}
           • Process payments{'\n'}
           • Set prices for services{'\n'}
           • Guarantee payment or service delivery{'\n'}
@@ -149,7 +149,7 @@ const TermsOfServiceScreen: React.FC = () => {
 
         <Text style={styles.subSectionTitle}>6.3 No Platform Fees (Current)</Text>
         <Text style={styles.paragraph}>
-          At this time, ZipService does not charge fees for using the platform. We reserve the right to implement fees in the future with advance notice to users.
+          At this time, GoZipMarket does not charge fees for using the platform. We reserve the right to implement fees in the future with advance notice to users.
         </Text>
 
         <Text style={styles.sectionTitle}>7. Disclaimers and Limitations of Liability</Text>
@@ -266,7 +266,7 @@ const TermsOfServiceScreen: React.FC = () => {
 
         <Text style={styles.boldText}>
           Zip Market LLC{'\n'}
-          Operating as: ZipService{'\n'}
+          Operating as: GoZipMarket{'\n'}
           30 N Gould St Ste N{'\n'}
           Sheridan, WY 82801{'\n'}
           Email: ZipMarket333@gmail.com
@@ -278,12 +278,12 @@ const TermsOfServiceScreen: React.FC = () => {
           • You have read and understood these Terms{'\n'}
           • You agree to be bound by these Terms{'\n'}
           • You are at least 18 years of age{'\n'}
-          • You understand that ZipService is a platform connecting users and is not a party to transactions between users
+          • You understand that GoZipMarket is a platform connecting users and is not a party to transactions between users
         </Text>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Zip Market LLC</Text>
-          <Text style={styles.footerText}>Operating as: ZipService</Text>
+          <Text style={styles.footerText}>Operating as: GoZipMarket</Text>
           <Text style={styles.footerText}>Last Updated: December 14, 2024</Text>
           <Text style={styles.footerText}>These Terms of Service are effective as of the date stated above and apply to all users of the Service.</Text>
         </View>

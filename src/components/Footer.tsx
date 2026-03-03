@@ -27,7 +27,7 @@ export const Footer = () => {
         <Text style={styles.link}>business@gozipmarket.com</Text>
       </TouchableOpacity>
 
-      <Text style={styles.copyright}>© 2025 ZipService - Zip Market LLC</Text>
+      <Text style={styles.copyright}>© 2025 GoZipMarket - Zip Market LLC</Text>
     </View>
   );
 };

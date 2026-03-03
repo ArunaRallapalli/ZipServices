@@ -33,7 +33,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
 // ✅ ADDED: Startup logging and environment check
-logger.info('Starting ZipServices server...');
+logger.info('Starting GoZipMarket server...');
 debugEnv();
 
 // Make pool accessible in all routes
