@@ -30,7 +30,7 @@ const TermsOfServiceScreen: React.FC = () => {
           • Business Name: GoZipMarket{'\n'}
           • Legal Entity: Zip Market LLC{'\n'}
           • Address: 30 N Gould St Ste N, Sheridan, WY 82801{'\n'}
-          • Email: ZipMarket333@gmail.com
+          • Email: support@gozipmarket.com
         </Text>
 
         <Text style={styles.warning}>
@@ -214,7 +214,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <Text style={styles.paragraph}>
           You may terminate your account at any time by:{'\n\n'}
           • Using the account deletion feature in the app{'\n'}
-          • Contacting us at ZipMarket333@gmail.com
+          • Contacting us at support@gozipmarket.com
         </Text>
 
         <Text style={styles.subSectionTitle}>9.2 Termination by Us</Text>
@@ -269,7 +269,7 @@ const TermsOfServiceScreen: React.FC = () => {
           Operating as: GoZipMarket{'\n'}
           30 N Gould St Ste N{'\n'}
           Sheridan, WY 82801{'\n'}
-          Email: ZipMarket333@gmail.com
+          Email: support@gozipmarket.com
         </Text>
 
         <Text style={styles.sectionTitle}>13. Acknowledgment</Text>
