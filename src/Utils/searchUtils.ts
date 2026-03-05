@@ -105,23 +105,6 @@ export interface Category {
 }
 
 // ============================================================================
-// POPULAR CATEGORIES CONFIGURATION
-// ============================================================================
-
-/**
- * Predefined popular service categories displayed as quick-access tiles
- * Each category includes icon styling for visual representation
- */
-export const popularCategories: Category[] = [
-  { name: "Catering", family: "Ionicons", icon: "restaurant", color: "#FF6B6B", bgColor: "#FFE5E5" },
-  { name: "Beauty Services", family: "FontAwesome", icon: "paint-brush", color: "#FF8C00", bgColor: "#FFF2E5" },
-  { name: "Decorations", family: "Ionicons", icon: "color-palette", color: "#1E90FF", bgColor: "#E5F2FF" },
-  { name: "Tailoring", family: "MaterialCommunityIcons", icon: "tshirt-crew", color: "#32CD32", bgColor: "#E8F5E8" },
-  { name: "Cleaning", family: "MaterialCommunityIcons", icon: "broom", color: "#BA55D3", bgColor: "#F5E8F5" },
-  { name: "Plumbing", family: "MaterialCommunityIcons", icon: "wrench", color: "#FF4500", bgColor: "#FFE8E0" },
-];
-
-// ============================================================================
 // VALIDATION FUNCTIONS
 // ============================================================================
 
@@ -353,6 +336,8 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
       console.warn("⚠️ [searchUtils] No ZIP code provided for radius search");
     }
 
+    
+
     // ========================================================================
     // RETURN STRUCTURED RESULTS
     // ========================================================================
@@ -404,5 +389,41 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
       hasZipCodeMatches: false,
       hasStateMatches: false,
     };
+    
+  }
+};
+// ============================================================================
+// ADD THIS FUNCTION TO searchUtils.ts
+// Place it after the existing searchServicePosts() function.
+// No backend changes needed — uses existing /api/service-posts/all endpoint.
+// ============================================================================
+
+/**
+ * Fetches the most recently created active service posts for display
+ * on the home screen in place of the old Popular Categories tiles.
+ *
+ * Uses existing ENDPOINT 3: GET /api/service-posts/all
+ *
+ * @param limit - Number of recent posts to return (default: 5)
+ * @returns Promise resolving to array of recent ServicePost objects
+ */
+export const fetchRecentPosts = async (limit: number = 5): Promise<ServicePost[]> => {
+  console.log(`🆕 [searchUtils] Fetching ${limit} most recent posts...`);
+  try {
+    const data = await api.get(`/api/service-posts/all?limit=${limit}&offset=0`);
+
+    if (data.success && Array.isArray(data.posts)) {
+      // Normalize post_id (backend returns 'id', frontend expects 'post_id')
+      const posts: ServicePost[] = data.posts.map((post: any) => ({
+        ...post,
+        post_id: post.post_id ?? post.id,
+      }));
+      console.log(`✅ [searchUtils] fetchRecentPosts: got ${posts.length} posts`);
+      return posts;
+    }
+    return [];
+  } catch (error) {
+    console.error('❌ [searchUtils] fetchRecentPosts error:', error);
+    return []; // Non-blocking — return empty so the screen still loads fine
   }
 };
