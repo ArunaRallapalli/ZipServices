@@ -1,27 +1,32 @@
 /**
  * SearchResultsList.tsx
  *
- * @updated 2026-01-04
- * @version 2.1.0 - Added star ratings display
+ * @updated March 2026
+ * @version 2.5.0
  *
- * March 2026: Results now display as a 2-column compact grid.
- *             Tap a card to expand full details + Contact button.
+ * 2-column mini card grid.
+ * Tap any card → Modal slides up showing full ServiceCard (photos, zoom, stars, contact).
+ * No navigation or ServiceDetailScreen needed.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
+  Image,
+  Modal,
+  ScrollView,
+  SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ServiceCard from "./ServiceCard";
-import { createResponsiveStyles } from "../Utils/globalStyles"
+import { createResponsiveStyles } from "../Utils/globalStyles";
 
 // ============================================================================
-// TYPE DEFINITIONS  (unchanged)
+// TYPE DEFINITIONS
 // ============================================================================
 
 interface ServicePost {
@@ -44,6 +49,7 @@ interface ServicePost {
   is_active?: boolean;
   average_rating?: number;
   review_count?: number;
+  photos?: string[];
 }
 
 interface SearchResults {
@@ -66,64 +72,133 @@ interface SearchResultsListProps {
 }
 
 // ============================================================================
-// MINI CARD  ← ADDED: compact 2-column card; tap to expand
+// HELPERS
+// ============================================================================
+
+const CATEGORY_COLORS: Record<string, string> = {
+  "Cleaning":        "#4A90E2",
+  "Catering":        "#E67E22",
+  "Landscaping":     "#27AE60",
+  "Dance Lessons":   "#9B59B6",
+  "Entertainment":   "#E91E63",
+  "Event Planning":  "#F39C12",
+  "Beauty Services": "#E91E8C",
+  "Shoe Repair":     "#795548",
+};
+
+const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "#607D8B";
+
+const initials = (cat: string) =>
+  cat.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+
+// ============================================================================
+// MINI STARS
+// ============================================================================
+
+const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count }) => (
+  <View style={miniStyles.starsRow}>
+    {[1, 2, 3, 4, 5].map(s => (
+      <Ionicons
+        key={s}
+        name={rating >= s ? "star" : rating >= s - 0.5 ? "star-half" : "star-outline"}
+        size={11}
+        color="#FFA500"
+      />
+    ))}
+    {count !== undefined && count > 0 && (
+      <Text style={miniStyles.ratingCount}> ({count})</Text>
+    )}
+  </View>
+);
+
+// ============================================================================
+// MINI SERVICE CARD — tap opens Modal with full ServiceCard
 // ============================================================================
 
 const MiniServiceCard: React.FC<{
   item: ServicePost;
-  onContactPress: () => void;
-}> = ({ item, onContactPress }) => {
-  const [expanded, setExpanded] = React.useState(false);
+  isOwnPost: boolean;
+  onChatPress: (item: ServicePost) => void;
+}> = ({ item, isOwnPost, onChatPress }) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const firstPhoto = item.photos?.[0] ?? null;
+  const color = categoryColor(item.service_category);
 
   return (
-    <TouchableOpacity
-      style={miniStyles.card}
-      onPress={() => setExpanded(prev => !prev)}
-      activeOpacity={0.85}
-    >
-      {/* Always-visible summary */}
-      <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
-      <Text style={miniStyles.category}>
-        <Ionicons name="briefcase" size={12} color="#4A90E2" />{" "}
-        {item.service_category}
-      </Text>
-      {item.distance !== undefined && (
-        <Text style={miniStyles.distance}>
-          <Ionicons name="navigate" size={11} color="#4A90E2" />{" "}
-          {item.distance} mi
-        </Text>
-      )}
+    <>
+      {/* ── Mini card ── */}
+      <TouchableOpacity
+        style={miniStyles.card}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.82}
+      >
+        {/* Photo or colored placeholder */}
+        {firstPhoto ? (
+          <Image
+            source={{ uri: firstPhoto }}
+            style={miniStyles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color }]}>
+            <Text style={miniStyles.placeholderText}>{initials(item.service_category)}</Text>
+          </View>
+        )}
 
-      {/* Expanded details shown on tap */}
-      {expanded && (
-        <View style={miniStyles.details}>
-          {item.business_name ? (
-            <Text style={miniStyles.detailLine}>🏢 {item.business_name}</Text>
-          ) : null}
-          {item.description ? (
-            <Text style={miniStyles.desc} numberOfLines={4}>{item.description}</Text>
-          ) : null}
-          {item.price_range ? (
-            <Text style={miniStyles.detailLine}>💰 {item.price_range}</Text>
-          ) : null}
-          {item.city && item.state ? (
-            <Text style={miniStyles.detailLine}>📍 {item.city}, {item.state}</Text>
-          ) : null}
-          <TouchableOpacity style={miniStyles.contactBtn} onPress={onContactPress}>
-            <Ionicons name="chatbubble-ellipses" size={14} color="#fff" />
-            <Text style={miniStyles.contactBtnText}> Contact</Text>
-          </TouchableOpacity>
+        {/* Text */}
+        <View style={miniStyles.content}>
+          <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
+          <Text style={miniStyles.category} numberOfLines={1}>{item.service_category}</Text>
+          <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+          {item.city && item.state && (
+            <View style={miniStyles.locationRow}>
+              <Ionicons name="location-outline" size={11} color="#888" />
+              <Text style={miniStyles.locationText} numberOfLines={1}>
+                {" "}{item.city}, {item.state}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
+      </TouchableOpacity>
 
-      {/* Expand/collapse hint */}
-      <Ionicons
-        name={expanded ? "chevron-up" : "chevron-down"}
-        size={14}
-        color="#bbb"
-        style={miniStyles.chevron}
-      />
-    </TouchableOpacity>
+      {/* ── Full detail Modal with ServiceCard ── */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <SafeAreaView style={modalStyles.safeArea}>
+          {/* Header with close button */}
+          <View style={modalStyles.header}>
+            <Text style={modalStyles.headerTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              style={modalStyles.closeBtn}
+            >
+              <Ionicons name="close" size={26} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          {/* ServiceCard — handles photos, zoom, stars, reviews, contact */}
+          <ScrollView
+            contentContainerStyle={modalStyles.body}
+            showsVerticalScrollIndicator={false}
+          >
+            <ServiceCard
+              item={item}
+              isOwnPost={isOwnPost}
+              onChatPress={(item) => {
+                setModalVisible(false);
+                setTimeout(() => onChatPress(item), 300);
+              }}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 };
 
@@ -131,73 +206,99 @@ const miniStyles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 6,
-    padding: 12,
     backgroundColor: "#fff",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    borderColor: "#e8e8e8",
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 4,
+  },
+  thumbnail: {
+    width: "100%",
+    height: 80,
+  },
+  placeholder: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  content: {
+    padding: 8,
   },
   title: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#333",
-    marginBottom: 5,
-  },
-  category: {
-    fontSize: 12,
-    color: "#4A90E2",
-    fontWeight: "600",
+    color: "#222",
+    lineHeight: 17,
     marginBottom: 3,
   },
-  distance: {
+  category: {
     fontSize: 11,
-    color: "#888",
-    marginBottom: 2,
-  },
-  details: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingTop: 8,
-  },
-  detailLine: {
-    fontSize: 12,
-    color: "#555",
+    color: "#4A90E2",
+    fontWeight: "600",
     marginBottom: 4,
   },
-  desc: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 6,
-    lineHeight: 17,
-  },
-  contactBtn: {
+  starsRow: {
     flexDirection: "row",
-    backgroundColor: "#4A90E2",
-    borderRadius: 6,
-    padding: 8,
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
+    marginBottom: 3,
   },
-  contactBtnText: {
-    color: "#fff",
-    fontSize: 12,
+  ratingCount: {
+    fontSize: 10,
+    color: "#888",
+    marginLeft: 2,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  locationText: {
+    fontSize: 11,
+    color: "#888",
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: "700",
+    color: "#222",
+    marginRight: 8,
   },
-  chevron: {
-    alignSelf: "center",
-    marginTop: 4,
+  closeBtn: {
+    padding: 4,
+  },
+  body: {
+    padding: 16,
+    paddingBottom: 40,
   },
 });
 
 // ============================================================================
-// MAIN COMPONENT  (structure unchanged; only renderContent updated)
+// MAIN COMPONENT
 // ============================================================================
 
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
@@ -241,10 +342,10 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
       );
     }
 
-    // ── Results — 2-column grid ─────────────────────────────────────────────
+    // ── Results ─────────────────────────────────────────────────────────────
     return (
       <>
-        {/* Result count + distance banner (unchanged) */}
+        {/* Result count + distance banner */}
         <View style={styles.resultsInfoContainer}>
           <Ionicons name="location" size={20} color="#4CAF50" />
           <View style={styles.resultsInfoTextContainer}>
@@ -261,13 +362,16 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
           </View>
         </View>
 
-        {/* ── 2-column mini card grid ── */}
+        <Text style={styles.tapHint}>Tap a card to view full details & contact</Text>
+
+        {/* 2-column grid */}
         <View style={styles.gridContainer}>
           {allResults.map((item) => (
             <View key={item.post_id} style={styles.gridItem}>
               <MiniServiceCard
                 item={item}
-                onContactPress={() => onChatPress(item)}
+                isOwnPost={isOwnPost(item.user_id)}
+                onChatPress={onChatPress}
               />
             </View>
           ))}
@@ -290,22 +394,20 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 };
 
 // ============================================================================
-// STYLES  (all original styles kept; 2 new grid styles added at the bottom)
+// STYLES
 // ============================================================================
 
 const styles = createResponsiveStyles({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f5f5f5",
   },
-
   resultsScrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 14,   // slightly tighter for grid
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 8,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
-
   resultsHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -315,11 +417,9 @@ const styles = createResponsiveStyles({
     paddingHorizontal: 20,
     paddingTop: 60,
   },
-
   backButton: {
     padding: 8,
   },
-
   resultsTitle: {
     fontSize: 22,
     fontWeight: "bold",
@@ -327,45 +427,53 @@ const styles = createResponsiveStyles({
     flex: 1,
     textAlign: "center",
   },
-
   placeholder: {
     width: 40,
   },
-
   resultsInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#E8F5E9",
-    padding: 15,
+    padding: 12,
     borderRadius: 8,
-    marginBottom: 16,
+    marginBottom: 8,
     borderLeftWidth: 4,
     borderLeftColor: "#4CAF50",
   },
-
   resultsInfoTextContainer: {
     flex: 1,
     marginLeft: 10,
   },
-
   resultsInfoText: {
     fontSize: 14,
     color: "#333",
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
   },
-
   resultsDistanceText: {
     fontSize: 12,
     color: "#666",
     fontWeight: "500",
   },
-
-  // kept for any legacy references
+  tapHint: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    fontStyle: "italic",
+    marginBottom: 10,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
+  },
+  gridItem: {
+    width: "50%",
+  },
+  // kept for legacy references
   serviceCardContainer: {
     marginBottom: 20,
   },
-
   distanceIndicator: {
     flexDirection: "row",
     alignItems: "center",
@@ -380,21 +488,18 @@ const styles = createResponsiveStyles({
     borderBottomWidth: 3,
     borderColor: "#4A90E2",
   },
-
   distanceText: {
     fontSize: 13,
     color: "#4A90E2",
     fontWeight: "600",
     marginLeft: 6,
   },
-
   noResultsContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
     paddingHorizontal: 20,
   },
-
   noResultsText: {
     marginTop: 20,
     fontSize: 18,
@@ -402,24 +507,12 @@ const styles = createResponsiveStyles({
     color: "#666",
     textAlign: "center",
   },
-
   noResultsSubtext: {
     marginTop: 12,
     fontSize: 14,
     color: "#999",
     textAlign: "center",
     lineHeight: 22,
-  },
-
-  // ← ADDED: 2-column grid layout
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-  },
-
-  gridItem: {
-    width: "50%",
   },
 });
 

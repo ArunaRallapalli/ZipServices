@@ -36,6 +36,7 @@ import api from "../api"; // ADDED: January 5, 2026
  * Represents a service post from a business or service provider
  * NOW INCLUDES: distance field (in miles) from radius search
  */
+// AFTER — add these 3 fields at the bottom:
 export interface ServicePost {
   post_id: number;
   user_id: number;
@@ -52,7 +53,10 @@ export interface ServicePost {
   state?: string;
   poster_name?: string;
   business_name?: string;
-  distance?: number;        // NEW: Distance in miles from search center
+  distance?: number;
+  photos?: string[];           // ← ADD
+  average_rating?: number;     // ← ADD
+  review_count?: number;       // ← ADD
 }
 
 /**
