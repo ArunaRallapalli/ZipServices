@@ -1,25 +1,11 @@
 /**
  * SearchResultsList.tsx
- * 
+ *
  * @updated 2026-01-04
  * @version 2.1.0 - Added star ratings display
- * 
- * OVERVIEW:
- * Component that displays search results for service providers using radius-based search.
- * Shows results sorted by distance with visual distance indicators and star ratings.
- * 
- * UPDATED FOR RATINGS:
- * - Displays star ratings on each service card
- * - Shows review counts for providers with reviews
- * - ServicePost interface includes average_rating and review_count
- * 
- * KEY FEATURES:
- * - Distance-based result display (e.g., "7.3 miles away")
- * - Star ratings for service providers (e.g., ⭐ 4.8 (24 reviews))
- * - Visual indicators for proximity
- * - Handles empty state with helpful messaging
- * - Back navigation to search form
- * - Contact/chat functionality for each service
+ *
+ * March 2026: Results now display as a 2-column compact grid.
+ *             Tap a card to expand full details + Contact button.
  */
 
 import React from "react";
@@ -35,64 +21,183 @@ import ServiceCard from "./ServiceCard";
 import { createResponsiveStyles } from "../Utils/globalStyles"
 
 // ============================================================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS  (unchanged)
 // ============================================================================
 
-/**
- * Service post data structure returned from radius-based search
- * NOW INCLUDES: distance field (in miles from search center)
- * NOW INCLUDES: average_rating and review_count for star ratings
- */
 interface ServicePost {
-  post_id: number;                    // Unique identifier for the post
-  user_id: number;                    // ID of the service provider
-  poster_type: string;                // Type: 'business_owner' or 'customer'
-  post_type: string;                  // Type: 'offer' or 'request'
-  title: string;                      // Service post title
-  description?: string;               // Detailed service description
-  service_category: string;           // Category (e.g., 'Plumbing', 'Cleaning')
-  price_range?: string;               // Optional pricing information
-  phone_number?: string;              // Contact phone number
-  contact_email?: string;             // Contact email address
-  zip_code?: string;                  // Service provider's ZIP code
-  city?: string;                      // Service provider's city
-  state?: string;                     // Service provider's state
-  poster_name?: string;               // Name of the person who posted
-  business_name?: string;             // Business name (if applicable)
-  distance?: number;                  // Distance in miles from search center
-  is_active?: boolean;                // Whether the post is active
-  average_rating?: number;            // ← NEW: Average star rating (0-5)
-  review_count?: number;              // ← NEW: Number of reviews received
+  post_id: number;
+  user_id: number;
+  poster_type: string;
+  post_type: string;
+  title: string;
+  description?: string;
+  service_category: string;
+  price_range?: string;
+  phone_number?: string;
+  contact_email?: string;
+  zip_code?: string;
+  city?: string;
+  state?: string;
+  poster_name?: string;
+  business_name?: string;
+  distance?: number;
+  is_active?: boolean;
+  average_rating?: number;
+  review_count?: number;
 }
 
-/**
- * Search results from radius-based search
- * All results are in a single array, sorted by distance
- */
 interface SearchResults {
-  exactZipMatches: ServicePost[];     // All results (sorted by distance)
-  nearbyZipMatches: ServicePost[];    // Deprecated (not used)
-  zipCodeMatches: ServicePost[];      // Same as exactZipMatches
-  stateMatches: ServicePost[];        // Deprecated (not used)
-  hasZipCodeMatches: boolean;         // Flag: has any results
-  hasStateMatches: boolean;           // Deprecated (always false)
+  exactZipMatches: ServicePost[];
+  nearbyZipMatches: ServicePost[];
+  zipCodeMatches: ServicePost[];
+  stateMatches: ServicePost[];
+  hasZipCodeMatches: boolean;
+  hasStateMatches: boolean;
 }
 
-/**
- * Component props for SearchResultsList
- */
 interface SearchResultsListProps {
-  searchResults: SearchResults;                     // Search results to display
-  isOwnPost: (userId: number) => boolean;          // Check if post belongs to user
-  onChatPress: (item: ServicePost) => void;        // Handler for chat button
-  onBackPress: () => void;                         // Handler for back navigation
-  zipCode: string;                                 // User's ZIP code for display
-  city: string;                                    // User's city for display
-  state: string;                                   // User's state for display
+  searchResults: SearchResults;
+  isOwnPost: (userId: number) => boolean;
+  onChatPress: (item: ServicePost) => void;
+  onBackPress: () => void;
+  zipCode: string;
+  city: string;
+  state: string;
 }
 
 // ============================================================================
-// MAIN COMPONENT
+// MINI CARD  ← ADDED: compact 2-column card; tap to expand
+// ============================================================================
+
+const MiniServiceCard: React.FC<{
+  item: ServicePost;
+  onContactPress: () => void;
+}> = ({ item, onContactPress }) => {
+  const [expanded, setExpanded] = React.useState(false);
+
+  return (
+    <TouchableOpacity
+      style={miniStyles.card}
+      onPress={() => setExpanded(prev => !prev)}
+      activeOpacity={0.85}
+    >
+      {/* Always-visible summary */}
+      <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
+      <Text style={miniStyles.category}>
+        <Ionicons name="briefcase" size={12} color="#4A90E2" />{" "}
+        {item.service_category}
+      </Text>
+      {item.distance !== undefined && (
+        <Text style={miniStyles.distance}>
+          <Ionicons name="navigate" size={11} color="#4A90E2" />{" "}
+          {item.distance} mi
+        </Text>
+      )}
+
+      {/* Expanded details shown on tap */}
+      {expanded && (
+        <View style={miniStyles.details}>
+          {item.business_name ? (
+            <Text style={miniStyles.detailLine}>🏢 {item.business_name}</Text>
+          ) : null}
+          {item.description ? (
+            <Text style={miniStyles.desc} numberOfLines={4}>{item.description}</Text>
+          ) : null}
+          {item.price_range ? (
+            <Text style={miniStyles.detailLine}>💰 {item.price_range}</Text>
+          ) : null}
+          {item.city && item.state ? (
+            <Text style={miniStyles.detailLine}>📍 {item.city}, {item.state}</Text>
+          ) : null}
+          <TouchableOpacity style={miniStyles.contactBtn} onPress={onContactPress}>
+            <Ionicons name="chatbubble-ellipses" size={14} color="#fff" />
+            <Text style={miniStyles.contactBtnText}> Contact</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Expand/collapse hint */}
+      <Ionicons
+        name={expanded ? "chevron-up" : "chevron-down"}
+        size={14}
+        color="#bbb"
+        style={miniStyles.chevron}
+      />
+    </TouchableOpacity>
+  );
+};
+
+const miniStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    margin: 6,
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 5,
+  },
+  category: {
+    fontSize: 12,
+    color: "#4A90E2",
+    fontWeight: "600",
+    marginBottom: 3,
+  },
+  distance: {
+    fontSize: 11,
+    color: "#888",
+    marginBottom: 2,
+  },
+  details: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    paddingTop: 8,
+  },
+  detailLine: {
+    fontSize: 12,
+    color: "#555",
+    marginBottom: 4,
+  },
+  desc: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 6,
+    lineHeight: 17,
+  },
+  contactBtn: {
+    flexDirection: "row",
+    backgroundColor: "#4A90E2",
+    borderRadius: 6,
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  contactBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  chevron: {
+    alignSelf: "center",
+    marginTop: 4,
+  },
+});
+
+// ============================================================================
+// MAIN COMPONENT  (structure unchanged; only renderContent updated)
 // ============================================================================
 
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
@@ -104,74 +209,30 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   city,
   state,
 }) => {
-  // --------------------------------------------------------------------------
-  // RESULT PROCESSING
-  // --------------------------------------------------------------------------
-  
-  /**
-   * Get all results from the search
-   * With radius-based search, all results are in zipCodeMatches
-   * They're already sorted by distance (closest first)
-   */
   const allResults = (searchResults.zipCodeMatches || [])
     .filter(item => item.is_active !== false);
-  
-  /**
-   * Check if any results exist
-   */
+
   const hasResults = allResults.length > 0;
-  
-  
-  /**
-   * Get distance range for display
-   */
   const closestDistance = allResults[0]?.distance;
   const farthestDistance = allResults[allResults.length - 1]?.distance;
 
-  // --------------------------------------------------------------------------
-  // RENDER FUNCTIONS
-  // --------------------------------------------------------------------------
-  
-  /**
-   * Renders the header bar with back button and title
-   * Fixed position at top with blue background
-   * 
-   * @returns Header component with navigation
-   */
   const renderHeader = () => (
     <View style={styles.resultsHeader}>
-      {/* Back button to return to search form */}
       <TouchableOpacity onPress={onBackPress} style={styles.backButton}>
         <Ionicons name="arrow-back" size={24} color="#ffffff" />
       </TouchableOpacity>
-      
-      {/* Centered title */}
       <Text style={styles.resultsTitle}>Search Results</Text>
-      
-      {/* Placeholder for symmetric layout */}
       <View style={styles.placeholder} />
     </View>
   );
 
-  /**
-   * Renders the main content area - either results or empty state
-   * 
-   * @returns Content component based on search results
-   */
   const renderContent = () => {
-    // --------------------------------------------------------------------------
-    // SCENARIO 1: NO RESULTS FOUND
-    // --------------------------------------------------------------------------
+    // ── No results ──────────────────────────────────────────────────────────
     if (!hasResults) {
       return (
         <View style={styles.noResultsContainer}>
-          {/* Search icon for visual context */}
           <Ionicons name="search" size={80} color="#ccc" />
-          
-          {/* Primary message */}
           <Text style={styles.noResultsText}>No services found</Text>
-          
-          {/* Helpful suggestion text */}
           <Text style={styles.noResultsSubtext}>
             No services found within 25 miles of {zipCode}.{"\n"}
             Try searching in a nearby city or check back later for new listings.
@@ -180,15 +241,10 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
       );
     }
 
-    // --------------------------------------------------------------------------
-    // SCENARIO 2: RESULTS FOUND
-    // --------------------------------------------------------------------------
+    // ── Results — 2-column grid ─────────────────────────────────────────────
     return (
       <>
-        {/* --------------------------------------------------------------------
-            RESULTS HEADER WITH DISTANCE INFO
-            Shows count of services and distance range
-        -------------------------------------------------------------------- */}
+        {/* Result count + distance banner (unchanged) */}
         <View style={styles.resultsInfoContainer}>
           <Ionicons name="location" size={20} color="#4CAF50" />
           <View style={styles.resultsInfoTextContainer}>
@@ -197,60 +253,36 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
             </Text>
             {closestDistance !== undefined && farthestDistance !== undefined && (
               <Text style={styles.resultsDistanceText}>
-                {closestDistance === farthestDistance 
+                {closestDistance === farthestDistance
                   ? `${closestDistance} miles away`
-                  : `${closestDistance} - ${farthestDistance} miles away`
-                }
+                  : `${closestDistance} - ${farthestDistance} miles away`}
               </Text>
             )}
           </View>
         </View>
 
-        {/* --------------------------------------------------------------------
-            SERVICE CARDS
-            Each card displays service info with distance and star rating
-        -------------------------------------------------------------------- */}
-        {allResults.map((item) => (
-          <View key={item.post_id} style={styles.serviceCardContainer}>
-            <ServiceCard
-              item={item}
-              isOwnPost={isOwnPost(item.user_id)}
-              onChatPress={onChatPress}
-            />
-            
-            {/* Distance indicator below each card */}
-            {item.distance !== undefined && (
-              <View style={styles.distanceIndicator}>
-                <Ionicons name="navigate" size={16} color="#4A90E2" />
-                <Text style={styles.distanceText}>
-                  {item.distance} mile{item.distance !== 1 ? "s" : ""} away
-                </Text>
-              </View>
-            )}
-          </View>
-        ))}
+        {/* ── 2-column mini card grid ── */}
+        <View style={styles.gridContainer}>
+          {allResults.map((item) => (
+            <View key={item.post_id} style={styles.gridItem}>
+              <MiniServiceCard
+                item={item}
+                onContactPress={() => onChatPress(item)}
+              />
+            </View>
+          ))}
+        </View>
       </>
     );
   };
 
-  // --------------------------------------------------------------------------
-  // MAIN RENDER
-  // --------------------------------------------------------------------------
-  
-  /**
-   * Main component render
-   * Uses FlatList with single item for scroll performance
-   */
   return (
     <View style={styles.container}>
-      {/* Fixed header at top */}
       {renderHeader()}
-      
-      {/* Scrollable content area */}
       <FlatList
-        data={[{ key: "content" }]}           // Single item for content
-        renderItem={renderContent}            // Render function
-        keyExtractor={(item) => item.key}     // Key extractor
+        data={[{ key: "content" }]}
+        renderItem={renderContent}
+        keyExtractor={(item) => item.key}
         contentContainerStyle={styles.resultsScrollContainer}
       />
     </View>
@@ -258,29 +290,22 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 };
 
 // ============================================================================
-// STYLES
+// STYLES  (all original styles kept; 2 new grid styles added at the bottom)
 // ============================================================================
 
 const styles = createResponsiveStyles({
-  // Main container - full screen
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
   },
-  
-  // Scrollable content area padding
+
   resultsScrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,   // slightly tighter for grid
     paddingTop: 20,
     paddingBottom: 20,
   },
-  
-  // --------------------------------------------------------------------------
-  // HEADER STYLES
-  // --------------------------------------------------------------------------
-  
-  // Blue header bar with back button and title
+
   resultsHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -288,15 +313,13 @@ const styles = createResponsiveStyles({
     backgroundColor: "#4A90E2",
     paddingVertical: 15,
     paddingHorizontal: 20,
-    paddingTop: 60,                           // Extra padding for status bar
+    paddingTop: 60,
   },
-  
-  // Back arrow button
+
   backButton: {
     padding: 8,
   },
-  
-  // "Search Results" title text
+
   resultsTitle: {
     fontSize: 22,
     fontWeight: "bold",
@@ -304,95 +327,74 @@ const styles = createResponsiveStyles({
     flex: 1,
     textAlign: "center",
   },
-  
-  // Placeholder for symmetric header layout
+
   placeholder: {
     width: 40,
   },
-  
-  // --------------------------------------------------------------------------
-  // RESULTS INFO BANNER STYLES
-  // --------------------------------------------------------------------------
-  
-  // Green banner showing result count and distance range
+
   resultsInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E8F5E9",               // Light green background
+    backgroundColor: "#E8F5E9",
     padding: 15,
     borderRadius: 8,
-    marginBottom: 20,
+    marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: "#4CAF50",               // Green accent border
+    borderLeftColor: "#4CAF50",
   },
-  
-  // Container for info text (allows multiline)
+
   resultsInfoTextContainer: {
     flex: 1,
     marginLeft: 10,
   },
-  
-  // Primary info text (count)
+
   resultsInfoText: {
     fontSize: 14,
     color: "#333",
     fontWeight: "600",
     marginBottom: 4,
   },
-  
-  // Secondary info text (distance range)
+
   resultsDistanceText: {
     fontSize: 12,
     color: "#666",
     fontWeight: "500",
   },
-  
-  // --------------------------------------------------------------------------
-  // SERVICE CARD STYLES
-  // --------------------------------------------------------------------------
-  
-  // Container for each service card with distance
+
+  // kept for any legacy references
   serviceCardContainer: {
     marginBottom: 20,
   },
-  
-  // Distance indicator below each card
+
   distanceIndicator: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E3F2FD",               // Light blue background
+    backgroundColor: "#E3F2FD",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
-    marginTop: -8,                            // Overlap with card slightly
+    marginTop: -8,
     borderLeftWidth: 3,
     borderRightWidth: 3,
     borderBottomWidth: 3,
-    borderColor: "#4A90E2",                   // Blue border
+    borderColor: "#4A90E2",
   },
-  
-  // Distance text
+
   distanceText: {
     fontSize: 13,
     color: "#4A90E2",
     fontWeight: "600",
     marginLeft: 6,
   },
-  
-  // --------------------------------------------------------------------------
-  // EMPTY STATE STYLES
-  // --------------------------------------------------------------------------
-  
-  // Container for "no results" empty state
+
   noResultsContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
     paddingHorizontal: 20,
   },
-  
-  // Primary "No services found" text
+
   noResultsText: {
     marginTop: 20,
     fontSize: 18,
@@ -400,14 +402,24 @@ const styles = createResponsiveStyles({
     color: "#666",
     textAlign: "center",
   },
-  
-  // Secondary suggestion text
+
   noResultsSubtext: {
     marginTop: 12,
     fontSize: 14,
     color: "#999",
     textAlign: "center",
     lineHeight: 22,
+  },
+
+  // ← ADDED: 2-column grid layout
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
+  },
+
+  gridItem: {
+    width: "50%",
   },
 });
 

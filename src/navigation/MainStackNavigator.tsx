@@ -65,6 +65,7 @@ import TermsOfServiceScreen from "../screens/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
+import ServiceDetailScreen from "../screens/ServiceDetailScreen"; // ← ADDED
 
 /**
  * LoadingScreen Component
@@ -156,6 +157,34 @@ export type RootStackParamList = {
   PostServiceScreen: undefined;                     // Create new service post
   RequestServiceCategoryScreen: undefined;          // Request new service category
   AdminCategoryRequests: undefined;
+
+  // ← ADDED: Service detail screen (opened from search results grid)
+  ServiceDetail: {
+    item: {
+      post_id: number;
+      user_id: number;
+      poster_type: string;
+      post_type: string;
+      title: string;
+      description?: string;
+      service_category: string;
+      price_range?: string;
+      phone_number?: string;
+      contact_email?: string;
+      zip_code?: string;
+      city?: string;
+      state?: string;
+      poster_name?: string;
+      business_name?: string;
+      distance?: number;
+      is_active?: boolean;
+      average_rating?: number;
+      review_count?: number;
+      photos?: string[];
+    };
+    onChatPress: (item: any) => void;
+  };
+
   // Authentication - User sign up/sign in flows
   SignUpFormBusinessOwners: { user_id: number };    // Business owner registration
   SigninBusinessOwners: undefined;                  // Business owner login
@@ -387,6 +416,12 @@ const NavigationStack: React.FC = () => {
                 fontWeight: 'bold',
               },
             }}
+          />
+          {/* ← ADDED: Service detail screen */}
+          <RootStack.Screen
+            name="ServiceDetail"
+            component={ServiceDetailScreen}
+            options={{ headerShown: false }}
           />
         </RootStack.Group>
       </RootStack.Navigator>

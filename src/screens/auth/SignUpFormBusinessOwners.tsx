@@ -11,6 +11,8 @@
  * 4. Removed unnecessary fields (street, description, phone, service radius)
  * 5. Better user experience - faster signup process
  * 6. Email verification required before login
+ * 
+ * March 2026: Added password show/hide toggle
  */
 
 import React, { useState, useRef } from "react";
@@ -22,12 +24,13 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";            // ← ADDED
 import { Alert } from "../../Utils/Alert";
 import { createResponsiveStyles } from "../../Utils/globalStyles"
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
-import api from '../../api'; // ADDED: January 5, 2026
+import api from '../../api';
 import { validateZipCode } from '../../Services/zipCodeService';
 
 type SignUpBusinessNavProp = StackNavigationProp<
@@ -38,15 +41,19 @@ type SignUpBusinessNavProp = StackNavigationProp<
 const SignUpFormBusinessOwners = () => {
   const navigation = useNavigation<SignUpBusinessNavProp>();
 
-  // Simplified form state - only essential fields
   const [formData, setFormData] = useState({
-    name: "",        // Required
-    email: "",       // Required
-    password: "",    // Required
-    zipCode: "",     // Required
-    city: "",        // Auto-populated (read-only)
-    state: "",       // Auto-populated (read-only)
+    name: "",
+    email: "",
+    password: "",
+    zipCode: "",
+    city: "",
+    state: "",
   });
+
+  // ← ADDED: show/hide toggles
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isLoadingZipData, setIsLoadingZipData] = useState(false);
@@ -55,49 +62,36 @@ const SignUpFormBusinessOwners = () => {
   const handleChange = (field: string, value: string) =>
     setFormData({ ...formData, [field]: value });
 
-  // Auto-populate city and state from zip code
-  // NOTE: This uses external ZIP API, not our backend, so keeping native fetch
- // Auto-populate city and state from zip code
-// UPDATED: January 26, 2026 - Using backend validation to avoid CORS
-const fetchCityStateFromZip = async (zipCode: string) => {
-  if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
-    return;
-  }
-
-  try {
-    setIsLoadingZipData(true);
-    console.log("📍 Validating ZIP code via backend:", zipCode);
-
-    // Use backend validation service (avoids CORS issues)
-    const result = await validateZipCode(zipCode);
-    console.log("📍 ZIP validation result:", result);
-
-    if (result.valid && result.city && result.stateAbbr) {
-      setFormData(prev => ({
-        ...prev,
-        city: result.city || '',
-        state: result.stateAbbr || '',
-      }));
-
-      console.log("✅ Auto-populated city:", result.city, "state:", result.stateAbbr);
-    } else {
-      console.log("❌ ZIP code validation failed:", result.error);
-      // Clear city/state if ZIP is invalid
-      setFormData(prev => ({
-        ...prev,
-        city: '',
-        state: '',
-      }));
+  const fetchCityStateFromZip = async (zipCode: string) => {
+    if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
+      return;
     }
-  } catch (error) {
-    console.error("❌ Error validating ZIP code:", error);
-    // Don't block user - validation will happen on submit
-  } finally {
-    setIsLoadingZipData(false);
-  }
-};
 
-  // Validation functions
+    try {
+      setIsLoadingZipData(true);
+      console.log("📍 Validating ZIP code via backend:", zipCode);
+
+      const result = await validateZipCode(zipCode);
+      console.log("📍 ZIP validation result:", result);
+
+      if (result.valid && result.city && result.stateAbbr) {
+        setFormData(prev => ({
+          ...prev,
+          city: result.city || '',
+          state: result.stateAbbr || '',
+        }));
+        console.log("✅ Auto-populated city:", result.city, "state:", result.stateAbbr);
+      } else {
+        console.log("❌ ZIP code validation failed:", result.error);
+        setFormData(prev => ({ ...prev, city: '', state: '' }));
+      }
+    } catch (error) {
+      console.error("❌ Error validating ZIP code:", error);
+    } finally {
+      setIsLoadingZipData(false);
+    }
+  };
+
   const isValidEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -108,12 +102,7 @@ const fetchCityStateFromZip = async (zipCode: string) => {
     navigation.goBack();
   };
 
-  /**
-   * Handle user registration
-   * UPDATED: January 5, 2026 - Using api.post() instead of fetch
-   */
   const handleRegister = async () => {
-    // Validate required fields
     const requiredFields = ["name", "email", "password", "zipCode"];
 
     for (let field of requiredFields) {
@@ -123,22 +112,19 @@ const fetchCityStateFromZip = async (zipCode: string) => {
       }
     }
 
-    // Validate passwords match
     if (formData.password !== confirmPassword) {
       setPasswordError("Passwords do not match!");
       Alert.alert("Validation Error", "Passwords do not match!");
       return;
     }
 
-    // Validate city and state were auto-populated
-  // Validate city and state were auto-populated
-if (!formData.city || !formData.state) {
-  Alert.alert(
-    "Invalid ZIP Code", 
-    "Please enter a valid 5-digit US ZIP code. The city and state will appear automatically when you enter a valid ZIP."
-  );
-  return;
-}
+    if (!formData.city || !formData.state) {
+      Alert.alert(
+        "Invalid ZIP Code",
+        "Please enter a valid 5-digit US ZIP code. The city and state will appear automatically when you enter a valid ZIP."
+      );
+      return;
+    }
 
     if (!isValidEmail(formData.email)) {
       Alert.alert("Validation Error", "Invalid email format");
@@ -155,8 +141,7 @@ if (!formData.city || !formData.state) {
 
     try {
       console.log("📤 Sending registration request...");
-      
-      // UPDATED: Using api client instead of fetch
+
       const data = await api.post('/business_owners/crud/register', {
         name: formData.name,
         email: formData.email,
@@ -164,7 +149,6 @@ if (!formData.city || !formData.state) {
         city: formData.city,
         state: formData.state,
         zip_code: formData.zipCode,
-        // Optional fields sent as empty/default values
         description: "",
         phone_number: "",
         street: "",
@@ -173,16 +157,14 @@ if (!formData.city || !formData.state) {
 
       console.log("📥 Registration response:", data);
       console.log("✅ Registration successful!");
-      
-      // Show email verification alert
+
       Alert.alert(
-        "Account Created! 📧", 
+        "Account Created! 📧",
         "Please check your email to verify your account. You must verify your email before you can sign in.",
         [
           {
             text: "OK",
             onPress: () => {
-              // Navigate to sign-in screen
               navigation.navigate('SigninBusinessOwners');
             }
           }
@@ -192,15 +174,14 @@ if (!formData.city || !formData.state) {
     } catch (err: any) {
       console.error("❌ Registration error:", err);
       const errorMessage = err.message || "";
-      const isEmailExistsError = 
-        errorMessage.toLowerCase().includes("email") && 
-        (errorMessage.toLowerCase().includes("exist") || 
-         errorMessage.toLowerCase().includes("already") ||
-         errorMessage.toLowerCase().includes("duplicate") ||
-         errorMessage.toLowerCase().includes("taken"));
+      const isEmailExistsError =
+        errorMessage.toLowerCase().includes("email") &&
+        (errorMessage.toLowerCase().includes("exist") ||
+          errorMessage.toLowerCase().includes("already") ||
+          errorMessage.toLowerCase().includes("duplicate") ||
+          errorMessage.toLowerCase().includes("taken"));
 
       if (isEmailExistsError) {
-        console.error("❌ Email already exists");
         Alert.alert(
           "Email Already Registered",
           "This email is already associated with an account. Please use a different email address or try logging in.",
@@ -214,10 +195,7 @@ if (!formData.city || !formData.state) {
 
   return (
     <View style={styles.screen}>
-      <TouchableOpacity 
-        style={styles.cancelButton} 
-        onPress={handleCancel}
-      >
+      <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
         <Text style={styles.cancelButtonText}>Cancel</Text>
       </TouchableOpacity>
 
@@ -247,34 +225,60 @@ if (!formData.city || !formData.state) {
           autoCapitalize="none"
         />
 
-        {/* Password - Required */}
-        <TextInput
-          placeholder="Password *"
-          style={styles.input}
-          value={formData.password}
-          onChangeText={(text) => handleChange("password", text)}
-          secureTextEntry
-        />
+        {/* ── Password with show/hide ── */}
+        <View style={styles.passwordWrapper}>
+          <TextInput
+            placeholder="Password *"
+            style={[styles.input, styles.passwordInput]}
+            value={formData.password}
+            onChangeText={(text) => handleChange("password", text)}
+            secureTextEntry={!showPassword}          // ← CHANGED
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowPassword(prev => !prev)}
+          >
+            <Ionicons
+              name={showPassword ? "eye-off-outline" : "eye-outline"}
+              size={22}
+              color="#999"
+            />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.helperText}>
           Min 8 characters, include uppercase, lowercase, number, and special character
         </Text>
 
-        {/* Confirm Password - Required */}
-        <TextInput
-          placeholder="Confirm Password *"
-          style={[styles.input, passwordError ? styles.inputError : null]}
-          value={confirmPassword}
-          onChangeText={(text) => {
-            setConfirmPassword(text);
-            setPasswordError("");
-          }}
-          secureTextEntry
-        />
+        {/* ── Confirm Password with show/hide ── */}
+        <View style={styles.passwordWrapper}>
+          <TextInput
+            placeholder="Confirm Password *"
+            style={[styles.input, styles.passwordInput, passwordError ? styles.inputError : null]}
+            value={confirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              setPasswordError("");
+            }}
+            secureTextEntry={!showConfirmPassword}   // ← CHANGED
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowConfirmPassword(prev => !prev)}
+          >
+            <Ionicons
+              name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+              size={22}
+              color="#999"
+            />
+          </TouchableOpacity>
+        </View>
+
         {passwordError ? (
           <Text style={styles.errorText}>{passwordError}</Text>
         ) : null}
 
-        {/* Zip Code - Required (triggers city/state auto-fill) */}
+        {/* Zip Code - Required */}
         <View style={styles.zipCodeContainer}>
           <TextInput
             placeholder="Zip Code *"
@@ -290,15 +294,15 @@ if (!formData.city || !formData.state) {
             maxLength={5}
           />
           {isLoadingZipData && (
-            <ActivityIndicator 
-              size="small" 
-              color="green" 
+            <ActivityIndicator
+              size="small"
+              color="green"
               style={styles.zipCodeLoader}
             />
           )}
         </View>
 
-        {/* City - Auto-populated (read-only display) */}
+        {/* City - Auto-populated */}
         {formData.city && (
           <View style={styles.autoFilledContainer}>
             <Text style={styles.autoFilledLabel}>City (auto-filled):</Text>
@@ -306,7 +310,7 @@ if (!formData.city || !formData.state) {
           </View>
         )}
 
-        {/* State - Auto-populated (read-only display) */}
+        {/* State - Auto-populated */}
         {formData.state && (
           <View style={styles.autoFilledContainer}>
             <Text style={styles.autoFilledLabel}>State (auto-filled):</Text>
@@ -314,29 +318,27 @@ if (!formData.city || !formData.state) {
           </View>
         )}
 
-        {/* Submit Button */}
+        {/* Submit */}
         <TouchableOpacity style={styles.button} onPress={handleRegister}>
           <Text style={styles.buttonText}>Create Account</Text>
         </TouchableOpacity>
 
-        <Text style={styles.footerText}>
-          * Required fields
-        </Text>
+        <Text style={styles.footerText}>* Required fields</Text>
       </ScrollView>
     </View>
   );
 };
 
 const styles = createResponsiveStyles({
-  screen: { 
-    flex: 1, 
-    backgroundColor: "#f9f9f9" 
+  screen: {
+    flex: 1,
+    backgroundColor: "#f9f9f9"
   },
-  
-  formContainer: { 
+
+  formContainer: {
     paddingTop: 60,
   },
-  
+
   cancelButton: {
     position: 'absolute',
     top: 40,
@@ -344,13 +346,13 @@ const styles = createResponsiveStyles({
     zIndex: 10,
     padding: 10,
   },
-  
+
   cancelButtonText: {
     color: 'red',
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   title: {
     fontSize: 28,
     fontWeight: "700",
@@ -365,7 +367,7 @@ const styles = createResponsiveStyles({
     textAlign: 'center',
     marginBottom: 24,
   },
-  
+
   input: {
     backgroundColor: "#fff",
     borderRadius: 10,
@@ -405,7 +407,7 @@ const styles = createResponsiveStyles({
     color: '#1b5e20',
     fontWeight: '500',
   },
-  
+
   button: {
     backgroundColor: "#4caf50",
     padding: 16,
@@ -419,11 +421,11 @@ const styles = createResponsiveStyles({
     shadowRadius: 4,
     elevation: 3,
   },
-  
-  buttonText: { 
-    color: "#fff", 
-    fontSize: 18, 
-    fontWeight: "700" 
+
+  buttonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700"
   },
 
   footerText: {
@@ -432,19 +434,19 @@ const styles = createResponsiveStyles({
     textAlign: 'center',
     marginTop: 10,
   },
-  
+
   zipCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     position: 'relative',
     marginBottom: 15,
   },
-  
+
   zipCodeInput: {
     flex: 1,
     marginBottom: 0,
   },
-  
+
   zipCodeLoader: {
     position: 'absolute',
     right: 12,
@@ -455,7 +457,7 @@ const styles = createResponsiveStyles({
     borderColor: '#ef4444',
     borderWidth: 2,
   },
-  
+
   errorText: {
     color: '#ef4444',
     fontSize: 14,
@@ -463,6 +465,23 @@ const styles = createResponsiveStyles({
     marginBottom: 15,
     paddingHorizontal: 5,
     fontWeight: '600',
+  },
+
+  // ← ADDED: password show/hide styles
+  passwordWrapper: {
+    position: 'relative',
+    marginBottom: 15,
+  },
+
+  passwordInput: {
+    marginBottom: 0,       // wrapper provides the margin
+    paddingRight: 50,      // space for eye icon
+  },
+
+  eyeIcon: {
+    position: 'absolute',
+    right: 14,
+    top: 14,
   },
 });
 

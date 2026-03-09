@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   signInIconText: {
-    color: '#FF0000',
-    fontSize: 10,
+    color: '#ffffff',
+    fontSize: 16,
     marginTop: 2,
     fontWeight: '600',
     textAlign: 'center',
