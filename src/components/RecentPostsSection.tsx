@@ -1,9 +1,10 @@
 /**
  * RecentPostsSection.tsx
  *
- * UPDATED March 2026 v3.0:
- * Mini card shows: photo (if available), title, star rating
- * Tap → detail modal shows: all photos, description, Contact Provider button
+ * UPDATED March 2026 v3.1:
+ * Mini card shows: photo (or icon placeholder), title, star rating, location
+ * Card has visible border for better UI separation
+ * Tap → detail modal shows: all photos, description (normalized), Contact Provider button
  */
 
 import React, { useState } from 'react';
@@ -23,6 +24,37 @@ import { Ionicons } from '@expo/vector-icons';
 import { ServicePost } from '../Utils/searchUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ============================================================================
+// HELPERS — category icon + color for placeholder
+// ============================================================================
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const CATEGORY_META: Record<string, { icon: IoniconsName; color: string }> = {
+  'Cleaning':        { icon: 'sparkles',       color: '#4A90E2' },
+  'Catering':        { icon: 'restaurant',      color: '#E67E22' },
+  'Landscaping':     { icon: 'leaf',            color: '#27AE60' },
+  'Dance Lessons':   { icon: 'musical-notes',   color: '#9B59B6' },
+  'Entertainment':   { icon: 'mic',             color: '#E91E63' },
+  'Event Planning':  { icon: 'calendar',        color: '#F39C12' },
+  'Beauty Services': { icon: 'cut',             color: '#D81B60' },
+  'Shoe Repair':     { icon: 'construct',       color: '#795548' },
+  'Plumbing':        { icon: 'water',           color: '#1565C0' },
+  'Electrical':      { icon: 'flash',           color: '#F9A825' },
+  'Home Repair':     { icon: 'hammer',          color: '#6D4C41' },
+  'Pet Care':        { icon: 'paw',             color: '#43A047' },
+  'Moving':          { icon: 'cube',            color: '#546E7A' },
+  'Tutoring':        { icon: 'school',          color: '#1E88E5' },
+  'Photography':     { icon: 'camera',          color: '#8E24AA' },
+  'Tailoring':       { icon: 'color-palette',   color: '#00897B' },
+};
+const DEFAULT_META = { icon: 'briefcase' as IoniconsName, color: '#607D8B' };
+const getCategoryMeta = (cat: string) => CATEGORY_META[cat] ?? DEFAULT_META;
+
+// Normalize description: collapse multiple spaces/newlines into single space, trim
+const normalizeText = (text?: string): string =>
+  (text ?? '').replace(/\s+/g, ' ').trim();
 
 // ============================================================================
 // TYPES
@@ -190,7 +222,7 @@ const DetailModal: React.FC<{
             {item.description ? (
               <View style={modalStyles.descriptionBox}>
                 <Text style={modalStyles.descriptionLabel}>About this service</Text>
-                <Text style={modalStyles.descriptionText}>{item.description}</Text>
+                <Text style={modalStyles.descriptionText}>{normalizeText(item.description)}</Text>
               </View>
             ) : (
               <View style={modalStyles.descriptionBox}>
@@ -235,6 +267,7 @@ const MiniServiceCard: React.FC<{
 }> = ({ item, isOwnPost, onChatPress }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
+  const { icon, color } = getCategoryMeta(item.service_category);
 
   return (
     <>
@@ -243,19 +276,34 @@ const MiniServiceCard: React.FC<{
         onPress={() => setModalVisible(true)}
         activeOpacity={0.80}
       >
-        {/* Photo — only shown if available */}
-        {firstPhoto && (
+        {/* Photo — real photo OR icon placeholder */}
+        {firstPhoto ? (
           <Image
             source={{ uri: firstPhoto }}
             style={miniStyles.thumbnail}
             resizeMode="cover"
           />
+        ) : (
+          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color + '18' }]}>
+            <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
+              <Ionicons name={icon} size={22} color="#fff" />
+            </View>
+          </View>
         )}
 
         {/* Text content */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
           <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+          {/* Location */}
+          {item.city && item.state && (
+            <View style={miniStyles.locationRow}>
+              <Ionicons name="location-outline" size={10} color="#aaa" />
+              <Text style={miniStyles.locationText} numberOfLines={1}>
+                {' '}{item.city}, {item.state}
+              </Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
 
@@ -282,12 +330,24 @@ const miniStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderWidth: 1.5,              // ← visible border
+    borderColor: '#e0e8f4',        // ← soft blue-grey border
   },
   thumbnail: {
     width: '100%',
     height: 90,
+  },
+  placeholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f4fa',
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     padding: 8,
@@ -302,11 +362,21 @@ const miniStyles = StyleSheet.create({
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 3,
   },
   ratingCount: {
     fontSize: 9,
     color: '#aaa',
     marginLeft: 2,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  locationText: {
+    fontSize: 10,
+    color: '#aaa',
   },
 });
 
