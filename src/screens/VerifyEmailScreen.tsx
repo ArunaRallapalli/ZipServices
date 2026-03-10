@@ -152,9 +152,17 @@ useEffect(() => {
   /**
    * Navigate to sign in
    */
-  const handleGoToSignIn = () => {
-    navigation.navigate('SigninBusinessOwners' as never);
-  };
+  
+// AFTER — resets stack so TabWrapperScreen is behind SignIn
+const handleGoToSignIn = () => {
+  navigation.reset({
+    index: 1,
+    routes: [
+      { name: 'TabWrapperScreen' as never },
+      { name: 'SigninBusinessOwners' as never },
+    ],
+  });
+};
 
   /**
    * Request new verification email

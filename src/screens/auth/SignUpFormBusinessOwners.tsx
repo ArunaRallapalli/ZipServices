@@ -98,9 +98,13 @@ const SignUpFormBusinessOwners = () => {
   const isStrongPassword = (password: string) =>
     /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/.test(password);
 
-  const handleCancel = () => {
+const handleCancel = () => {
+  if (navigation.canGoBack()) {
     navigation.goBack();
-  };
+  } else {
+    navigation.navigate('SigninBusinessOwners'); // fallback when no history
+  }
+};
 
   const handleRegister = async () => {
     const requiredFields = ["name", "email", "password", "zipCode"];

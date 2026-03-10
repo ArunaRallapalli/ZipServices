@@ -489,11 +489,17 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.topBar}>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            disabled={loading}
-            style={styles.cancelButton}
-          >
+         <TouchableOpacity
+  onPress={() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('TabWrapperScreen');
+    }
+  }}
+  disabled={loading}
+  style={styles.cancelButton}
+>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
