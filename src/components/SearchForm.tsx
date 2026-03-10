@@ -101,8 +101,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
   return (
     <View style={styles.searchSection}>
       <Text style={styles.subtitleText}>
-        Connect with service providers in your Area
-      </Text>
+        </Text>
 
       {/* ── Single row: Category | ZIP | Search ── */}
       <View style={styles.searchRow}>
