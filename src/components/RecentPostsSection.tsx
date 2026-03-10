@@ -1,10 +1,11 @@
 /**
  * RecentPostsSection.tsx
  *
- * UPDATED March 2026:
- * - 2-column mini card grid (photo/placeholder, title, category, stars, location)
- * - Tap any mini card → Modal slides up showing full ServiceCard
- * - No navigation to separate screen needed — ServiceCard has everything
+ * UPDATED March 2026 v2.2:
+ * - Clean icon placeholder (no more letter initials)
+ * - Category pill overlaid on thumbnail
+ * - Smaller, more compact cards
+ * - Tap → Modal with full ServiceCard
  */
 
 import React, { useState } from 'react';
@@ -35,22 +36,32 @@ interface RecentPostsSectionProps {
 }
 
 // ============================================================================
-// HELPERS
+// HELPERS — icon + color per category (no initials)
 // ============================================================================
 
-const CATEGORY_COLORS: Record<string, string> = {
-  "Cleaning":        "#4A90E2",
-  "Catering":        "#E67E22",
-  "Landscaping":     "#27AE60",
-  "Dance Lessons":   "#9B59B6",
-  "Entertainment":   "#E91E63",
-  "Event Planning":  "#F39C12",
-  "Beauty Services": "#E91E8C",
-  "Shoe Repair":     "#795548",
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
+const CATEGORY_META: Record<string, { icon: IoniconsName; color: string }> = {
+  "Cleaning":        { icon: "sparkles",              color: "#4A90E2" },
+  "Catering":        { icon: "restaurant",             color: "#E67E22" },
+  "Landscaping":     { icon: "leaf",                   color: "#27AE60" },
+  "Dance Lessons":   { icon: "musical-notes",          color: "#9B59B6" },
+  "Entertainment":   { icon: "mic",                    color: "#E91E63" },
+  "Event Planning":  { icon: "calendar",               color: "#F39C12" },
+  "Beauty Services": { icon: "cut",                    color: "#D81B60" },
+  "Shoe Repair":     { icon: "construct",              color: "#795548" },
+  "Plumbing":        { icon: "water",                  color: "#1565C0" },
+  "Electrical":      { icon: "flash",                  color: "#F9A825" },
+  "Home Repair":     { icon: "hammer",                 color: "#6D4C41" },
+  "Pet Care":        { icon: "paw",                    color: "#43A047" },
+  "Moving":          { icon: "cube",                   color: "#546E7A" },
+  "Tutoring":        { icon: "school",                 color: "#1E88E5" },
+  "Photography":     { icon: "camera",                 color: "#8E24AA" },
+  "Tailoring":       { icon: "color-palette",          color: "#00897B" },
 };
-const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "#607D8B";
-const initials = (cat: string) =>
-  cat.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+
+const DEFAULT_META = { icon: "briefcase" as IoniconsName, color: "#607D8B" };
+const getCategoryMeta = (cat: string) => CATEGORY_META[cat] ?? DEFAULT_META;
 
 // ============================================================================
 // MINI STARS
@@ -62,7 +73,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
       <Ionicons
         key={s}
         name={rating >= s ? "star" : rating >= s - 0.5 ? "star-half" : "star-outline"}
-        size={11}
+        size={10}
         color="#FFA500"
       />
     ))}
@@ -73,7 +84,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
 );
 
 // ============================================================================
-// MINI CARD  — tap opens Modal with full ServiceCard
+// MINI CARD
 // ============================================================================
 
 const MiniServiceCard: React.FC<{
@@ -83,33 +94,40 @@ const MiniServiceCard: React.FC<{
 }> = ({ item, isOwnPost, onChatPress }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
-  const color = categoryColor(item.service_category);
+  const { icon, color } = getCategoryMeta(item.service_category);
 
   return (
     <>
-      {/* ── Mini card (tap to open modal) ── */}
       <TouchableOpacity
         style={miniStyles.card}
         onPress={() => setModalVisible(true)}
-        activeOpacity={0.82}
+        activeOpacity={0.80}
       >
-        {/* Photo or colored placeholder */}
+        {/* ── Thumbnail: real photo OR icon placeholder ── */}
         {firstPhoto ? (
           <Image source={{ uri: firstPhoto }} style={miniStyles.thumbnail} resizeMode="cover" />
         ) : (
-          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color }]}>
-            <Text style={miniStyles.placeholderText}>{initials(item.service_category)}</Text>
+          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color + "18" }]}>
+            <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
+              <Ionicons name={icon} size={22} color="#fff" />
+            </View>
           </View>
         )}
 
-        {/* Text */}
+        {/* ── Category pill overlaid at bottom of thumbnail ── */}
+        <View style={[miniStyles.categoryPill, { backgroundColor: color }]}>
+          <Text style={miniStyles.categoryPillText} numberOfLines={1}>
+            {item.service_category}
+          </Text>
+        </View>
+
+        {/* ── Text content ── */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
-          <Text style={miniStyles.category} numberOfLines={1}>{item.service_category}</Text>
           <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
-              <Ionicons name="location-outline" size={11} color="#888" />
+              <Ionicons name="location-outline" size={10} color="#aaa" />
               <Text style={miniStyles.locationText} numberOfLines={1}>
                 {" "}{item.city}, {item.state}
               </Text>
@@ -118,7 +136,7 @@ const MiniServiceCard: React.FC<{
         </View>
       </TouchableOpacity>
 
-      {/* ── Full detail Modal with ServiceCard ── */}
+      {/* ── Full detail Modal ── */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -126,30 +144,19 @@ const MiniServiceCard: React.FC<{
         onRequestClose={() => setModalVisible(false)}
       >
         <SafeAreaView style={modalStyles.safeArea}>
-          {/* Modal header with close button */}
           <View style={modalStyles.header}>
-            <Text style={modalStyles.headerTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <TouchableOpacity
-              onPress={() => setModalVisible(false)}
-              style={modalStyles.closeBtn}
-            >
+            <Text style={modalStyles.headerTitle} numberOfLines={1}>{item.title}</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.closeBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
           </View>
-
-          {/* ServiceCard inside scrollview — has everything */}
-          <ScrollView
-            contentContainerStyle={modalStyles.body}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
             <ServiceCard
               item={item}
               isOwnPost={isOwnPost}
               onChatPress={(item) => {
-                setModalVisible(false);       // close modal first
-                setTimeout(() => onChatPress(item), 300); // then open chat
+                setModalVisible(false);
+                setTimeout(() => onChatPress(item), 300);
               }}
             />
           </ScrollView>
@@ -162,62 +169,96 @@ const MiniServiceCard: React.FC<{
 const miniStyles = StyleSheet.create({
   card: {
     flex: 1,
-    margin: 6,
+    margin: 5,
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e8e8e8",
+    borderRadius: 12,
     overflow: "hidden",
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
-  thumbnail: { width: "100%", height: 80 },
-  placeholder: { justifyContent: "center", alignItems: "center" },
-  placeholderText: { color: "#fff", fontSize: 22, fontWeight: "800", letterSpacing: 1 },
-  content: { padding: 8 },
-  title: { fontSize: 13, fontWeight: "700", color: "#222", lineHeight: 17, marginBottom: 3 },
-  category: { fontSize: 11, color: "#4A90E2", fontWeight: "600", marginBottom: 4 },
-  starsRow: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
-  ratingCount: { fontSize: 10, color: "#888", marginLeft: 2 },
-  locationRow: { flexDirection: "row", alignItems: "center" },
-  locationText: { fontSize: 11, color: "#888" },
+  thumbnail: {
+    width: "100%",
+    height: 90,
+  },
+  placeholder: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  categoryPill: {
+    position: "absolute",
+    top: 70,
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  categoryPillText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  content: {
+    padding: 8,
+    paddingTop: 12,
+  },
+  title: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  starsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 3,
+  },
+  ratingCount: {
+    fontSize: 9,
+    color: "#aaa",
+    marginLeft: 2,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  locationText: {
+    fontSize: 10,
+    color: "#aaa",
+  },
 });
 
 const modalStyles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
+  safeArea: { flex: 1, backgroundColor: "#f5f5f5" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#222",
-    marginRight: 8,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  body: {
-    padding: 16,
-    paddingBottom: 40,
-  },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#222", marginRight: 8 },
+  closeBtn: { padding: 4 },
+  body: { padding: 16, paddingBottom: 40 },
 });
 
 // ============================================================================
-// MAIN COMPONENT  (structure unchanged)
+// MAIN COMPONENT
 // ============================================================================
 
 const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
@@ -250,14 +291,12 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   return (
     <View style={styles.outerContainer}>
 
-      {/* Now Available — unchanged */}
       <View style={styles.nowAvailableRow}>
         <View style={styles.nowAvailableDot} />
         <Text style={styles.nowAvailableText}>NOW AVAILABLE</Text>
         <View style={styles.nowAvailableDot} />
       </View>
 
-      {/* Section header — unchanged */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Recently Posted Services</Text>
         <View style={styles.newBadge}>
@@ -268,7 +307,6 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
         Tap a card to view full details & contact provider
       </Text>
 
-      {/* 2-column grid */}
       <View style={styles.gridContainer}>
         {recentPosts.map((post, i) => (
           <View key={post.post_id ?? i} style={styles.gridItem}>
@@ -281,7 +319,6 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
         ))}
       </View>
 
-      {/* Nudge — unchanged */}
       <View style={styles.nudgeContainer}>
         <Ionicons name="search" size={15} color="#4A90E2" />
         <Text style={styles.nudgeText}>
@@ -296,52 +333,39 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
 };
 
 // ============================================================================
-// STYLES  (all original styles kept; grid styles added)
+// STYLES
 // ============================================================================
 
 const styles = StyleSheet.create({
   loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 28,
-    backgroundColor: '#ffffff',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 28, backgroundColor: '#ffffff',
   },
   loadingText: { fontSize: 14, color: '#888', marginLeft: 10 },
-
   emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 30,
-    backgroundColor: '#ffffff',
+    alignItems: 'center', paddingVertical: 40, paddingHorizontal: 30, backgroundColor: '#ffffff',
   },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#999', marginTop: 14 },
   emptySubtitle: { fontSize: 13, color: '#bbb', textAlign: 'center', marginTop: 6, lineHeight: 19 },
-
   outerContainer: {
     backgroundColor: '#f5f5f5',
     paddingHorizontal: 9,
     paddingTop: 22,
     paddingBottom: 30,
   },
-
   nowAvailableRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     marginBottom: 12, gap: 8,
   },
   nowAvailableDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4CAF50' },
   nowAvailableText: { fontSize: 13, fontWeight: '800', color: '#4CAF50', letterSpacing: 2 },
-
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#222' },
   newBadge: { backgroundColor: '#E53935', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   newBadgeText: { fontSize: 11, color: '#fff', fontWeight: '700', letterSpacing: 0.5 },
   sectionSubtitle: { fontSize: 12, color: '#888', marginBottom: 12 },
-
-  // 2-column grid
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 },
   gridItem: { width: '50%' },
-
   nudgeContainer: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: '#F0F7FF', borderRadius: 10, padding: 12, marginTop: 8,

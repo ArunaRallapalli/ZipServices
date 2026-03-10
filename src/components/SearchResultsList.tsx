@@ -2,11 +2,12 @@
  * SearchResultsList.tsx
  *
  * @updated March 2026
- * @version 2.5.0
+ * @version 2.6.0
  *
  * 2-column mini card grid.
- * Tap any card → Modal slides up showing full ServiceCard (photos, zoom, stars, contact).
- * No navigation or ServiceDetailScreen needed.
+ * - Real photo if available, clean icon placeholder if not
+ * - Compact cards with better visual design
+ * - Tap → Modal with full ServiceCard
  */
 
 import React, { useState } from "react";
@@ -72,24 +73,33 @@ interface SearchResultsListProps {
 }
 
 // ============================================================================
-// HELPERS
+// HELPERS — category icon + color (no initials)
 // ============================================================================
 
-const CATEGORY_COLORS: Record<string, string> = {
-  "Cleaning":        "#4A90E2",
-  "Catering":        "#E67E22",
-  "Landscaping":     "#27AE60",
-  "Dance Lessons":   "#9B59B6",
-  "Entertainment":   "#E91E63",
-  "Event Planning":  "#F39C12",
-  "Beauty Services": "#E91E8C",
-  "Shoe Repair":     "#795548",
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
+const CATEGORY_META: Record<string, { icon: IoniconsName; color: string }> = {
+  "Cleaning":        { icon: "sparkles",              color: "#4A90E2" },
+  "Catering":        { icon: "restaurant",             color: "#E67E22" },
+  "Landscaping":     { icon: "leaf",                   color: "#27AE60" },
+  "Dance Lessons":   { icon: "musical-notes",          color: "#9B59B6" },
+  "Entertainment":   { icon: "mic",                    color: "#E91E63" },
+  "Event Planning":  { icon: "calendar",               color: "#F39C12" },
+  "Beauty Services": { icon: "cut",                    color: "#D81B60" },
+  "Shoe Repair":     { icon: "construct",              color: "#795548" },
+  "Plumbing":        { icon: "water",                  color: "#1565C0" },
+  "Electrical":      { icon: "flash",                  color: "#F9A825" },
+  "Home Repair":     { icon: "hammer",                 color: "#6D4C41" },
+  "Pet Care":        { icon: "paw",                    color: "#43A047" },
+  "Moving":          { icon: "cube",                   color: "#546E7A" },
+  "Tutoring":        { icon: "school",                 color: "#1E88E5" },
+  "Photography":     { icon: "camera",                 color: "#8E24AA" },
+  "Tailoring":       { icon: "color-palette",          color: "#00897B" },
 };
 
-const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "#607D8B";
+const DEFAULT_META = { icon: "briefcase" as IoniconsName, color: "#607D8B" };
 
-const initials = (cat: string) =>
-  cat.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+const getCategoryMeta = (cat: string) => CATEGORY_META[cat] ?? DEFAULT_META;
 
 // ============================================================================
 // MINI STARS
@@ -101,7 +111,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
       <Ionicons
         key={s}
         name={rating >= s ? "star" : rating >= s - 0.5 ? "star-half" : "star-outline"}
-        size={11}
+        size={10}
         color="#FFA500"
       />
     ))}
@@ -112,7 +122,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
 );
 
 // ============================================================================
-// MINI SERVICE CARD — tap opens Modal with full ServiceCard
+// MINI SERVICE CARD
 // ============================================================================
 
 const MiniServiceCard: React.FC<{
@@ -122,37 +132,40 @@ const MiniServiceCard: React.FC<{
 }> = ({ item, isOwnPost, onChatPress }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
-  const color = categoryColor(item.service_category);
+  const { icon, color } = getCategoryMeta(item.service_category);
 
   return (
     <>
-      {/* ── Mini card ── */}
       <TouchableOpacity
         style={miniStyles.card}
         onPress={() => setModalVisible(true)}
-        activeOpacity={0.82}
+        activeOpacity={0.80}
       >
-        {/* Photo or colored placeholder */}
+        {/* ── Thumbnail: real photo OR clean icon placeholder ── */}
         {firstPhoto ? (
-          <Image
-            source={{ uri: firstPhoto }}
-            style={miniStyles.thumbnail}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: firstPhoto }} style={miniStyles.thumbnail} resizeMode="cover" />
         ) : (
-          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color }]}>
-            <Text style={miniStyles.placeholderText}>{initials(item.service_category)}</Text>
+          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color + "22" }]}>
+            <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
+              <Ionicons name={icon} size={22} color="#fff" />
+            </View>
           </View>
         )}
 
-        {/* Text */}
+        {/* ── Category pill overlaid on bottom of thumbnail ── */}
+        <View style={[miniStyles.categoryPill, { backgroundColor: color }]}>
+          <Text style={miniStyles.categoryPillText} numberOfLines={1}>
+            {item.service_category}
+          </Text>
+        </View>
+
+        {/* ── Text content ── */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
-          <Text style={miniStyles.category} numberOfLines={1}>{item.service_category}</Text>
           <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
-              <Ionicons name="location-outline" size={11} color="#888" />
+              <Ionicons name="location-outline" size={10} color="#aaa" />
               <Text style={miniStyles.locationText} numberOfLines={1}>
                 {" "}{item.city}, {item.state}
               </Text>
@@ -161,7 +174,7 @@ const MiniServiceCard: React.FC<{
         </View>
       </TouchableOpacity>
 
-      {/* ── Full detail Modal with ServiceCard ── */}
+      {/* ── Full detail Modal ── */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -169,24 +182,13 @@ const MiniServiceCard: React.FC<{
         onRequestClose={() => setModalVisible(false)}
       >
         <SafeAreaView style={modalStyles.safeArea}>
-          {/* Header with close button */}
           <View style={modalStyles.header}>
-            <Text style={modalStyles.headerTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <TouchableOpacity
-              onPress={() => setModalVisible(false)}
-              style={modalStyles.closeBtn}
-            >
+            <Text style={modalStyles.headerTitle} numberOfLines={1}>{item.title}</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.closeBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
           </View>
-
-          {/* ServiceCard — handles photos, zoom, stars, reviews, contact */}
-          <ScrollView
-            contentContainerStyle={modalStyles.body}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
             <ServiceCard
               item={item}
               isOwnPost={isOwnPost}
@@ -205,46 +207,63 @@ const MiniServiceCard: React.FC<{
 const miniStyles = StyleSheet.create({
   card: {
     flex: 1,
-    margin: 6,
+    margin: 5,
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e8e8e8",
+    borderRadius: 12,
     overflow: "hidden",
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
+
+  // ── Thumbnail ──
   thumbnail: {
     width: "100%",
-    height: 80,
+    height: 90,
   },
   placeholder: {
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f8f8f8",
   },
-  placeholderText: {
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // ── Category pill overlaid on image ──
+  categoryPill: {
+    position: "absolute",
+    top: 70,                  // sits at bottom of thumbnail
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  categoryPillText: {
     color: "#fff",
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: 1,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
+
+  // ── Text area ──
   content: {
     padding: 8,
+    paddingTop: 12,           // extra top padding so pill doesn't overlap
   },
   title: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#222",
-    lineHeight: 17,
-    marginBottom: 3,
-  },
-  category: {
-    fontSize: 11,
-    color: "#4A90E2",
-    fontWeight: "600",
+    color: "#1a1a1a",
+    lineHeight: 16,
     marginBottom: 4,
   },
   starsRow: {
@@ -253,8 +272,8 @@ const miniStyles = StyleSheet.create({
     marginBottom: 3,
   },
   ratingCount: {
-    fontSize: 10,
-    color: "#888",
+    fontSize: 9,
+    color: "#aaa",
     marginLeft: 2,
   },
   locationRow: {
@@ -262,39 +281,25 @@ const miniStyles = StyleSheet.create({
     alignItems: "center",
   },
   locationText: {
-    fontSize: 11,
-    color: "#888",
+    fontSize: 10,
+    color: "#aaa",
   },
 });
 
 const modalStyles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
+  safeArea: { flex: 1, backgroundColor: "#f5f5f5" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#222",
-    marginRight: 8,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  body: {
-    padding: 16,
-    paddingBottom: 40,
-  },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#222", marginRight: 8 },
+  closeBtn: { padding: 4 },
+  body: { padding: 16, paddingBottom: 40 },
 });
 
 // ============================================================================
@@ -328,7 +333,6 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   );
 
   const renderContent = () => {
-    // ── No results ──────────────────────────────────────────────────────────
     if (!hasResults) {
       return (
         <View style={styles.noResultsContainer}>
@@ -336,16 +340,14 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
           <Text style={styles.noResultsText}>No services found</Text>
           <Text style={styles.noResultsSubtext}>
             No services found within 25 miles of {zipCode}.{"\n"}
-            Try searching in a nearby city or check back later for new listings.
+            Try searching in a nearby city or check back later.
           </Text>
         </View>
       );
     }
 
-    // ── Results ─────────────────────────────────────────────────────────────
     return (
       <>
-        {/* Result count + distance banner */}
         <View style={styles.resultsInfoContainer}>
           <Ionicons name="location" size={20} color="#4CAF50" />
           <View style={styles.resultsInfoTextContainer}>
@@ -364,7 +366,6 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 
         <Text style={styles.tapHint}>Tap a card to view full details & contact</Text>
 
-        {/* 2-column grid */}
         <View style={styles.gridContainer}>
           {allResults.map((item) => (
             <View key={item.post_id} style={styles.gridItem}>
@@ -398,16 +399,8 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 // ============================================================================
 
 const styles = createResponsiveStyles({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  resultsScrollContainer: {
-    flexGrow: 1,
-    paddingHorizontal: 8,
-    paddingTop: 16,
-    paddingBottom: 30,
-  },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  resultsScrollContainer: { flexGrow: 1, paddingHorizontal: 8, paddingTop: 16, paddingBottom: 30 },
   resultsHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -417,19 +410,9 @@ const styles = createResponsiveStyles({
     paddingHorizontal: 20,
     paddingTop: 60,
   },
-  backButton: {
-    padding: 8,
-  },
-  resultsTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#ffffff",
-    flex: 1,
-    textAlign: "center",
-  },
-  placeholder: {
-    width: 40,
-  },
+  backButton: { padding: 8 },
+  resultsTitle: { fontSize: 22, fontWeight: "bold", color: "#ffffff", flex: 1, textAlign: "center" },
+  placeholder: { width: 40 },
   resultsInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -440,80 +423,23 @@ const styles = createResponsiveStyles({
     borderLeftWidth: 4,
     borderLeftColor: "#4CAF50",
   },
-  resultsInfoTextContainer: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  resultsInfoText: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  resultsDistanceText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-  },
-  tapHint: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    fontStyle: "italic",
-    marginBottom: 10,
-  },
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-  },
-  gridItem: {
-    width: "50%",
-  },
-  // kept for legacy references
-  serviceCardContainer: {
-    marginBottom: 20,
-  },
+  resultsInfoTextContainer: { flex: 1, marginLeft: 10 },
+  resultsInfoText: { fontSize: 14, color: "#333", fontWeight: "600", marginBottom: 2 },
+  resultsDistanceText: { fontSize: 12, color: "#666", fontWeight: "500" },
+  tapHint: { fontSize: 12, color: "#999", textAlign: "center", fontStyle: "italic", marginBottom: 10 },
+  gridContainer: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -5 },
+  gridItem: { width: "50%" },
+  serviceCardContainer: { marginBottom: 20 },
   distanceIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E3F2FD",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    marginTop: -8,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
-    borderBottomWidth: 3,
-    borderColor: "#4A90E2",
+    flexDirection: "row", alignItems: "center", backgroundColor: "#E3F2FD",
+    paddingVertical: 8, paddingHorizontal: 12, borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8, marginTop: -8,
+    borderLeftWidth: 3, borderRightWidth: 3, borderBottomWidth: 3, borderColor: "#4A90E2",
   },
-  distanceText: {
-    fontSize: 13,
-    color: "#4A90E2",
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  noResultsContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  noResultsText: {
-    marginTop: 20,
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#666",
-    textAlign: "center",
-  },
-  noResultsSubtext: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
-    lineHeight: 22,
-  },
+  distanceText: { fontSize: 13, color: "#4A90E2", fontWeight: "600", marginLeft: 6 },
+  noResultsContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 20 },
+  noResultsText: { marginTop: 20, fontSize: 18, fontWeight: "600", color: "#666", textAlign: "center" },
+  noResultsSubtext: { marginTop: 12, fontSize: 14, color: "#999", textAlign: "center", lineHeight: 22 },
 });
 
 export default SearchResultsList;
