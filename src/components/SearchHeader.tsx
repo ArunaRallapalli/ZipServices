@@ -38,9 +38,8 @@ const SearchHeader: React.FC<SearchHeaderProps> = ({
 
       {/* Compact subtitle */}
       <Text style={styles.subtitle}>
-        "Looking for local services or want to promote your business?{' '}
-        <Text style={styles.subtitleLink}>Welcome to Gozipmarket.com</Text>
-        {' '}— your local services marketplace."
+       <Text style={styles.subtitleLink}>Welcome to Gozipmarket.com</Text>
+        {' '}— your local services marketplace.
       </Text>
 
       {/* Authenticated welcome badge */}
