@@ -330,7 +330,7 @@ const MiniServiceCard: React.FC<{
           <Image
             source={{ uri: firstPhoto }}
             style={miniStyles.thumbnail}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         ) : (
           <View style={miniStyles.placeholder}>
@@ -384,12 +384,12 @@ const miniStyles = StyleSheet.create({
   },
   thumbnail: {
     width: '100%',
-    aspectRatio: 4 / 3,          // full image, no cropping
+    height: 110,                   // fixed compact height
     backgroundColor: '#f0f4fa',
   },
   placeholder: {
     width: '100%',
-    aspectRatio: 4 / 3,
+    height: 110,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f4fa',
@@ -459,18 +459,18 @@ const modalStyles = StyleSheet.create({
   body: { paddingBottom: 40 },
 
   // Photos
-  photosSection: { backgroundColor: '#f0f0f0' },
+  photosSection: { backgroundColor: '#f5f5f5' },
 
   // Compact photo (fixed height so description is always visible)
   compactPhotoWrapper: {
     width: '100%',
-    height: 180,                   // ← fixed compact height
+    height: 200,
     position: 'relative',
-    backgroundColor: '#000',
+    backgroundColor: '#f5f5f5',
   },
   compactPhoto: {
     width: '100%',
-    height: 180,
+    height: 200,
   },
   zoomHint: {
     position: 'absolute',
@@ -524,9 +524,9 @@ const modalStyles = StyleSheet.create({
   },
   photoCounterText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   thumbStrip: {
-    backgroundColor: '#111',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    backgroundColor: '#f0f0f0',    // light grey, not black
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
   },
   thumb: {
     marginRight: 6,
