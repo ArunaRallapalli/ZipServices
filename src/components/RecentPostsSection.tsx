@@ -122,12 +122,22 @@ const DetailModal: React.FC<{
           {/* ── Photos ── */}
           {photos.length > 0 && (
             <View style={modalStyles.photosSection}>
-              {/* Main photo */}
-              <Image
-                source={{ uri: photos[photoIndex] }}
-                style={modalStyles.mainPhoto}
-                resizeMode="cover"
-              />
+              {/* Main photo with pinch-to-zoom */}
+              <ScrollView
+                style={modalStyles.photoZoomScroll}
+                contentContainerStyle={modalStyles.photoZoomContent}
+                maximumZoomScale={3}
+                minimumZoomScale={1}
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+                bouncesZoom={true}
+              >
+                <Image
+                  source={{ uri: photos[photoIndex] }}
+                  style={modalStyles.mainPhoto}
+                  resizeMode="contain"
+                />
+              </ScrollView>
 
               {/* Counter */}
               {photos.length > 1 && (
@@ -154,7 +164,7 @@ const DetailModal: React.FC<{
                         i === photoIndex && modalStyles.thumbActive,
                       ]}
                     >
-                      <Image source={{ uri }} style={modalStyles.thumbImage} resizeMode="cover" />
+                      <Image source={{ uri }} style={modalStyles.thumbImage} resizeMode="contain" />
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -281,10 +291,10 @@ const MiniServiceCard: React.FC<{
           <Image
             source={{ uri: firstPhoto }}
             style={miniStyles.thumbnail}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         ) : (
-          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color + '18' }]}>
+          <View style={miniStyles.placeholder}>
             <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
               <Ionicons name={icon} size={22} color="#fff" />
             </View>
@@ -298,7 +308,7 @@ const MiniServiceCard: React.FC<{
           {/* Location */}
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
-              <Ionicons name="location-outline" size={10} color="#aaa" />
+              <Ionicons name="location-outline" size={10} color="#4A90E2" />
               <Text style={miniStyles.locationText} numberOfLines={1}>
                 {' '}{item.city}, {item.state}
               </Text>
@@ -335,9 +345,12 @@ const miniStyles = StyleSheet.create({
   },
   thumbnail: {
     width: '100%',
-    height: 90,
+    aspectRatio: 4 / 3,          // full image, no cropping
+    backgroundColor: '#f0f4fa',
   },
   placeholder: {
+    width: '100%',
+    aspectRatio: 4 / 3,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f4fa',
@@ -376,7 +389,8 @@ const miniStyles = StyleSheet.create({
   },
   locationText: {
     fontSize: 10,
-    color: '#aaa',
+    color: '#4A90E2',            // ← blue
+    fontWeight: '700',           // ← bold
   },
 });
 
@@ -406,10 +420,18 @@ const modalStyles = StyleSheet.create({
   body: { paddingBottom: 40 },
 
   // Photos
-  photosSection: { backgroundColor: '#000' },
+  photosSection: { backgroundColor: '#f0f0f0' },
+  photoZoomScroll: {
+    width: SCREEN_WIDTH,
+    backgroundColor: '#f0f0f0',
+  },
+  photoZoomContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mainPhoto: {
     width: SCREEN_WIDTH,
-    height: 240,
+    aspectRatio: 4 / 3,          // full image, no cropping
   },
   photoCounter: {
     position: 'absolute',
