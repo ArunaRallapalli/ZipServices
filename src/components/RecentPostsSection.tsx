@@ -99,6 +99,7 @@ const DetailModal: React.FC<{
   onChatPress: (item: ServicePost) => void;
 }> = ({ item, visible, isOwnPost, onClose, onChatPress }) => {
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [zoomVisible, setZoomVisible] = useState(false);
   const photos = item.photos ?? [];
 
   return (
@@ -122,55 +123,93 @@ const DetailModal: React.FC<{
           {/* ── Photos ── */}
           {photos.length > 0 && (
             <View style={modalStyles.photosSection}>
-              {/* Main photo with pinch-to-zoom */}
-              <ScrollView
-                style={modalStyles.photoZoomScroll}
-                contentContainerStyle={modalStyles.photoZoomContent}
-                maximumZoomScale={3}
-                minimumZoomScale={1}
-                showsVerticalScrollIndicator={false}
-                showsHorizontalScrollIndicator={false}
-                bouncesZoom={true}
+
+              {/* Compact fixed-height photo */}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setZoomVisible(true)}
+                style={modalStyles.compactPhotoWrapper}
               >
                 <Image
                   source={{ uri: photos[photoIndex] }}
-                  style={modalStyles.mainPhoto}
-                  resizeMode="contain"
+                  style={modalStyles.compactPhoto}
+                  resizeMode="cover"
                 />
-              </ScrollView>
-
-              {/* Counter */}
-              {photos.length > 1 && (
-                <View style={modalStyles.photoCounter}>
-                  <Text style={modalStyles.photoCounterText}>
-                    {photoIndex + 1} / {photos.length}
-                  </Text>
+                {/* Zoom hint overlay */}
+                <View style={modalStyles.zoomHint}>
+                  <Ionicons name="expand-outline" size={16} color="#fff" />
+                  <Text style={modalStyles.zoomHintText}>Tap to zoom</Text>
                 </View>
-              )}
+                {/* Counter */}
+                {photos.length > 1 && (
+                  <View style={modalStyles.photoCounter}>
+                    <Text style={modalStyles.photoCounterText}>
+                      {photoIndex + 1} / {photos.length}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
 
-              {/* Thumbnail strip for multiple photos */}
+              {/* Thumbnail strip */}
               {photos.length > 1 && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   style={modalStyles.thumbStrip}
+                  contentContainerStyle={{ paddingHorizontal: 8, paddingVertical: 6 }}
                 >
                   {photos.map((uri, i) => (
                     <TouchableOpacity
                       key={i}
                       onPress={() => setPhotoIndex(i)}
-                      style={[
-                        modalStyles.thumb,
-                        i === photoIndex && modalStyles.thumbActive,
-                      ]}
+                      style={[modalStyles.thumb, i === photoIndex && modalStyles.thumbActive]}
                     >
-                      <Image source={{ uri }} style={modalStyles.thumbImage} resizeMode="contain" />
+                      <Image source={{ uri }} style={modalStyles.thumbImage} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               )}
             </View>
           )}
+
+          {/* ── Full-screen zoom modal ── */}
+          <Modal
+            visible={zoomVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setZoomVisible(false)}
+          >
+            <View style={modalStyles.zoomOverlay}>
+              <TouchableOpacity
+                style={modalStyles.zoomClose}
+                onPress={() => setZoomVisible(false)}
+              >
+                <Ionicons name="close-circle" size={36} color="#fff" />
+              </TouchableOpacity>
+              <ScrollView
+                style={{ width: SCREEN_WIDTH }}
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+                maximumZoomScale={4}
+                minimumZoomScale={1}
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+                bouncesZoom
+              >
+                <Image
+                  source={{ uri: photos[photoIndex] }}
+                  style={{ width: SCREEN_WIDTH, aspectRatio: 4 / 3 }}
+                  resizeMode="contain"
+                />
+              </ScrollView>
+              {photos.length > 1 && (
+                <View style={modalStyles.zoomCounter}>
+                  <Text style={modalStyles.zoomCounterText}>
+                    {photoIndex + 1} / {photos.length}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Modal>
 
           {/* ── Service info ── */}
           <View style={modalStyles.infoSection}>
@@ -421,18 +460,59 @@ const modalStyles = StyleSheet.create({
 
   // Photos
   photosSection: { backgroundColor: '#f0f0f0' },
-  photoZoomScroll: {
-    width: SCREEN_WIDTH,
-    backgroundColor: '#f0f0f0',
+
+  // Compact photo (fixed height so description is always visible)
+  compactPhotoWrapper: {
+    width: '100%',
+    height: 180,                   // ← fixed compact height
+    position: 'relative',
+    backgroundColor: '#000',
   },
-  photoZoomContent: {
+  compactPhoto: {
+    width: '100%',
+    height: 180,
+  },
+  zoomHint: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  zoomHintText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Full-screen zoom overlay
+  zoomOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  mainPhoto: {
-    width: SCREEN_WIDTH,
-    aspectRatio: 4 / 3,          // full image, no cropping
+  zoomClose: {
+    position: 'absolute',
+    top: 44,
+    right: 16,
+    zIndex: 10,
   },
+  zoomCounter: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  zoomCounterText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   photoCounter: {
     position: 'absolute',
     top: 12,
