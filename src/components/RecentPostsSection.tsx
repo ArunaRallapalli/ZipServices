@@ -132,7 +132,7 @@ const DetailModal: React.FC<{
               >
                 <Image
                   source={{ uri: photos[photoIndex] }}
-                  style={modalStyles.compactPhoto}
+                  style={[StyleSheet.absoluteFillObject, { backgroundColor: '#f5f5f5' }]}
                   resizeMode="cover"
                 />
                 {/* Zoom hint overlay */}
@@ -325,20 +325,22 @@ const MiniServiceCard: React.FC<{
         onPress={() => setModalVisible(true)}
         activeOpacity={0.80}
       >
-        {/* Photo — real photo OR icon placeholder */}
-        {firstPhoto ? (
-          <Image
-            source={{ uri: firstPhoto }}
-            style={miniStyles.thumbnail}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={miniStyles.placeholder}>
-            <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
-              <Ionicons name={icon} size={22} color="#fff" />
+        {/* Photo wrapper — explicit overflow:hidden for correct clipping on RN Web */}
+        <View style={miniStyles.imageWrapper}>
+          {firstPhoto ? (
+            <Image
+              source={{ uri: firstPhoto }}
+              style={miniStyles.thumbnail}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={miniStyles.placeholder}>
+              <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
+                <Ionicons name={icon} size={22} color="#fff" />
+              </View>
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
         {/* Text content */}
         <View style={miniStyles.content}>
@@ -373,19 +375,26 @@ const miniStyles = StyleSheet.create({
     margin: 5,
     backgroundColor: '#fff',
     borderRadius: 12,
-    overflow: 'hidden',
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
-    borderWidth: 1.5,              // ← visible border
-    borderColor: '#e0e8f4',        // ← soft blue-grey border
+    borderWidth: 1.5,
+    borderColor: '#e0e8f4',
+  },
+  // Separate wrapper handles image clipping — more reliable on RN Web
+  imageWrapper: {
+    width: '100%',
+    height: 110,
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 11,
+    overflow: 'hidden',
+    backgroundColor: '#f0f4fa',
   },
   thumbnail: {
     width: '100%',
-    height: 110,                   // fixed compact height
-    backgroundColor: '#f0f4fa',
+    height: 110,
   },
   placeholder: {
     width: '100%',
@@ -461,16 +470,18 @@ const modalStyles = StyleSheet.create({
   // Photos
   photosSection: { backgroundColor: '#f5f5f5' },
 
-  // Compact photo (fixed height so description is always visible)
+  // Compact photo — explicit pixel width so it fills modal correctly on web
   compactPhotoWrapper: {
-    width: '100%',
+    width: SCREEN_WIDTH,
     height: 200,
     position: 'relative',
     backgroundColor: '#f5f5f5',
+    overflow: 'hidden',
   },
   compactPhoto: {
-    width: '100%',
+    width: SCREEN_WIDTH,
     height: 200,
+    backgroundColor: '#f5f5f5',
   },
   zoomHint: {
     position: 'absolute',
