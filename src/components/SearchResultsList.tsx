@@ -2,11 +2,10 @@
  * SearchResultsList.tsx
  *
  * @updated March 2026
- * @version 2.6.0
+ * @version 2.7.0
  *
  * 2-column mini card grid.
- * - Real photo if available, clean icon placeholder if not
- * - Compact cards with better visual design
+ * - Row layout: 90x90 photo (fixed pixels) + text — same as RecentPostsSection
  * - Tap → Modal with full ServiceCard
  */
 
@@ -21,10 +20,13 @@ import {
   Modal,
   ScrollView,
   SafeAreaView,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ServiceCard from "./ServiceCard";
 import { createResponsiveStyles } from "../Utils/globalStyles";
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -73,32 +75,31 @@ interface SearchResultsListProps {
 }
 
 // ============================================================================
-// HELPERS — category icon + color (no initials)
+// HELPERS — category icon + color
 // ============================================================================
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 const CATEGORY_META: Record<string, { icon: IoniconsName; color: string }> = {
-  "Cleaning":        { icon: "sparkles",              color: "#4A90E2" },
-  "Catering":        { icon: "restaurant",             color: "#E67E22" },
-  "Landscaping":     { icon: "leaf",                   color: "#27AE60" },
-  "Dance Lessons":   { icon: "musical-notes",          color: "#9B59B6" },
-  "Entertainment":   { icon: "mic",                    color: "#E91E63" },
-  "Event Planning":  { icon: "calendar",               color: "#F39C12" },
-  "Beauty Services": { icon: "cut",                    color: "#D81B60" },
-  "Shoe Repair":     { icon: "construct",              color: "#795548" },
-  "Plumbing":        { icon: "water",                  color: "#1565C0" },
-  "Electrical":      { icon: "flash",                  color: "#F9A825" },
-  "Home Repair":     { icon: "hammer",                 color: "#6D4C41" },
-  "Pet Care":        { icon: "paw",                    color: "#43A047" },
-  "Moving":          { icon: "cube",                   color: "#546E7A" },
-  "Tutoring":        { icon: "school",                 color: "#1E88E5" },
-  "Photography":     { icon: "camera",                 color: "#8E24AA" },
-  "Tailoring":       { icon: "color-palette",          color: "#00897B" },
+  "Cleaning":        { icon: "sparkles",       color: "#4A90E2" },
+  "Catering":        { icon: "restaurant",      color: "#E67E22" },
+  "Landscaping":     { icon: "leaf",            color: "#27AE60" },
+  "Dance Lessons":   { icon: "musical-notes",   color: "#9B59B6" },
+  "Entertainment":   { icon: "mic",             color: "#E91E63" },
+  "Event Planning":  { icon: "calendar",        color: "#F39C12" },
+  "Beauty Services": { icon: "cut",             color: "#D81B60" },
+  "Shoe Repair":     { icon: "construct",       color: "#795548" },
+  "Plumbing":        { icon: "water",           color: "#1565C0" },
+  "Electrical":      { icon: "flash",           color: "#F9A825" },
+  "Home Repair":     { icon: "hammer",          color: "#6D4C41" },
+  "Pet Care":        { icon: "paw",             color: "#43A047" },
+  "Moving":          { icon: "cube",            color: "#546E7A" },
+  "Tutoring":        { icon: "school",          color: "#1E88E5" },
+  "Photography":     { icon: "camera",          color: "#8E24AA" },
+  "Tailoring":       { icon: "color-palette",   color: "#00897B" },
 };
 
 const DEFAULT_META = { icon: "briefcase" as IoniconsName, color: "#607D8B" };
-
 const getCategoryMeta = (cat: string) => CATEGORY_META[cat] ?? DEFAULT_META;
 
 // ============================================================================
@@ -122,7 +123,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
 );
 
 // ============================================================================
-// MINI SERVICE CARD
+// MINI SERVICE CARD — row layout, 90x90 photo, same as RecentPostsSection
 // ============================================================================
 
 const MiniServiceCard: React.FC<{
@@ -141,31 +142,38 @@ const MiniServiceCard: React.FC<{
         onPress={() => setModalVisible(true)}
         activeOpacity={0.80}
       >
-        {/* ── Thumbnail: real photo OR clean icon placeholder ── */}
+        {/* ── Photo left: 90×90 fixed pixels (no width:'100%') ── */}
         {firstPhoto ? (
-          <Image source={{ uri: firstPhoto }} style={miniStyles.thumbnail} resizeMode="cover" />
+          <View style={miniStyles.photoWrapper}>
+            <Image
+              source={{ uri: firstPhoto }}
+              style={miniStyles.photoImage}
+              resizeMode="cover"
+            />
+            <View style={miniStyles.expandHint}>
+              <Ionicons name="expand" size={14} color="#fff" />
+            </View>
+          </View>
         ) : (
-          <View style={[miniStyles.thumbnail, miniStyles.placeholder, { backgroundColor: color + "22" }]}>
+          <View style={[miniStyles.noPhotoBox, { backgroundColor: color + "22" }]}>
             <View style={[miniStyles.iconCircle, { backgroundColor: color }]}>
               <Ionicons name={icon} size={22} color="#fff" />
             </View>
           </View>
         )}
 
-        {/* ── Category pill overlaid on bottom of thumbnail ── */}
-        <View style={[miniStyles.categoryPill, { backgroundColor: color }]}>
-          <Text style={miniStyles.categoryPillText} numberOfLines={1}>
-            {item.service_category}
-          </Text>
-        </View>
-
-        {/* ── Text content ── */}
+        {/* ── Text right ── */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
+          <View style={[miniStyles.categoryPill, { backgroundColor: color }]}>
+            <Text style={miniStyles.categoryPillText} numberOfLines={1}>
+              {item.service_category}
+            </Text>
+          </View>
           <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
-              <Ionicons name="location-outline" size={10} color="#aaa" />
+              <Ionicons name="location-outline" size={10} color="#4A90E2" />
               <Text style={miniStyles.locationText} numberOfLines={1}>
                 {" "}{item.city}, {item.state}
               </Text>
@@ -174,7 +182,7 @@ const MiniServiceCard: React.FC<{
         </View>
       </TouchableOpacity>
 
-      {/* ── Full detail Modal ── */}
+      {/* ── Full detail Modal with ServiceCard ── */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -208,56 +216,54 @@ const miniStyles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 5,
-    backgroundColor: "#fff",
+    backgroundColor: "#fafafa",
     borderRadius: 12,
-    overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
     borderWidth: 1,
-    borderColor: "#f0f0f0",
+    borderColor: "#e0e0e0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    padding: 8,
+    flexDirection: "row",        // ← photo left, text right
+    alignItems: "flex-start",
   },
-
-  // ── Thumbnail ──
-  thumbnail: {
-    width: "100%",
+  photoWrapper: {
+    position: "relative",
+    marginRight: 8,
+  },
+  photoImage: {
+    width: 90,                   // ← fixed pixels, not '100%'
     height: 90,
+    borderRadius: 8,
   },
-  placeholder: {
+  expandHint: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 10,
+    padding: 3,
+  },
+  noPhotoBox: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8f8f8",
+    marginRight: 8,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // ── Category pill overlaid on image ──
-  categoryPill: {
-    position: "absolute",
-    top: 70,                  // sits at bottom of thumbnail
-    left: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  categoryPillText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
-
-  // ── Text area ──
   content: {
-    padding: 8,
-    paddingTop: 12,           // extra top padding so pill doesn't overlap
+    flex: 1,
+    justifyContent: "flex-start",
   },
   title: {
     fontSize: 12,
@@ -265,6 +271,19 @@ const miniStyles = StyleSheet.create({
     color: "#1a1a1a",
     lineHeight: 16,
     marginBottom: 4,
+  },
+  categoryPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  categoryPillText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   starsRow: {
     flexDirection: "row",
@@ -282,7 +301,8 @@ const miniStyles = StyleSheet.create({
   },
   locationText: {
     fontSize: 10,
-    color: "#aaa",
+    color: "#4A90E2",
+    fontWeight: "700",
   },
 });
 
@@ -303,7 +323,7 @@ const modalStyles = StyleSheet.create({
 });
 
 // ============================================================================
-// MAIN COMPONENT
+// MAIN COMPONENT — unchanged from v2.6.0
 // ============================================================================
 
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
@@ -395,7 +415,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
 };
 
 // ============================================================================
-// STYLES
+// STYLES — unchanged from v2.6.0
 // ============================================================================
 
 const styles = createResponsiveStyles({
