@@ -452,13 +452,18 @@ const miniStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
+    padding: 8,                  // ← inner padding so photo sits inside card
+    flexDirection: 'row',        // ← photo left, text right
+    alignItems: 'flex-start',
   },
   photoWrapper: {
     position: 'relative',
+    marginRight: 8,
   },
   photoImage: {
-    width: CARD_WIDTH,      // explicit pixel width — same pattern as ServiceCard's 120px
-    height: 120,             // fixed height — same as ServiceCard
+    width: 90,       // small square — matches Image 3 target
+    height: 90,
+    borderRadius: 8,
   },
   expandHint: {
     position: 'absolute',
@@ -469,14 +474,17 @@ const miniStyles = StyleSheet.create({
     padding: 3,
   },
   noPhotoBox: {
-    width: CARD_WIDTH,
-    height: 120,
+    width: 90,
+    height: 90,
     backgroundColor: '#f0f0f0',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 8,
   },
   content: {
-    padding: 8,
+    flex: 1,
+    justifyContent: 'flex-start',
   },
   title: {
     fontSize: 12,
