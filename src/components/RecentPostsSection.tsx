@@ -36,6 +36,7 @@ interface RecentPostsSectionProps {
   isOwnPost: (postUserId: number) => boolean;
   onChatPress: (item: ServicePost) => void;
   loading: boolean;
+  onReviewSubmitted?: () => void;   // ← triggers parent re-fetch after review
 }
 
 // ============================================================================
@@ -68,7 +69,8 @@ const DetailModal: React.FC<{
   isOwnPost: boolean;
   onClose: () => void;
   onChatPress: (item: ServicePost) => void;
-}> = ({ item, visible, isOwnPost, onClose, onChatPress }) => {
+  onReviewSubmitted?: () => void;
+}> = ({ item, visible, isOwnPost, onClose, onChatPress, onReviewSubmitted }) => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [zoomVisible, setZoomVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
@@ -228,7 +230,10 @@ const DetailModal: React.FC<{
         visible={showReviewsModal}
         providerId={item.user_id}
         providerName={item.business_name || item.poster_name || 'Provider'}
-        onClose={() => setShowReviewsModal(false)}
+        onClose={() => {
+          setShowReviewsModal(false);
+          onReviewSubmitted?.();   // ← refresh parent data
+        }}
       />
       <Modal
         visible={zoomVisible}
@@ -304,7 +309,8 @@ const MiniServiceCard: React.FC<{
   item: ServicePost;
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
-}> = ({ item, isOwnPost, onChatPress }) => {
+  onReviewSubmitted?: () => void;
+}> = ({ item, isOwnPost, onChatPress, onReviewSubmitted }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
@@ -368,6 +374,7 @@ const MiniServiceCard: React.FC<{
         isOwnPost={isOwnPost}
         onClose={() => setModalVisible(false)}
         onChatPress={onChatPress}
+        onReviewSubmitted={onReviewSubmitted}
       />
 
       {/* ReviewsModal opened directly from mini card stars */}
@@ -375,7 +382,10 @@ const MiniServiceCard: React.FC<{
         visible={showReviewsModal}
         providerId={item.user_id}
         providerName={item.business_name || item.poster_name || 'Provider'}
-        onClose={() => setShowReviewsModal(false)}
+        onClose={() => {
+          setShowReviewsModal(false);
+          onReviewSubmitted?.();   // ← refresh parent data
+        }}
       />
     </>
   );
@@ -390,6 +400,7 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   isOwnPost,
   onChatPress,
   loading,
+  onReviewSubmitted,
 }) => {
   if (loading) {
     return (
@@ -448,6 +459,7 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
               item={post}
               isOwnPost={isOwnPost(post.user_id)}
               onChatPress={onChatPress}
+              onReviewSubmitted={onReviewSubmitted}
             />
           ))}
           {/* Spacer if odd number of posts */}
