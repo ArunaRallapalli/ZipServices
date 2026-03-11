@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ServicePost } from '../Utils/searchUtils';
+import ReviewsModal from './Reviewsmodal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2; // 2 columns with padding
@@ -70,6 +71,7 @@ const DetailModal: React.FC<{
 }> = ({ item, visible, isOwnPost, onClose, onChatPress }) => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [zoomVisible, setZoomVisible] = useState(false);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
   const photos = item.photos ?? [];
 
   const openZoom = (index: number) => {
@@ -112,8 +114,12 @@ const DetailModal: React.FC<{
             </View>
           </View>
 
-          {/* ── Rating ── */}
-          <View style={modalStyles.ratingRow}>
+          {/* ── Rating — tap to open reviews ── */}
+          <TouchableOpacity
+            style={modalStyles.ratingRow}
+            onPress={() => setShowReviewsModal(true)}
+            activeOpacity={0.7}
+          >
             {[1,2,3,4,5].map(s => (
               <Ionicons
                 key={s}
@@ -125,7 +131,8 @@ const DetailModal: React.FC<{
             <Text style={modalStyles.ratingText}>
               {item.review_count ? `(${item.review_count} reviews)` : '(No reviews yet)'}
             </Text>
-          </View>
+            <Ionicons name="chevron-forward" size={14} color="#999" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
 
           {/* ── Business name ── */}
           {(item.business_name || item.poster_name) && (
@@ -216,7 +223,13 @@ const DetailModal: React.FC<{
         </ScrollView>
       </SafeAreaView>
 
-      {/* ── Full-screen zoom modal — exact ServiceCard pattern ── */}
+      {/* ── Reviews Modal ── */}
+      <ReviewsModal
+        visible={showReviewsModal}
+        providerId={item.user_id}
+        providerName={item.business_name || item.poster_name || 'Provider'}
+        onClose={() => setShowReviewsModal(false)}
+      />
       <Modal
         visible={zoomVisible}
         transparent
