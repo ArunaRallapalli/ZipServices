@@ -43,7 +43,7 @@ interface RecentPostsSectionProps {
 // ============================================================================
 
 const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count }) => (
-  <View style={miniStyles.starsRow}>
+  <>
     {[1, 2, 3, 4, 5].map(s => (
       <Ionicons
         key={s}
@@ -55,7 +55,7 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
     {count !== undefined && (
       <Text style={miniStyles.ratingCount}>({count})</Text>
     )}
-  </View>
+  </>
 );
 
 // ============================================================================
@@ -306,6 +306,7 @@ const MiniServiceCard: React.FC<{
   onChatPress: (item: ServicePost) => void;
 }> = ({ item, isOwnPost, onChatPress }) => {
   const [modalVisible, setModalVisible] = useState(false);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
 
   return (
@@ -315,12 +316,12 @@ const MiniServiceCard: React.FC<{
         onPress={() => setModalVisible(true)}
         activeOpacity={0.80}
       >
-        {/* Single photo thumbnail — fixed 120×120 pixels, same as ServiceCard */}
+        {/* Single photo thumbnail */}
         {firstPhoto ? (
           <View style={miniStyles.photoWrapper}>
             <Image
               source={{ uri: firstPhoto }}
-              style={miniStyles.photoImage}   // CARD_WIDTH × 120 fixed pixels
+              style={miniStyles.photoImage}
               resizeMode="cover"
             />
             <View style={miniStyles.expandHint}>
@@ -336,7 +337,20 @@ const MiniServiceCard: React.FC<{
         {/* Text */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
-          <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+
+          {/* Stars — tap opens ReviewsModal directly, stops card press */}
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowReviewsModal(true);
+            }}
+            activeOpacity={0.7}
+            style={miniStyles.starsRow}
+          >
+            <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+            <Ionicons name="chevron-forward" size={10} color="#bbb" />
+          </TouchableOpacity>
+
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
               <Ionicons name="location-outline" size={10} color="#4A90E2" />
@@ -354,6 +368,14 @@ const MiniServiceCard: React.FC<{
         isOwnPost={isOwnPost}
         onClose={() => setModalVisible(false)}
         onChatPress={onChatPress}
+      />
+
+      {/* ReviewsModal opened directly from mini card stars */}
+      <ReviewsModal
+        visible={showReviewsModal}
+        providerId={item.user_id}
+        providerName={item.business_name || item.poster_name || 'Provider'}
+        onClose={() => setShowReviewsModal(false)}
       />
     </>
   );
