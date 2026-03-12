@@ -205,7 +205,7 @@ const SearchResultsScreen: React.FC = () => {
     setRefreshing(true);
     const refreshTasks: Promise<any>[] = [
       // Always refresh recent-posts section
-      fetchRecentPosts(6).then(setRecentPosts).catch(() => {}),
+      fetchRecentPosts(9).then(setRecentPosts).catch(() => {}),
     ];
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
       refreshTasks.push(performSearch(true));
@@ -360,7 +360,7 @@ const SearchResultsScreen: React.FC = () => {
     const loadRecentSection = async () => {
       setLoadingRecentSection(true);
       try {
-        const posts = await fetchRecentPosts(6);
+        const posts = await fetchRecentPosts(9);
         setRecentPosts(posts);
       } catch (error) {
         console.error('Error loading recent section:', error);

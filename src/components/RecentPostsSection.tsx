@@ -424,7 +424,7 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   }
 
 // Group into rows of 2 for the grid — offers only, no requests
-  const offers = recentPosts.filter(p => p.post_type !== 'request');
+  const offers = recentPosts.filter(p => p.post_type !== 'request' && p.is_active !== false);
   const rows: ServicePost[][] = [];
   for (let i = 0; i < offers.length; i += 2) {
     rows.push(offers.slice(i, i + 2));

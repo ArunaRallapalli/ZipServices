@@ -57,6 +57,7 @@ export interface ServicePost {
   photos?: string[];           // ← ADD
   average_rating?: number;     // ← ADD
   review_count?: number;       // ← ADD
+  is_active?: boolean;
 }
 
 /**
