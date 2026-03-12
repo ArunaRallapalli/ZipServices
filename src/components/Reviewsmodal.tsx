@@ -301,6 +301,14 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
             </TouchableOpacity>
           </View>
 
+          {/* Guest banner — shown above reviews when not logged in */}
+          {!checkingEligibility && !currentUserId && (
+            <View style={styles.guestBanner}>
+              <Ionicons name="lock-closed-outline" size={16} color="#4A90E2" />
+              <Text style={styles.guestBannerText}>Sign in to write a review</Text>
+            </View>
+          )}
+
           {/* Reviews List */}
           <ReviewList 
             key={refreshKey}
@@ -308,7 +316,7 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
             limit={50} 
           />
 
-          {/* Write Review Button / Guest Banner */}
+          {/* Write Review Button / loading spinner */}
           {checkingEligibility ? (
             <View style={styles.checkingContainer}>
               <ActivityIndicator size="small" color="#4A90E2" />
@@ -323,13 +331,7 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
                 <Text style={styles.writeReviewButtonText}>Write a Review</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            // ← Guest user banner
-            <View style={styles.guestBanner}>
-              <Ionicons name="lock-closed-outline" size={16} color="#888" />
-              <Text style={styles.guestBannerText}>Sign in to write a review</Text>
-            </View>
-          )}
+          ) : null}
         </SafeAreaView>
       </Modal>
 
@@ -439,21 +441,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // ← NEW: guest banner
+  // ← Guest banner (shown at top, above reviews)
   guestBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    backgroundColor: '#EBF4FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#C7DCFF',
   },
   guestBannerText: {
     fontSize: 14,
-    color: '#888',
-    fontStyle: 'italic',
+    color: '#4A90E2',
+    fontWeight: '700',
   },
   infoContainer: {
     flexDirection: 'row',
