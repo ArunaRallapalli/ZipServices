@@ -2,11 +2,11 @@
  * SearchResultsList.tsx
  *
  * @updated March 2026
- * @version 2.7.0
+ * @version 2.8.0
  *
- * 2-column mini card grid.
- * - Row layout: 90x90 photo (fixed pixels) + text — same as RecentPostsSection
- * - Tap → Modal with full ServiceCard
+ * Changes from v2.7.0:
+ * - Stars on mini card now open ReviewsModal directly (same as RecentPostsSection)
+ * - Card tap still opens full ServiceCard modal
  */
 
 import React, { useState } from "react";
@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ServiceCard from "./ServiceCard";
+import ReviewsModal from "./Reviewsmodal";
 import { createResponsiveStyles } from "../Utils/globalStyles";
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -116,6 +117,7 @@ const MiniServiceCard: React.FC<{
   onChatPress: (item: ServicePost) => void;
 }> = ({ item, isOwnPost, onChatPress }) => {
   const [modalVisible, setModalVisible] = useState(false);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);  // ← NEW
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
 
@@ -152,7 +154,20 @@ const MiniServiceCard: React.FC<{
               {item.service_category}
             </Text>
           </View>
-          <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+
+          {/* Stars — tap opens ReviewsModal, stops card press */}
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowReviewsModal(true);
+            }}
+            activeOpacity={0.7}
+            style={miniStyles.starsRowTouchable}
+          >
+            <MiniStars rating={item.average_rating ?? 0} count={item.review_count} />
+            <Ionicons name="chevron-forward" size={10} color="#bbb" />
+          </TouchableOpacity>
+
           {item.city && item.state && (
             <View style={miniStyles.locationRow}>
               <Ionicons name="location-outline" size={10} color="#4A90E2" />
@@ -164,6 +179,7 @@ const MiniServiceCard: React.FC<{
         </View>
       </TouchableOpacity>
 
+      {/* Full detail Modal with ServiceCard */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -189,6 +205,14 @@ const MiniServiceCard: React.FC<{
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* ReviewsModal — opened from mini card stars */}
+      <ReviewsModal
+        visible={showReviewsModal}
+        providerId={item.user_id}
+        providerName={item.business_name || item.poster_name || 'Provider'}
+        onClose={() => setShowReviewsModal(false)}
+      />
     </>
   );
 };
@@ -229,6 +253,7 @@ const miniStyles = StyleSheet.create({
   categoryPill: { alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 },
   categoryPillText: { color: "#fff", fontSize: 9, fontWeight: "700", letterSpacing: 0.3 },
   starsRow: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
+  starsRowTouchable: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
   ratingCount: { fontSize: 9, color: "#aaa", marginLeft: 2 },
   locationRow: { flexDirection: "row", alignItems: "center" },
   locationText: { fontSize: 10, color: "#4A90E2", fontWeight: "700" },

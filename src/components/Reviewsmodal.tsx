@@ -9,6 +9,9 @@
  *         (e.g., accounting + dance class from Sai Services). The modal now
  *         lets users select which booking to review if they have multiple.
  * 
+ * March 2026: Added guest banner — shows "Sign in to write a review" when
+ *             user is not logged in.
+ * 
  * OVERVIEW:
  * Full-screen modal that displays a provider's reviews and allows eligible
  * customers to write reviews. Opened when user taps star ratings on ServiceCard.
@@ -20,6 +23,7 @@
  * - Eligibility check: fetches user's unreviewed completed bookings
  * - Opens WriteReviewModal for review submission
  * - Prevents duplicate reviews
+ * - Guest users see a "Sign in to write a review" banner
  * 
  * ELIGIBILITY RULES:
  * - User must be logged in
@@ -304,22 +308,28 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
             limit={50} 
           />
 
-          {/* Write Review Button */}
+          {/* Write Review Button / Guest Banner */}
           {checkingEligibility ? (
-  <View style={styles.checkingContainer}>
-    <ActivityIndicator size="small" color="#4A90E2" />
-  </View>
-) : currentUserId ? (
-  <View style={styles.writeReviewContainer}>
-    <TouchableOpacity
-      style={styles.writeReviewButton}
-      onPress={handleWriteReviewPress}
-    >
-      <Ionicons name="create" size={20} color="#fff" />
-      <Text style={styles.writeReviewButtonText}>Write a Review</Text>
-    </TouchableOpacity>
-  </View>
-) : null}
+            <View style={styles.checkingContainer}>
+              <ActivityIndicator size="small" color="#4A90E2" />
+            </View>
+          ) : currentUserId ? (
+            <View style={styles.writeReviewContainer}>
+              <TouchableOpacity
+                style={styles.writeReviewButton}
+                onPress={handleWriteReviewPress}
+              >
+                <Ionicons name="create" size={20} color="#fff" />
+                <Text style={styles.writeReviewButtonText}>Write a Review</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // ← Guest user banner
+            <View style={styles.guestBanner}>
+              <Ionicons name="lock-closed-outline" size={16} color="#888" />
+              <Text style={styles.guestBannerText}>Sign in to write a review</Text>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
 
@@ -428,6 +438,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // ← NEW: guest banner
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  guestBannerText: {
+    fontSize: 14,
+    color: '#888',
+    fontStyle: 'italic',
   },
   infoContainer: {
     flexDirection: 'row',
