@@ -143,19 +143,37 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
         return;
       }
 
-      const token = data.token || data.access_token || data.data?.token;
-      console.log('💾 Stored token:', token);
-      
-      await AsyncStorage.setItem('access_token', token);
+     // ✅ REPLACE WITH - correct order
+const token = data.token || data.access_token || data.data?.token;
 
-      const storedToken = await AsyncStorage.getItem('access_token');
+// 1. Check first
+if (!token) {
+  throw new Error("No authentication token received from server");
+}
+
+// 2. Then save
+await AsyncStorage.setItem('access_token', token);
+if (typeof window !== 'undefined') {
+  localStorage.setItem('access_token', token);
+}
+
+const storedToken = await AsyncStorage.getItem('access_token');
+
       console.log('💾 Stored access_token:', storedToken);
 
-      if (!token) {
-        throw new Error("No authentication token received from server");
-      }
-
-      let userInfo;
+          // ✅ FIXED
+let userInfo: {
+  user_id: number;
+  user_type: 'business_owner';
+  email: string;
+  business_name: string;
+  full_name: string;
+  is_admin: boolean;
+  phone_number?: string;
+  zip_code?: string;
+  city?: string;
+  state?: string;
+};
       let userId = 0;
       let businessName = "Business Owner";
 

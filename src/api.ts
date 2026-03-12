@@ -47,9 +47,12 @@ async function request<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   try {
-    // Get token from AsyncStorage
-    const token = await AsyncStorage.getItem('access_token');
-    console.log('🔐 Token from AsyncStorage:', token ? 'exists' : 'missing');
+   const asyncToken = await AsyncStorage.getItem('access_token');
+const webToken = typeof window !== 'undefined' 
+  ? (localStorage.getItem('access_token') ?? localStorage.getItem('token')) 
+  : null;
+const token = asyncToken ?? webToken;
+console.log('🔐 Token from storage:', token ? 'exists' : 'missing');
     
     // Build headers with Content-Type
     const headers: Record<string, string> = {
@@ -105,22 +108,26 @@ async function request<T = any>(
       });
 
       // ✅ PERMANENT FIX: Better auth error handling
-      if (response.status === 401) {
-        console.warn('🔐 Unauthorized - Token expired or invalid');
-        
-        // Clear the actual token key being used
-        try {
-          await AsyncStorage.removeItem('access_token');
-          console.log('✅ Cleared expired token');
-        } catch (clearError) {
-          console.error('❌ Failed to clear token:', clearError);
-        }
-        
-        // Create error with status code
-        const error: any = new Error('Unauthorized');
-        error.status = 401;
-        throw error;
-      }
+    if (response.status === 401) {
+  console.warn('🔐 Unauthorized - Token expired or invalid');
+  try {
+    await AsyncStorage.removeItem('access_token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
+    }
+    console.log('✅ Cleared expired token');
+  } catch (clearError) {
+    console.error('❌ Failed to clear token:', clearError);
+  }
+  // Redirect to login instead of showing generic error
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+  const error: any = new Error('Session expired. Please log in again.');
+  error.status = 401;
+  throw error;
+}
       
       // For other errors, throw with details
       const error = new Error(errorMessage);

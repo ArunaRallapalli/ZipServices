@@ -56,6 +56,8 @@ import ReviewList from './ReviewList';
 import WriteReviewModal from './Writereviewmodal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api';
+// Add after the existing imports
+import { useNavigation } from '@react-navigation/native';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -104,7 +106,8 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   const [selectedBooking, setSelectedBooking] = useState<BookingForReview | null>(null);
   const [showWriteReview, setShowWriteReview] = useState(false);
   const [showBookingSelection, setShowBookingSelection] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+ const [refreshKey, setRefreshKey] = useState(0);
+const navigation = useNavigation<any>();
 
   // ========================================================================
   // LOAD USER & CHECK ELIGIBILITY
@@ -302,12 +305,22 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
           </View>
 
           {/* Guest banner — shown above reviews when not logged in */}
-          {!checkingEligibility && !currentUserId && (
-            <View style={styles.guestBanner}>
-              <Ionicons name="lock-closed-outline" size={16} color="#4A90E2" />
-              <Text style={styles.guestBannerText}>Sign in to write a review</Text>
-            </View>
-          )}
+       {!checkingEligibility && !currentUserId && (
+  <View style={styles.guestBanner}>
+    <Ionicons name="lock-closed-outline" size={16} color="#4A90E2" />
+    <Text style={styles.guestBannerText}>Sign in to write a review</Text>
+    <TouchableOpacity
+      onPress={() => {
+        onClose();
+        navigation.navigate('BusinessOwnerHomeScreen');
+      }}
+      style={styles.guestSignInButton}
+    >
+      <Ionicons name="person-circle-outline" size={14} color="#fff" />
+      <Text style={styles.guestSignInText}>Sign In</Text>
+    </TouchableOpacity>
+  </View>
+)}
 
           {/* Reviews List */}
           <ReviewList 
@@ -453,11 +466,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#C7DCFF',
   },
-  guestBannerText: {
-    fontSize: 14,
-    color: '#4A90E2',
-    fontWeight: '700',
-  },
+guestBannerText: {
+  fontSize: 14,
+  color: '#4A90E2',
+  fontWeight: '700',
+},
+guestSignInButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginLeft: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 5,
+  backgroundColor: '#4A90E2',
+  borderRadius: 14,
+  gap: 4,
+},
+guestSignInText: {
+  color: '#fff',
+  fontSize: 13,
+  fontWeight: '700',
+},
   infoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
