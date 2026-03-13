@@ -265,7 +265,7 @@ router.post("/register", async (req: Request, res: Response) => {
     const { data: existingUser, error: checkError } = await supabase
       .from('users')
       .select('email')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (existingUser) {
@@ -283,7 +283,7 @@ router.post("/register", async (req: Request, res: Response) => {
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
-        email: email,
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
         user_type: 'business_owner',
         email_verified: false  // Explicitly set to false
