@@ -38,7 +38,28 @@ interface RecentPostsSectionProps {
   loading: boolean;
   onReviewSubmitted?: () => void;   // ← triggers parent re-fetch after review
 }
-
+// ✅ ADD THIS - category icon/color map for placeholder
+const CATEGORY_META: Record<string, { icon: any; color: string }> = {
+  "Cleaning":        { icon: "sparkles",       color: "#4A90E2" },
+  "Catering":        { icon: "restaurant",      color: "#E67E22" },
+  "Landscaping":     { icon: "leaf",            color: "#27AE60" },
+  "Dance Lessons":   { icon: "musical-notes",   color: "#9B59B6" },
+  "Entertainment":   { icon: "mic",             color: "#E91E63" },
+  "Event Planning":  { icon: "calendar",        color: "#F39C12" },
+  "Beauty Services": { icon: "cut",             color: "#D81B60" },
+  "Shoe Repair":     { icon: "construct",       color: "#795548" },
+  "Plumbing":        { icon: "water",           color: "#1565C0" },
+  "Electrical":      { icon: "flash",           color: "#F9A825" },
+  "Home Repair":     { icon: "hammer",          color: "#6D4C41" },
+  "Pet Care":        { icon: "paw",             color: "#43A047" },
+  "Moving":          { icon: "cube",            color: "#546E7A" },
+  "Tutoring":        { icon: "school",          color: "#1E88E5" },
+  "Photography":     { icon: "camera",          color: "#8E24AA" },
+  "Tailoring":       { icon: "color-palette",   color: "#00897B" },
+  "DJ":              { icon: "headset",         color: "#6C3483" },
+  "Other":           { icon: "apps",            color: "#607D8B" },
+};
+const DEFAULT_META = { icon: "briefcase", color: "#607D8B" };
 // ============================================================================
 // MINI STARS
 // ============================================================================
@@ -334,11 +355,23 @@ const MiniServiceCard: React.FC<{
               <Ionicons name="expand" size={14} color="#fff" />
             </View>
           </View>
-        ) : (
-          <View style={miniStyles.noPhotoBox}>
-            <Ionicons name="image-outline" size={28} color="#ccc" />
-          </View>
-        )}
+       ) : (
+  <View style={[
+    miniStyles.noPhotoBox, 
+    { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color + '22' }
+  ]}>
+    <View style={[
+      miniStyles.noPhotoIconCircle,
+      { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color }
+    ]}>
+      <Ionicons 
+        name={(CATEGORY_META[item.service_category] ?? DEFAULT_META).icon} 
+        size={22} 
+        color="#fff" 
+      />
+    </View>
+  </View>
+)}
 
         {/* Text */}
         <View style={miniStyles.content}>
@@ -522,25 +555,32 @@ const miniStyles = StyleSheet.create({
     padding: 3,
   },
   noPhotoBox: {
-    width: 90,
-    height: 90,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'flex-start',
-  },
-  title: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    lineHeight: 16,
-    marginBottom: 4,
-  },
+  width: 90,
+  height: 90,
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 8,
+},
+noPhotoIconCircle: {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+content: {        // ← ADD THIS BACK
+  flex: 1,
+  justifyContent: 'flex-start',
+},
+title: {
+  fontSize: 12,
+  fontWeight: '700',
+  color: '#1a1a1a',
+  lineHeight: 17,      // ← slightly more breathing room for 2 lines
+  marginBottom: 4,
+  minHeight: 34,       // ← reserves space for 2 lines always
+},
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
