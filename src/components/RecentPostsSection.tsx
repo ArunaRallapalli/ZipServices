@@ -541,11 +541,11 @@ const miniStyles = StyleSheet.create({
     position: 'relative',
     marginRight: 8,
   },
-  photoImage: {
-    width: 90,       // small square — matches Image 3 target
-    height: 90,
-    borderRadius: 8,
-  },
+ photoImage: {
+  width: 70,
+  height: 70,
+  borderRadius: 8,
+},
   expandHint: {
     position: 'absolute',
     top: 4,
@@ -554,9 +554,9 @@ const miniStyles = StyleSheet.create({
     borderRadius: 10,
     padding: 3,
   },
-  noPhotoBox: {
-  width: 90,
-  height: 90,
+noPhotoBox: {
+  width: 70,
+  height: 70,
   borderRadius: 8,
   justifyContent: 'center',
   alignItems: 'center',
