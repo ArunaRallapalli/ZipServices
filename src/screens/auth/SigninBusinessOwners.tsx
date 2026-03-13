@@ -129,7 +129,7 @@ export default function SignInBusinessOwnersScreen({ navigation }: { navigation:
       setLoading(true);
       
       const data: LoginResponse = await api.post('/business_owners/login', { 
-        email: email.trim(), 
+       email: email.toLowerCase().trim(),
         password: password.trim() 
       });
 
@@ -197,7 +197,7 @@ let userInfo: {
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
-          email: email.trim(),
+          email: email.toLowerCase().trim(),
           business_name: businessName,
           full_name: businessName,
           is_admin: is_admin
@@ -208,7 +208,7 @@ let userInfo: {
         userInfo = {
           user_id: userId,
           user_type: 'business_owner' as const,
-          email: email.trim(),
+          email: email.toLowerCase().trim(),
           business_name: businessName,
           full_name: businessName,
           phone_number: userFromResponse?.phone_number,
@@ -219,7 +219,7 @@ let userInfo: {
         };
       }
 
-      await signIn(token, 'business_owner', userId, email.trim(), userInfo);
+      await signIn(token, 'business_owner', userId, email.toLowerCase().trim(), userInfo);
 
       setSuccessMessage("Business session saved securely!");
       setShowSuccess(true);
