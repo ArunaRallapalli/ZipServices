@@ -325,7 +325,7 @@ router.post("/register", async (req: Request, res: Response) => {
     // 5️⃣ Send verification email
     console.log("📧 Sending verification email...");
     // ✅ NEW:
-await sendVerificationEmail(req, newUser.user_id, email, name);
+await sendVerificationEmail(req, newUser.user_id, email.toLowerCase().trim(), name);
 
     // 6️⃣ Generate JWT token for automatic login
     const token = generateToken(newUser.user_id, businessOwner.business_id);
