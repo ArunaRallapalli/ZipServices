@@ -42,8 +42,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
-//added for stripe routes
-app.use('/api/stripe', stripeRoutes);
+// 1. Webhook FIRST (needs raw body, before express.json)
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 // ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -79,7 +79,8 @@ app.use(cors({
 // ✅ ADDED: Request tracking and performance monitoring
 app.use(requestTracking);
 app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
-
+// ✅ Stripe routes (after express.json, after CORS)
+app.use('/api/stripe', stripeRoutes);
 // Health check
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
