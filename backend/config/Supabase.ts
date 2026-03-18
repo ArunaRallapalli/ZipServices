@@ -1,3 +1,10 @@
+/**
+ * SUPABASE JAVASCRIPT CLIENT — FOR AUTH & REALTIME ONLY
+ * Use this for: user authentication, storage, realtime subscriptions.
+ * Do NOT use for raw SQL queries — use database.ts pool instead.
+ * Usage: import { supabase } from '../config/supabase';
+ */
+
 import { createClient } from '@supabase/supabase-js';
 
 // Render injects env vars directly - only use dotenv in development

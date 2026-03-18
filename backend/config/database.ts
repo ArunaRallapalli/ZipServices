@@ -1,3 +1,11 @@
+/**
+ * PRIMARY DATABASE CONNECTION FOR RENDER (PRODUCTION & DEV)
+ * Uses DATABASE_URL connection string from environment variables.
+ * This is the correct pool to import in all route files including stripe.ts.
+ * Usage: import { pool } from '../config/database';
+ */
+
+
 import dns from 'dns';
 import { Pool } from 'pg';
 

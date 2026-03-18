@@ -1,3 +1,11 @@
+
+/**
+ * LEGACY LOCAL DEV DATABASE CONNECTION — DO NOT USE IN NEW CODE
+ * Uses individual PG_* variables (PG_HOST, PG_USER, etc.)
+ * Kept for reference only. Use database.ts instead.
+ * This file is NOT used on Render — Render uses database.ts via DATABASE_URL.
+ */
+
 import { Pool } from "pg";
 import dotenv from "dotenv";
 

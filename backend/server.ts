@@ -28,6 +28,7 @@ import serviceCategoriesRouter from "./routes/serviceCategories";
 import servicePostsRouter from './routes/ServicePosts';
 import passwordResetRoutes from './routes/Passwordreset';
 import emailVerificationRoutes from './routes/EmailVerification';
+import stripeRoutes from './routes/stripe';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -41,7 +42,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
-
+//added for stripe routes
+app.use('/api/stripe', stripeRoutes);
 // ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
