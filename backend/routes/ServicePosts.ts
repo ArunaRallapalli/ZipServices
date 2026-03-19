@@ -136,15 +136,14 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
     console.log('   Fetching all active posts for distance calculation...');
 
     const { data, error } = await supabase
-  .from('service_posts')
-  .select(`
-    *,
-    users!service_posts_user_id_fkey(
-      email,
-      business_owners(business_name, average_rating, review_count)
-    ),
-    service_categories!service_posts_service_category_fkey(accepts_payment)
-  `)
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          business_owners(business_name, average_rating, review_count)
+        )
+      `)
       .eq('service_category', service_category as string)
       .eq('status', POST_STATUS.ACTIVE);
 
@@ -209,19 +208,17 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
           return null;
         }
 
- // REPLACE with:
-return {
-  ...post,
-  post_id: post.id,
-  distance: roundedDistance,
-  poster_name: post.users?.business_owners?.business_name ||
-               post.users?.email,
-  business_name: post.users?.business_owners?.business_name,
-  average_rating: post.users?.business_owners?.average_rating || 0,
-  review_count: post.users?.business_owners?.review_count || 0,
-  photos: post.photos || [],
-  accepts_payment: post.service_categories?.accepts_payment ?? false, // ← ADD THIS
-};
+        return {
+          ...post,
+          post_id: post.id,
+          distance: roundedDistance,
+          poster_name: post.users?.business_owners?.business_name ||
+                       post.users?.email,
+          business_name: post.users?.business_owners?.business_name,
+          average_rating: post.users?.business_owners?.average_rating || 0,
+          review_count: post.users?.business_owners?.review_count || 0,
+          photos: post.photos || [],
+        };
       })
     );
 
@@ -269,16 +266,15 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
     console.log('📋 Fetching service posts with filters:', req.query);
 
     let query = supabase
-  .from('service_posts')
-  .select(`
-    *,
-    users!service_posts_user_id_fkey(
-      email,
-      business_owners(business_name, average_rating, review_count)
-    ),
-    service_categories!service_posts_service_category_fkey(accepts_payment)
-  `)
-  .order('created_at', { ascending: false });
+      .from('service_posts')
+      .select(`
+        *,
+        users!service_posts_user_id_fkey(
+          email,
+          business_owners(business_name, average_rating, review_count)
+        )
+      `)
+      .order('created_at', { ascending: false });
     if (post_type) query = query.eq('post_type', post_type);
     if (service_category) query = query.eq('service_category', service_category);
     if (zip_code) query = query.eq('zip_code', zip_code);
@@ -341,8 +337,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
         users!service_posts_user_id_fkey(
           email,
           business_owners(business_name, average_rating, review_count)
-        ),
-        service_categories!service_posts_service_category_fkey(accepts_payment)
+        )
       `, { count: 'exact' })
       .eq('status', POST_STATUS.ACTIVE);
 
@@ -359,15 +354,14 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
     if (error) throw error;
 
     const posts = (data || []).map((post: any) => ({
-  ...post,
-  post_id: post.id,
-  poster_name: post.users?.business_owners?.business_name || 
-               post.users?.email,
-  business_name: post.users?.business_owners?.business_name,
-  average_rating: post.users?.business_owners?.average_rating || 0,
-  review_count: post.users?.business_owners?.review_count || 0,
-  accepts_payment: post.service_categories?.accepts_payment ?? false, // ← ADD THIS
-}));
+      ...post,
+      post_id: post.id,
+      poster_name: post.users?.business_owners?.business_name ||
+                   post.users?.email,
+      business_name: post.users?.business_owners?.business_name,
+      average_rating: post.users?.business_owners?.average_rating || 0,
+      review_count: post.users?.business_owners?.review_count || 0,
+    }));
     const total = count || 0;
 
     console.log(`✅ Found ${posts.length} posts (${total} total)`);

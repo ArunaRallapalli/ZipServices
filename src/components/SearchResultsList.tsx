@@ -250,8 +250,8 @@ const MiniServiceCard: React.FC<{
           )}
 
           {/* ADDED (feature/stripe-connect-payments): cart button below text content.
-              Hidden for own posts. Shows "Added!" state after successful cart add. */}
-          {!isOwnPost && (
+              Only shown for Boutique category. Hidden for own posts. */}
+          {!isOwnPost && item.service_category === 'Boutique' && (
             <TouchableOpacity
               style={[cartBtnStyle.btn, cartAdded && cartBtnStyle.btnAdded]}
               onPress={handleAddToCart}
@@ -294,8 +294,8 @@ const MiniServiceCard: React.FC<{
               }}
             />
             {/* ADDED (feature/stripe-connect-payments): cart button inside full detail modal.
-                Closes the modal first, then triggers the same auth-guarded cart handler. */}
-            {!isOwnPost && (
+                Only shown for Boutique category. */}
+            {!isOwnPost && item.service_category === 'Boutique' && (
               <TouchableOpacity
                 style={modalStyles.cartBtn}
                 onPress={(e) => {

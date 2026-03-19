@@ -290,14 +290,16 @@ const DetailModal: React.FC<{
                 <Text style={modalStyles.contactButtonText}> Contact</Text>
               </TouchableOpacity>
 
-              {/* Add to Cart */}
-              <TouchableOpacity
-                style={modalStyles.cartButton}
-                onPress={handleCartPress}
-              >
-                <Ionicons name="cart-outline" size={18} color="#fff" />
-                <Text style={modalStyles.contactButtonText}> Add to Cart</Text>
-              </TouchableOpacity>
+              {/* Add to Cart — Boutique only */}
+              {item.service_category === 'Boutique' && (
+                <TouchableOpacity
+                  style={modalStyles.cartButton}
+                  onPress={handleCartPress}
+                >
+                  <Ionicons name="cart-outline" size={18} color="#fff" />
+                  <Text style={modalStyles.contactButtonText}> Add to Cart</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -502,8 +504,8 @@ const MiniServiceCard: React.FC<{
             </View>
           )}
 
-          {/* ── Cart button — below title/text content (right side) ── */}
-          {!isOwnPost && (
+          {/* ── Cart button — below title/text content, Boutique only ── */}
+          {!isOwnPost && item.service_category === 'Boutique' && (
             <TouchableOpacity
               style={[cartBtnStyle.btn, cartAdded && cartBtnStyle.btnAdded]}
               onPress={handleAddToCart}
