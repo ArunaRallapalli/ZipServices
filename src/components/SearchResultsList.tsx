@@ -1,12 +1,26 @@
 /**
  * SearchResultsList.tsx
  *
- * @updated March 2026
- * @version 2.8.0
+ * OVERVIEW:
+ * Renders the search results grid after a user submits a category + ZIP search.
+ * Displays results as 2-column mini cards with photo, title, rating, location.
+ * Tapping a card opens a full-detail modal (ServiceCard) with contact + cart options.
  *
- * Changes from v2.7.0:
- * - Stars on mini card now open ReviewsModal directly (same as RecentPostsSection)
- * - Card tap still opens full ServiceCard modal
+ * CART INTEGRATION (added March 2026 - feature/stripe-connect-payments):
+ * - Each mini card now shows an "Add to Cart" button below the text content
+ * - Auth guard: guests are redirected to BusinessOwnerHomeScreen on cart tap
+ * - Cart button also appears inside the full detail modal
+ * - Requires onAddToCart and isAuthenticated props from SearchResultsScreen
+ *
+ * @updated March 2026
+ * @version 2.9.0
+ *
+ * Changes from v2.8.0:
+ * - Added cart button to MiniServiceCard (below text content)
+ * - Added cart button inside full detail modal
+ * - Added onAddToCart + isAuthenticated props to SearchResultsListProps
+ * - Auth guard: unauthenticated cart tap navigates to BusinessOwnerHomeScreen
+ * - Added Alert, useNavigation, NativeStackNavigationProp imports
  */
 
 import React, { useState } from "react";
@@ -21,8 +35,11 @@ import {
   ScrollView,
   SafeAreaView,
   Dimensions,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import ServiceCard from "./ServiceCard";
 import ReviewsModal from "./Reviewsmodal";
 import { createResponsiveStyles } from "../Utils/globalStyles";
@@ -69,6 +86,8 @@ interface SearchResultsListProps {
   zipCode: string;
   city: string;
   state: string;
+  onAddToCart?: (item: ServicePost) => void;
+  isAuthenticated?: boolean;
 }
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -111,15 +130,68 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
   </View>
 );
 
+// ADDED (feature/stripe-connect-payments): onAddToCart + isAuthenticated props for cart support
 const MiniServiceCard: React.FC<{
   item: ServicePost;
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
-}> = ({ item, isOwnPost, onChatPress }) => {
+  onAddToCart?: (item: ServicePost) => void;
+  isAuthenticated?: boolean;
+}> = ({ item, isOwnPost, onChatPress, onAddToCart, isAuthenticated }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const [showReviewsModal, setShowReviewsModal] = useState(false);  // ← NEW
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  // ADDED: tracks whether this item has been added to cart (shows "Added!" state)
+  const [cartAdded, setCartAdded] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
+  // ADDED: navigation needed to redirect guest users to sign-in
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+
+  // ADDED (feature/stripe-connect-payments):
+  // Auth guard — guests are sent to BusinessOwnerHomeScreen.
+  // Own posts cannot be added to cart.
+  // On success: dispatches via onAddToCart, shows "Keep Browsing / View Cart" alert.
+  const handleAddToCart = (e: any) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to add items to your cart.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: () => navigation.navigate('BusinessOwnerHomeScreen'),
+          },
+        ],
+      );
+      return;
+    }
+    if (isOwnPost) {
+      Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
+      return;
+    }
+    onAddToCart?.(item);
+    setCartAdded(true);
+    Alert.alert(
+      'Added to Cart',
+      `"${item.title}" has been added to your cart.`,
+      [
+        {
+          text: 'Keep Browsing',
+          style: 'cancel',
+          onPress: () => setCartAdded(false),
+        },
+        {
+          text: 'View Cart',
+          onPress: () => {
+            setCartAdded(false);
+            navigation.navigate('CartScreen');
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <>
@@ -176,6 +248,25 @@ const MiniServiceCard: React.FC<{
               </Text>
             </View>
           )}
+
+          {/* ADDED (feature/stripe-connect-payments): cart button below text content.
+              Hidden for own posts. Shows "Added!" state after successful cart add. */}
+          {!isOwnPost && (
+            <TouchableOpacity
+              style={[cartBtnStyle.btn, cartAdded && cartBtnStyle.btnAdded]}
+              onPress={handleAddToCart}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={cartAdded ? 'checkmark-circle' : 'cart-outline'}
+                size={12}
+                color="#fff"
+              />
+              <Text style={cartBtnStyle.btnText}>
+                {cartAdded ? 'Added!' : 'Add to Cart'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
 
@@ -202,6 +293,20 @@ const MiniServiceCard: React.FC<{
                 setTimeout(() => onChatPress(item), 300);
               }}
             />
+            {/* ADDED (feature/stripe-connect-payments): cart button inside full detail modal.
+                Closes the modal first, then triggers the same auth-guarded cart handler. */}
+            {!isOwnPost && (
+              <TouchableOpacity
+                style={modalStyles.cartBtn}
+                onPress={(e) => {
+                  setModalVisible(false);
+                  setTimeout(() => handleAddToCart(e), 300);
+                }}
+              >
+                <Ionicons name="cart-outline" size={20} color="#fff" />
+                <Text style={modalStyles.cartBtnText}>Add to Cart</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -269,8 +374,38 @@ const modalStyles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#222", marginRight: 8 },
   closeBtn: { padding: 4 },
   body: { padding: 16, paddingBottom: 40 },
+  // ADDED (feature/stripe-connect-payments): cart button inside full detail modal
+  cartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2E7D32',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginTop: 16,
+    gap: 8,
+  },
+  cartBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
 
+// ADDED (feature/stripe-connect-payments): cart button styles for mini card
+const cartBtnStyle = StyleSheet.create({
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#2E7D32',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  btnAdded: { backgroundColor: '#388E3C' },
+  btnText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+});
+
+// ADDED (feature/stripe-connect-payments): destructure new cart props
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
   searchResults,
   isOwnPost,
@@ -279,6 +414,8 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   zipCode,
   city,
   state,
+  onAddToCart,
+  isAuthenticated,
 }) => {
   const allResults = (searchResults.zipCodeMatches || [])
     .filter(item => item.is_active !== false);
@@ -334,10 +471,13 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
         <View style={styles.gridContainer}>
           {allResults.map((item) => (
             <View key={item.post_id} style={styles.gridItem}>
+              {/* ADDED (feature/stripe-connect-payments): pass cart props to each card */}
               <MiniServiceCard
                 item={item}
                 isOwnPost={isOwnPost(item.user_id)}
                 onChatPress={onChatPress}
+                onAddToCart={onAddToCart}
+                isAuthenticated={isAuthenticated}
               />
             </View>
           ))}

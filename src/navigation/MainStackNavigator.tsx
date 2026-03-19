@@ -65,6 +65,10 @@ import TermsOfServiceScreen from "../screens/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
+import CartScreen from '../screens/cart/CartScreen';
+import CheckoutScreen from '../screens/cart/CheckoutScreen';
+import ServiceAddressScreen from '../screens/cart/ServiceAddressScreen';
+import PaymentScreen from '../screens/cart/PaymentScreen';
 
 
 /**
@@ -145,10 +149,14 @@ export type TabParamList = {
  */
 export type RootStackParamList = {
   // Main Entry Point
-  TabWrapperScreen: {
-    screen?: keyof TabParamList;                    // Optional: Navigate to specific tab
-    params?: TabParamList[keyof TabParamList];      // Optional: Pass params to tab
+ TabWrapperScreen: {
+    screen?: keyof TabParamList;
+    params?: TabParamList[keyof TabParamList];
   };
+  CartScreen: undefined;
+  CheckoutScreen: { serviceAddress?: any };
+  ServiceAddressScreen: undefined;
+  PaymentScreen: { serviceAddress: any; totalCents: number; items: any[] };
   
   // Listings & Posts - Service management
   ListingsScreen: undefined;  // View all user's posted services
@@ -255,13 +263,14 @@ const NavigationStack: React.FC = () => {
       <RootStack.Navigator
         id={undefined}
         initialRouteName="TabWrapperScreen"
+        
         screenOptions={{ 
           headerShown: false,
           animation: 'slide_from_right',
           contentStyle: { backgroundColor: '#fff' }
         }}
-
       >
+        
         {/* All your existing screens stay exactly the same */}
         <RootStack.Screen 
   name="AdminCategoryRequests" 
@@ -273,6 +282,7 @@ const NavigationStack: React.FC = () => {
           component={TabWrapperScreen}
           options={{ gestureEnabled: false }}
         />
+        
         
         <RootStack.Group screenOptions={{ presentation: 'card', animation: 'slide_from_right' }}>
           <RootStack.Screen 
@@ -378,9 +388,11 @@ const NavigationStack: React.FC = () => {
           <RootStack.Screen 
             name="RequestServiceCategoryScreen" 
             component={RequestServiceCategoryScreen}
+            
             options={{
               headerShown: false,
               headerTitle: 'Request New Category',
+              
               headerStyle: {
                 backgroundColor: '#4A90E2',
               },
@@ -389,8 +401,28 @@ const NavigationStack: React.FC = () => {
                 fontWeight: 'bold',
               },
             }}
+            
           />
-         
+          <RootStack.Screen
+            name="CartScreen"
+            component={CartScreen}
+            options={{ headerTitle: 'My Cart' }}
+          />
+          <RootStack.Screen
+            name="CheckoutScreen"
+            component={CheckoutScreen}
+            options={{ headerTitle: 'Checkout' }}
+          />
+          <RootStack.Screen
+            name="ServiceAddressScreen"
+            component={ServiceAddressScreen}
+            options={{ headerTitle: 'Service Address' }}
+          />
+          <RootStack.Screen
+            name="PaymentScreen"
+            component={PaymentScreen}
+            options={{ headerTitle: 'Payment' }}
+          />
         </RootStack.Group>
       </RootStack.Navigator>
 

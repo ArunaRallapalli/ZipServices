@@ -58,6 +58,7 @@ export interface ServicePost {
   average_rating?: number;     // ← ADD
   review_count?: number;       // ← ADD
   is_active?: boolean;
+  accepts_payment?: boolean;
 }
 
 /**

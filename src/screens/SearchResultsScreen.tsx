@@ -11,10 +11,11 @@
  *      • "Can't find it? Search 100+ categories" nudge
  *  - Added fetchRecentPosts to load on mount
  *  - Header is now shorter (see SearchHeader.tsx)
- *
- * No backend changes required.
+ *  - Added handleAddToCart wired to Redux cartSlice
+ *  - isAuthenticated passed to RecentPostsSection for cart auth guard
  */
-
+import { useDispatch } from 'react-redux';
+import { addToCart } from '../store/cartSlice';
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -36,7 +37,7 @@ import { RootStackParamList, TabParamList } from '../navigation/MainStackNavigat
 import Header from '../components/SearchHeader';
 import SearchForm from '../components/SearchForm';
 import SearchResultsList from '../components/SearchResultsList';
-import RecentPostsSection from '../components/RecentPostsSection'; // ← NEW
+import RecentPostsSection from '../components/RecentPostsSection';
 
 import {
   ServicePost,
@@ -44,7 +45,7 @@ import {
   fetchLocationFromZip,
   fetchCategories,
   searchServicePosts,
-  fetchRecentPosts,        // ← this is the new one
+  fetchRecentPosts,
   isValidZipCode,
 } from '../Utils/searchUtils';
 
@@ -78,6 +79,7 @@ const SearchResultsScreen: React.FC = () => {
   const route = useRoute<SearchResultsRouteProp>();
   const navigation = useNavigation<SearchResultsNavProp>();
   const auth = useAuth();
+  const dispatch = useDispatch(); // ← NEW
 
   const routeParams = route.params || {};
   const customerInfo: CustomerInfo | undefined = routeParams.customerInfo;
@@ -104,7 +106,7 @@ const SearchResultsScreen: React.FC = () => {
     hasStateMatches: false,
   });
 
-  // NEW: recent-posts section state
+  // recent-posts section state
   const [recentPosts, setRecentPosts] = useState<ServicePost[]>([]);
   const [loadingRecentSection, setLoadingRecentSection] = useState(true);
 
@@ -129,6 +131,23 @@ const SearchResultsScreen: React.FC = () => {
 
   const isOwnPost = (postUserId: number): boolean =>
     String(auth.userInfo?.user_id) === String(postUserId);
+
+  // --------------------------------------------------------------------------
+  // CART HANDLER — NEW
+  // --------------------------------------------------------------------------
+
+  const handleAddToCart = (item: ServicePost) => {
+  dispatch(addToCart({
+    post_id: item.post_id,
+    title: item.title,
+    service_category: item.service_category,
+    price_range: item.price_range ?? '',
+    provider_user_id: item.user_id,                          // ← was user_id
+    provider_name: item.business_name ?? item.poster_name ?? '', // ← was business_name
+    photos: item.photos ?? [],
+    saved_for_later: false,
+  }));
+};
 
   // --------------------------------------------------------------------------
   // CHAT HANDLER
@@ -204,7 +223,6 @@ const SearchResultsScreen: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     const refreshTasks: Promise<any>[] = [
-      // Always refresh recent-posts section
       fetchRecentPosts(9).then(setRecentPosts).catch(() => {}),
     ];
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
@@ -300,7 +318,7 @@ const SearchResultsScreen: React.FC = () => {
   const handleSearch = () => performSearch(false);
 
   // --------------------------------------------------------------------------
-  // CATEGORY PRESS — used by both RecentPostsSection chips/cards
+  // CATEGORY PRESS
   // --------------------------------------------------------------------------
 
   const handleCategoryPress = (categoryName: string) => {
@@ -330,7 +348,6 @@ const SearchResultsScreen: React.FC = () => {
   // EFFECTS
   // --------------------------------------------------------------------------
 
-  /** Refresh search results when screen regains focus */
   useFocusEffect(
     useCallback(() => {
       if (hasSearched && showResults && serviceNeeded && zipCode && isZipValid) {
@@ -339,7 +356,6 @@ const SearchResultsScreen: React.FC = () => {
     }, [hasSearched, showResults, serviceNeeded, zipCode, isZipValid]),
   );
 
-  /** Load categories (for picker) on mount */
   useEffect(() => {
     const loadCategories = async () => {
       setLoadingCategories(true);
@@ -355,7 +371,6 @@ const SearchResultsScreen: React.FC = () => {
     loadCategories();
   }, []);
 
-  /** NEW: Load recent posts + active category names on mount */
   useEffect(() => {
     const loadRecentSection = async () => {
       setLoadingRecentSection(true);
@@ -371,7 +386,6 @@ const SearchResultsScreen: React.FC = () => {
     loadRecentSection();
   }, []);
 
-  /** Auto-search with preselected category */
   useFocusEffect(
     useCallback(() => {
       if (preselectedCategory && isZipValid && !hasSearched && categories.length > 0) {
@@ -380,7 +394,6 @@ const SearchResultsScreen: React.FC = () => {
     }, [preselectedCategory, isZipValid, hasSearched, categories]),
   );
 
-  /** Mark component as past initial mount */
   useEffect(() => {
     isInitialMount.current = false;
   }, []);
@@ -399,6 +412,8 @@ const SearchResultsScreen: React.FC = () => {
 
   if (showResults) {
     return (
+      // ADDED (feature/stripe-connect-payments): pass cart handler and auth state
+      // so search result cards show the Add to Cart button with proper auth guard
       <SearchResultsList
         searchResults={searchResults}
         isOwnPost={isOwnPost}
@@ -407,6 +422,8 @@ const SearchResultsScreen: React.FC = () => {
         zipCode={zipCode}
         city={city}
         state={state}
+        onAddToCart={handleAddToCart}
+        isAuthenticated={auth.isAuthenticated}
       />
     );
   }
@@ -443,17 +460,17 @@ const SearchResultsScreen: React.FC = () => {
           onZipChange={handleZipChange}
         />
 
-        {/*
-          NEW: RecentPostsSection
-          Replaces the popular category tiles.
-          Shows real active categories + latest 5 posts.
-          onCategoryPress wires into the same search flow.
-        */}
+        {/* RecentPostsSection — now with cart props */}
         <RecentPostsSection
           recentPosts={recentPosts}
           isOwnPost={isOwnPost}
           onChatPress={handleChatPress}
           loading={loadingRecentSection}
+          onAddToCart={handleAddToCart}              // ← NEW
+          isAuthenticated={auth.isAuthenticated}     // ← NEW
+          onReviewSubmitted={() => {
+            fetchRecentPosts(9).then(setRecentPosts).catch(() => {});
+          }}
         />
 
         {/* Support line */}

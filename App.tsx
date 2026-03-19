@@ -3,11 +3,10 @@ import { StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import MainStackNavigator from "./src/navigation/MainStackNavigator";
-import ErrorBoundary from "./src/components/ErrorBoundary";  // ← ADD THIS IMPORT
+import ErrorBoundary from "./src/components/ErrorBoundary";
+import { Provider } from 'react-redux';
+import { store } from './src/store/store';
 
-// Linking configuration for deep linking and web URLs
-//Deep linking means instead of just launching the app, it "navigates" 
-// directly to a particular screen with specific data.
 const linking = {
   prefixes: ['http://localhost:8081', 'https://gozipmarket.com'],
   config: {
@@ -26,13 +25,15 @@ const linking = {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <ErrorBoundary>  {/* ← ADD THIS WRAPPER */}
-        <NavigationContainer linking={linking}>
-          <MainStackNavigator />
-        </NavigationContainer>
-      </ErrorBoundary>  {/* ← CLOSE THE WRAPPER */}
-    </GestureHandlerRootView>
+    <Provider store={store}>
+      <GestureHandlerRootView style={styles.container}>
+        <ErrorBoundary>
+          <NavigationContainer linking={linking}>
+            <MainStackNavigator />
+          </NavigationContainer>
+        </ErrorBoundary>
+      </GestureHandlerRootView>
+    </Provider>
   );
 }
 

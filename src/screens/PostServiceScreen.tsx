@@ -1,18 +1,14 @@
 /**
- * PostServiceScreen Component - WITH PHOTO UPLOAD
- * 
- * Last Updated: February 24, 2026
- * Changes: Added photo upload functionality, premium users get 10 photos vs 5 for free users
- * 
+ * PostServiceScreen Component - WITH PHOTO UPLOAD + PER-PHOTO DESCRIPTIONS
+ *
+ * Last Updated: March 2026
+ * Changes:
+ *   - Added per-photo description/caption field below each photo preview
+ *   - PhotoWithDesc type wraps asset + description string
+ *   - Description sent to backend via JSON (web) and FormData (mobile)
+ *   - Premium users get 10 photos vs 5 for free users
+ *
  * Purpose: Allows users to OFFER their services with optional photos
- * 
- * Key Features:
- * - Post service offers (title, description, category, price, contact info)
- * - Upload up to 5 photos per post for free users, 10 for premium (HEIC auto-converted, compressed by backend)
- * - Photo preview and removal before posting
- * - Orange banner links to RequestServiceCategoryScreen for new categories
- * - Auto-populates user profile data (email, zip, phone)
- * - Form validation
  */
 
 import { useAuth } from "../contexts/AuthContext";
@@ -39,11 +35,24 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import API_URL from '../config/apiConfig';
 
+// ============================================================================
+// TYPE — photo asset bundled with its caption
+// ============================================================================
+
+interface PhotoWithDesc {
+  asset: ImagePicker.ImagePickerAsset;
+  description: string;
+}
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
 const PostServiceScreen: React.FC = () => {
   const { isAuthenticated, userId, userType, userInfo } = useAuth();
   const maxPhotos = userInfo?.is_premium ? 10 : 5;
   const navigation = useNavigation();
-  
+
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -53,8 +62,8 @@ const PostServiceScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
 
-  // Photo state
-  const [selectedPhotos, setSelectedPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  // Photo state — each entry is { asset, description }
+  const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   // UI state
@@ -76,22 +85,21 @@ const PostServiceScreen: React.FC = () => {
     requestPermissions();
   }, []);
 
-  /**
-   * Request camera roll permissions
-   */
+  // --------------------------------------------------------------------------
+  // PERMISSIONS
+  // --------------------------------------------------------------------------
+
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Permission Required',
-        'Please allow access to your photos to upload images.'
-      );
+      Alert.alert('Permission Required', 'Please allow access to your photos to upload images.');
     }
   };
 
-  /**
-   * Pick photos from gallery
-   */
+  // --------------------------------------------------------------------------
+  // PICK PHOTOS
+  // --------------------------------------------------------------------------
+
   const pickPhotos = async () => {
     try {
       if (selectedPhotos.length >= maxPhotos) {
@@ -106,217 +114,213 @@ const PostServiceScreen: React.FC = () => {
         selectionLimit: maxPhotos - selectedPhotos.length,
       });
 
-     if (!result.canceled && result.assets) {
-  const available = maxPhotos - selectedPhotos.length;
-  const trimmed = result.assets.slice(0, available);
-  if (result.assets.length > trimmed.length) {
-    Alert.alert('Limit Reached', `Only ${trimmed.length} photo(s) added. Maximum is ${maxPhotos} per post.`);
-  }
-  setSelectedPhotos([...selectedPhotos, ...trimmed]);
-  console.log(`📸 Selected ${trimmed.length} photos`);
-}
+      if (!result.canceled && result.assets) {
+        const available = maxPhotos - selectedPhotos.length;
+        const trimmed = result.assets.slice(0, available);
+        if (result.assets.length > trimmed.length) {
+          Alert.alert(
+            'Limit Reached',
+            `Only ${trimmed.length} photo(s) added. Maximum is ${maxPhotos} per post.`,
+          );
+        }
+        // Wrap each asset with an empty description
+        const withDesc: PhotoWithDesc[] = trimmed.map(asset => ({ asset, description: '' }));
+        setSelectedPhotos([...selectedPhotos, ...withDesc]);
+        console.log(`📸 Selected ${trimmed.length} photos`);
+      }
     } catch (error) {
       console.error('Error picking photos:', error);
       Alert.alert('Error', 'Failed to pick photos. Please try again.');
     }
   };
 
-  /**
-   * Remove a photo from selection
-   */
+  // --------------------------------------------------------------------------
+  // REMOVE PHOTO
+  // --------------------------------------------------------------------------
+
   const removePhoto = (index: number) => {
     setSelectedPhotos(selectedPhotos.filter((_, i) => i !== index));
   };
-/**
- * Upload photos to backend after post is created
- * CROSS-PLATFORM: Uses Base64 for web, FormData for mobile
- */
-const uploadPhotos = async (postId: string) => {
-  if (selectedPhotos.length === 0) return;
 
-  setUploadingPhotos(true);
-  console.log(`📤 Uploading ${selectedPhotos.length} photos for post ${postId}`);
+  // --------------------------------------------------------------------------
+  // UPDATE PHOTO DESCRIPTION
+  // --------------------------------------------------------------------------
 
-  let uploadedCount = 0;
-  let failedCount = 0;
+  const updatePhotoDescription = (index: number, text: string) => {
+    const updated = [...selectedPhotos];
+    updated[index] = { ...updated[index], description: text };
+    setSelectedPhotos(updated);
+  };
 
-  for (const photo of selectedPhotos) {
-    try {
-      const token = await AsyncStorage.getItem('access_token');
-      
-      if (!token) {
-        throw new Error('No authentication token');
-      }
+  // --------------------------------------------------------------------------
+  // UPLOAD PHOTOS — sends description alongside each photo
+  // --------------------------------------------------------------------------
 
-      const uri = photo.uri;
+  const uploadPhotos = async (postId: string) => {
+    if (selectedPhotos.length === 0) return;
 
-      // Determine mimeType and extension
-      let mimeType = 'image/jpeg';
-      let fileExtension = 'jpg';
-      let blob: Blob | null = null;
+    setUploadingPhotos(true);
+    console.log(`📤 Uploading ${selectedPhotos.length} photos for post ${postId}`);
 
-      if (Platform.OS === 'web') {
-        // On web, blob URLs don't have extensions - fetch the blob to determine type
-        const response = await fetch(uri);
-        blob = await response.blob();
-        mimeType = blob.type || 'image/jpeg';
-        
-        // Map MIME type to extension
-        const extensionMap: { [key: string]: string } = {
-          'image/jpeg': 'jpg',
-          'image/png': 'png',
-          'image/webp': 'webp',
-          'image/heic': 'heic',
-          'image/heif': 'heic',
-        };
-        fileExtension = extensionMap[mimeType] || 'jpg';
-      } else {
-        // On mobile, we can trust the file extension
-        fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
-        
-        if (fileExtension === 'png') mimeType = 'image/png';
-        else if (fileExtension === 'webp') mimeType = 'image/webp';
-        else if (fileExtension === 'heic' || fileExtension === 'heif') mimeType = 'image/heic';
-      }
-      
-      console.log(`📤 Uploading photo ${uploadedCount + 1}/${selectedPhotos.length}`);
+    let uploadedCount = 0;
+    let failedCount = 0;
 
-      let uploadSuccess = false;
+    for (const photo of selectedPhotos) {
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        if (!token) throw new Error('No authentication token');
 
-      // ============================================================
-      // WEB: BASE64 UPLOAD (works for ALL file sizes)
-      // ============================================================
-      if (Platform.OS === 'web') {
-        console.log('🌐 Web: Using Base64 upload method');
-        
-        // Blob is already fetched above
-        if (!blob) {
-          throw new Error('Blob not available for web upload');
-        }
-        
-        // Convert to base64
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = (reader.result as string).split(',')[1];
-            resolve(base64String);
+        const uri = photo.asset.uri;
+        let mimeType = 'image/jpeg';
+        let fileExtension = 'jpg';
+        let blob: Blob | null = null;
+
+        if (Platform.OS === 'web') {
+          const response = await fetch(uri);
+          blob = await response.blob();
+          mimeType = blob.type || 'image/jpeg';
+          const extensionMap: { [key: string]: string } = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp',
+            'image/heic': 'heic',
+            'image/heif': 'heic',
           };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        
-        console.log('📦 Converted to Base64, size:', Math.round(base64.length / 1024), 'KB');
-        
-        // Send as JSON with PROPER filename
-        const uploadResponse = await fetch(`${API_URL}/api/service-posts/${postId}/upload-photo`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            photo: base64,
-            filename: `photo_${Date.now()}.${fileExtension}`,
-            mimetype: mimeType
-          })
-        });
-
-        if (uploadResponse.ok) {
-          const result = await uploadResponse.json();
-          console.log('✅ Web upload successful:', result);
-          uploadSuccess = true;
+          fileExtension = extensionMap[mimeType] || 'jpg';
         } else {
-          const error = await uploadResponse.text();
-          console.error('❌ Web upload failed:', error);
-          throw new Error(`Upload failed with status ${uploadResponse.status}`);
+          fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
+          if (fileExtension === 'png') mimeType = 'image/png';
+          else if (fileExtension === 'webp') mimeType = 'image/webp';
+          else if (fileExtension === 'heic' || fileExtension === 'heif') mimeType = 'image/heic';
         }
-      } 
-      // ============================================================
-      // MOBILE: FORMDATA UPLOAD (XMLHttpRequest)
-      // ============================================================
-      else {
-        console.log('📱 Mobile: Using FormData upload method');
-        
-        const formData = new FormData();
-        formData.append('photo', {
-          uri: uri,
-          type: mimeType,
-          name: `photo.${fileExtension}`,
-        } as any);
-        
-        uploadSuccess = await new Promise<boolean>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          
-          xhr.open('POST', `${API_URL}/api/service-posts/${postId}/upload-photo`);
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-          
-          xhr.onload = () => {
-            if (xhr.status === 200) {
-              try {
-                const response = JSON.parse(xhr.responseText);
-                console.log('✅ Mobile upload successful:', response);
-                resolve(true);
-              } catch (e) {
-                console.error('❌ Failed to parse response');
-                reject(new Error('Invalid response'));
+
+        console.log(`📤 Uploading photo ${uploadedCount + 1}/${selectedPhotos.length}`);
+
+        let uploadSuccess = false;
+
+        // ── WEB: Base64 upload ──
+        if (Platform.OS === 'web') {
+          console.log('🌐 Web: Using Base64 upload method');
+          if (!blob) throw new Error('Blob not available for web upload');
+
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob!);
+          });
+
+          console.log('📦 Converted to Base64, size:', Math.round(base64.length / 1024), 'KB');
+
+          const uploadResponse = await fetch(
+            `${API_URL}/api/service-posts/${postId}/upload-photo`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                photo: base64,
+                filename: `photo_${Date.now()}.${fileExtension}`,
+                mimetype: mimeType,
+                description: photo.description.trim(), // ← NEW
+              }),
+            },
+          );
+
+          if (uploadResponse.ok) {
+            const result = await uploadResponse.json();
+            console.log('✅ Web upload successful:', result);
+            uploadSuccess = true;
+          } else {
+            const error = await uploadResponse.text();
+            console.error('❌ Web upload failed:', error);
+            throw new Error(`Upload failed with status ${uploadResponse.status}`);
+          }
+
+        // ── MOBILE: FormData upload ──
+        } else {
+          console.log('📱 Mobile: Using FormData upload method');
+
+          const formData = new FormData();
+          formData.append('photo', {
+            uri,
+            type: mimeType,
+            name: `photo.${fileExtension}`,
+          } as any);
+          formData.append('description', photo.description.trim()); // ← NEW
+
+          uploadSuccess = await new Promise<boolean>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_URL}/api/service-posts/${postId}/upload-photo`);
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+            xhr.onload = () => {
+              if (xhr.status === 200) {
+                try {
+                  const response = JSON.parse(xhr.responseText);
+                  console.log('✅ Mobile upload successful:', response);
+                  resolve(true);
+                } catch (e) {
+                  console.error('❌ Failed to parse response');
+                  reject(new Error('Invalid response'));
+                }
+              } else {
+                console.error('❌ Mobile upload failed:', xhr.responseText);
+                reject(new Error(`Upload failed with status ${xhr.status}`));
               }
-            } else {
-              console.error('❌ Mobile upload failed:', xhr.responseText);
-              reject(new Error(`Upload failed with status ${xhr.status}`));
-            }
-          };
-          
-          xhr.onerror = () => reject(new Error('Network error'));
-          xhr.ontimeout = () => reject(new Error('Upload timeout'));
-          
-          xhr.send(formData);
-        });
-      }
+            };
+            xhr.onerror = () => reject(new Error('Network error'));
+            xhr.ontimeout = () => reject(new Error('Upload timeout'));
+            xhr.send(formData);
+          });
+        }
 
-      if (uploadSuccess) {
-        uploadedCount++;
-        console.log(`✅ Photo ${uploadedCount}/${selectedPhotos.length} uploaded successfully`);
-      }
+        if (uploadSuccess) {
+          uploadedCount++;
+          console.log(`✅ Photo ${uploadedCount}/${selectedPhotos.length} uploaded`);
+        }
 
-    } catch (error) {
-      failedCount++;
-      console.error(`❌ Photo upload failed:`, error);
+      } catch (error) {
+        failedCount++;
+        console.error('❌ Photo upload failed:', error);
+      }
     }
-  }
 
-  setUploadingPhotos(false);
+    setUploadingPhotos(false);
 
-  if (failedCount > 0) {
-    Alert.alert(
-      'Upload Complete',
-      `${uploadedCount} photos uploaded successfully. ${failedCount} failed.`
-    );
-  }
+    if (failedCount > 0) {
+      Alert.alert(
+        'Upload Complete',
+        `${uploadedCount} photos uploaded successfully. ${failedCount} failed.`,
+      );
+    }
 
-  console.log(`✅ Photo upload complete: ${uploadedCount} succeeded, ${failedCount} failed`);
-};
+    console.log(`✅ Upload complete: ${uploadedCount} succeeded, ${failedCount} failed`);
+  };
+
+  // --------------------------------------------------------------------------
+  // AUTH CHECK
+  // --------------------------------------------------------------------------
 
   const checkAuthAndRedirect = async () => {
     console.log('🔐 Auth check - isAuthenticated:', isAuthenticated, 'userId:', userId);
-    
     setLoadingUser(true);
 
     if (!isAuthenticated || !userId) {
       console.log('❌ Not authenticated - redirecting to login');
       setLoadingUser(false);
-      
       Alert.alert(
         'Sign In Required',
         'Please sign in to post a service.',
         [
           {
             text: 'Sign In',
-            onPress: () => {
-              navigation.navigate('BusinessOwnerHomeScreen' as never);
-            },
-          }
+            onPress: () => navigation.navigate('BusinessOwnerHomeScreen' as never),
+          },
         ],
-        { cancelable: false }
+        { cancelable: false },
       );
       return;
     }
@@ -326,22 +330,23 @@ const uploadPhotos = async (postId: string) => {
     setLoadingUser(false);
   };
 
+  // --------------------------------------------------------------------------
+  // LOAD CATEGORIES
+  // --------------------------------------------------------------------------
+
   const loadServiceCategories = async () => {
     try {
       setLoadingCategories(true);
       console.log('📦 Loading service categories');
-      
       const data = await api.get('/api/service-categories');
 
       if (data.success && Array.isArray(data.categories)) {
         setServiceCategories(data.categories);
-        console.log('✅ Loaded categories:', data.categories);
       } else {
         throw new Error('Invalid response format');
       }
     } catch (error) {
       console.error('❌ Error loading service categories:', error);
-      // Fallback categories
       setServiceCategories([
         { category_name: 'Cleaning', display_order: 1 },
         { category_name: 'Plumbing', display_order: 2 },
@@ -355,22 +360,24 @@ const uploadPhotos = async (postId: string) => {
         { category_name: 'Catering', display_order: 10 },
         { category_name: 'Beauty Services', display_order: 11 },
         { category_name: 'Tech Support', display_order: 12 },
-        { category_name: 'Other', display_order: 13 }
+        { category_name: 'Other', display_order: 13 },
       ]);
     } finally {
       setLoadingCategories(false);
     }
   };
 
+  // --------------------------------------------------------------------------
+  // LOAD USER PROFILE
+  // --------------------------------------------------------------------------
+
   const loadUserProfile = async () => {
     try {
       console.log('👤 Loading profile for user:', userId);
-
       const data = await api.get(`/api/users/${userId}/profile`);
 
       if (data.success && data.profile) {
         const profile = data.profile;
-
         if (profile.customerProfile) {
           setZipCode(profile.customerProfile.zip_code || '');
           setPhoneNumber(profile.customerProfile.phone_number || '');
@@ -378,53 +385,36 @@ const uploadPhotos = async (postId: string) => {
           setZipCode(profile.businessProfile.zip_code || '');
           setPhoneNumber(profile.businessProfile.phone_number || '');
         }
-
-        if (profile.user && profile.user.email) {
-          setContactEmail(profile.user.email);
-        }
+        if (profile.user?.email) setContactEmail(profile.user.email);
       }
     } catch (error) {
       console.error('❌ Error loading user profile:', error);
     }
   };
 
+  // --------------------------------------------------------------------------
+  // FORM VALIDATION
+  // --------------------------------------------------------------------------
+
   const validateForm = () => {
-    if (!title.trim()) {
-      Alert.alert('Validation Error', 'Please enter a title');
-      return false;
-    }
-    if (!description.trim()) {
-      Alert.alert('Validation Error', 'Please enter a description');
-      return false;
-    }
-    if (!serviceCategory) {
-      Alert.alert('Validation Error', 'Please select a service category');
-      return false;
-    }
-    if (!zipCode.trim()) {
-      Alert.alert('Validation Error', 'Please enter a zip code');
-      return false;
-    }
-    if (!contactEmail.trim()) {
-      Alert.alert('Validation Error', 'Please enter a contact email');
-      return false;
-    }
+    if (!title.trim()) { Alert.alert('Validation Error', 'Please enter a title'); return false; }
+    if (!description.trim()) { Alert.alert('Validation Error', 'Please enter a description'); return false; }
+    if (!serviceCategory) { Alert.alert('Validation Error', 'Please select a service category'); return false; }
+    if (!zipCode.trim()) { Alert.alert('Validation Error', 'Please enter a zip code'); return false; }
+    if (!contactEmail.trim()) { Alert.alert('Validation Error', 'Please enter a contact email'); return false; }
     return true;
   };
+
+  // --------------------------------------------------------------------------
+  // SUBMIT
+  // --------------------------------------------------------------------------
 
   const handleSubmit = async () => {
     if (!isAuthenticated || !userId) {
       Alert.alert(
         'Sign In Required',
         'Your session has expired. Please sign in again.',
-        [
-          {
-            text: 'Sign In',
-            onPress: () => {
-              navigation.navigate('BusinessOwnerHomeScreen' as never);
-            },
-          }
-        ]
+        [{ text: 'Sign In', onPress: () => navigation.navigate('BusinessOwnerHomeScreen' as never) }],
       );
       return;
     }
@@ -433,26 +423,21 @@ const uploadPhotos = async (postId: string) => {
 
     try {
       setLoading(true);
-      
       console.log('════════════════════════════════════════');
-      console.log('🚀 ATTEMPTING TO POST SERVICE WITH PHOTOS');
+      console.log('🚀 POSTING SERVICE WITH PHOTOS');
       console.log('  Photos selected:', selectedPhotos.length);
       console.log('════════════════════════════════════════');
-      
+
       const tokenFromStorage = await AsyncStorage.getItem('access_token');
-      
       if (!tokenFromStorage) {
-        console.error('❌ CRITICAL: No token found!');
         Alert.alert('Error', 'No authentication token found. Please log in again.');
         navigation.navigate('BusinessOwnerHomeScreen' as never);
         return;
       }
-      
-      let posterType = userType || 'guest';
 
       const servicePostData = {
         user_id: userId,
-        poster_type: posterType,
+        poster_type: userType || 'guest',
         post_type: 'offer',
         title: title.trim(),
         description: description.trim(),
@@ -465,10 +450,8 @@ const uploadPhotos = async (postId: string) => {
 
       console.log('📤 Submitting service offer...');
       const data = await api.post('/api/service-posts', servicePostData);
-
       console.log('✅ Post created successfully:', data.post.id);
 
-      // Upload photos if any selected
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
         await uploadPhotos(data.post.id);
@@ -479,40 +462,23 @@ const uploadPhotos = async (postId: string) => {
       console.log('════════════════════════════════════════');
 
       clearForm();
-      
+
       Alert.alert(
         'Success!',
         selectedPhotos.length > 0
           ? `Your service offer with ${selectedPhotos.length} photo(s) has been posted!`
           : 'Your service offer has been posted successfully!',
         [
-          {
-            text: 'View My Listings',
-            onPress: () => {
-              navigation.navigate('ListingsScreen' as never);
-            },
-          },
-          {
-            text: 'Post Another',
-            onPress: () => {
-              // Form already cleared
-            },
-          },
-        ]
+          { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
+          { text: 'Post Another' },
+        ],
       );
     } catch (error: any) {
-      console.log('════════════════════════════════════════');
-      console.error('❌ ERROR POSTING SERVICE');
-      console.error('  Error:', error);
-      console.log('════════════════════════════════════════');
-      
+      console.error('❌ ERROR POSTING SERVICE:', error);
       let errorMessage = 'Failed to create service post. Please try again.';
-      
       if (error.status === 401) {
         errorMessage = 'Your session has expired. Please log in again.';
-        setTimeout(() => {
-          navigation.navigate('BusinessOwnerHomeScreen' as never);
-        }, 2000);
+        setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen' as never), 2000);
       } else if (error.status === 403) {
         errorMessage = 'You do not have permission to perform this action.';
       } else if (error.response?.error) {
@@ -520,12 +486,15 @@ const uploadPhotos = async (postId: string) => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
+  // --------------------------------------------------------------------------
+  // CLEAR FORM
+  // --------------------------------------------------------------------------
 
   const clearForm = () => {
     setTitle('');
@@ -538,6 +507,10 @@ const uploadPhotos = async (postId: string) => {
   const navigateToRequestCategory = () => {
     navigation.navigate('RequestServiceCategoryScreen' as never);
   };
+
+  // --------------------------------------------------------------------------
+  // LOADING / AUTH GATES
+  // --------------------------------------------------------------------------
 
   if (loadingUser || loadingCategories) {
     return (
@@ -557,6 +530,10 @@ const uploadPhotos = async (postId: string) => {
     );
   }
 
+  // --------------------------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------------------------
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -564,11 +541,8 @@ const uploadPhotos = async (postId: string) => {
     >
       {/* Back button header */}
       <View style={styles.topBar}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color="#4A90E2"/>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#4A90E2" />
           <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>
       </View>
@@ -576,9 +550,7 @@ const uploadPhotos = async (postId: string) => {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Offer Your Services</Text>
-          <Text style={styles.headerSubtitle}>
-            Share your expertise with those who need it
-          </Text>
+          <Text style={styles.headerSubtitle}>Share your expertise with those who need it</Text>
         </View>
 
         <View style={styles.roleDescription}>
@@ -589,10 +561,7 @@ const uploadPhotos = async (postId: string) => {
         </View>
 
         {/* Banner to request new category */}
-        <TouchableOpacity 
-          style={styles.requestCategoryBanner}
-          onPress={navigateToRequestCategory}
-        >
+        <TouchableOpacity style={styles.requestCategoryBanner} onPress={navigateToRequestCategory}>
           <Ionicons name="add-circle-outline" size={20} color="#FF6B35" />
           <Text style={styles.requestCategoryText}>
             Don't see your category? Request a new one →
@@ -600,6 +569,7 @@ const uploadPhotos = async (postId: string) => {
         </TouchableOpacity>
 
         <View style={styles.form}>
+          {/* Title */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Title *</Text>
             <TextInput
@@ -609,11 +579,10 @@ const uploadPhotos = async (postId: string) => {
               placeholder="e.g., Professional House Cleaning Service"
               maxLength={200}
             />
-            <Text style={styles.characterCount}>
-              {title.length}/200 characters
-            </Text>
+            <Text style={styles.characterCount}>{title.length}/200 characters</Text>
           </View>
-          
+
+          {/* Description */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Description *</Text>
             <TextInput
@@ -627,14 +596,14 @@ const uploadPhotos = async (postId: string) => {
               textAlignVertical="top"
             />
             <Text style={styles.privacyNote}>
-              🔒 Privacy Notice: This application does not publicly display personal contact information such as phone numbers or email addresses.
-              Any contact details included in your description will be visible to others and shared at your own discretion and risk.
+              🔒 Privacy Notice: This application does not publicly display personal contact
+              information such as phone numbers or email addresses. Any contact details included in
+              your description will be visible to others and shared at your own discretion and risk.
             </Text>
-            <Text style={styles.characterCount}>
-              {description.length}/5000 characters
-            </Text>
+            <Text style={styles.characterCount}>{description.length}/5000 characters</Text>
           </View>
-          
+
+          {/* Category */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Category *</Text>
             <View style={styles.pickerContainer}>
@@ -645,45 +614,72 @@ const uploadPhotos = async (postId: string) => {
               >
                 <Picker.Item label="Select a category..." value="" />
                 {serviceCategories.map((category) => (
-                  <Picker.Item 
-                    key={category.category_name} 
-                    label={category.category_name} 
-                    value={category.category_name} 
+                  <Picker.Item
+                    key={category.category_name}
+                    label={category.category_name}
+                    value={category.category_name}
                   />
                 ))}
               </Picker>
             </View>
           </View>
 
-          {/* ========== PHOTO UPLOAD SECTION ========== */}
+          {/* ── PHOTO UPLOAD SECTION ── */}
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>Photos (Optional)</Text>
               <Text style={styles.photoCount}>{selectedPhotos.length}/{maxPhotos}</Text>
             </View>
-            
+
             <TouchableOpacity
               style={styles.addPhotoButton}
               onPress={pickPhotos}
               disabled={selectedPhotos.length >= maxPhotos}
             >
-              <Ionicons name="camera-outline" size={24} color={selectedPhotos.length >= maxPhotos ? "#ccc" : "#4A90E2"} />
-              <Text style={[styles.addPhotoText, selectedPhotos.length >= maxPhotos && styles.disabledText]}>
+              <Ionicons
+                name="camera-outline"
+                size={24}
+                color={selectedPhotos.length >= maxPhotos ? '#ccc' : '#4A90E2'}
+              />
+              <Text style={[
+                styles.addPhotoText,
+                selectedPhotos.length >= maxPhotos && styles.disabledText,
+              ]}>
                 {selectedPhotos.length >= maxPhotos ? 'Maximum photos reached' : 'Add Photos'}
               </Text>
             </TouchableOpacity>
 
+            {/* Photo previews — each with a description field below */}
             {selectedPhotos.length > 0 && (
               <View style={styles.photoGrid}>
                 {selectedPhotos.map((photo, index) => (
-                  <View key={index} style={styles.photoPreview}>
-                    <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-                    <TouchableOpacity
-                      style={styles.removePhotoButton}
-                      onPress={() => removePhoto(index)}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#fff" />
-                    </TouchableOpacity>
+                  <View key={index} style={styles.photoPreviewCard}>
+                    {/* Thumbnail row */}
+                    <View style={styles.photoPreviewRow}>
+                      <View style={styles.photoPreview}>
+                        <Image source={{ uri: photo.asset.uri }} style={styles.photoImage} />
+                        <TouchableOpacity
+                          style={styles.removePhotoButton}
+                          onPress={() => removePhoto(index)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.photoIndexLabel}>Photo {index + 1}</Text>
+                    </View>
+
+                    {/* Per-photo description — NEW */}
+                    <TextInput
+                      style={styles.photoDescInput}
+                      value={photo.description}
+                      onChangeText={(text) => updatePhotoDescription(index, text)}
+                      placeholder="Add a caption or detail for this photo... (optional)"
+                      maxLength={200}
+                      multiline
+                    />
+                    <Text style={styles.photoDescCount}>
+                      {photo.description.length}/200
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -695,8 +691,9 @@ const uploadPhotos = async (postId: string) => {
               </Text>
             )}
           </View>
-          {/* ========== END PHOTO SECTION ========== */}
+          {/* ── END PHOTO SECTION ── */}
 
+          {/* Price */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Price/Rate (Optional)</Text>
             <TextInput
@@ -709,7 +706,8 @@ const uploadPhotos = async (postId: string) => {
           </View>
 
           <Text style={styles.sectionHeader}>Contact Information</Text>
-          
+
+          {/* Email */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Contact Email *</Text>
             <TextInput
@@ -722,6 +720,7 @@ const uploadPhotos = async (postId: string) => {
             />
           </View>
 
+          {/* Zip */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Zip Code *</Text>
             <TextInput
@@ -734,6 +733,7 @@ const uploadPhotos = async (postId: string) => {
             />
           </View>
 
+          {/* Phone */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Phone Number (Optional)</Text>
             <TextInput
@@ -746,6 +746,7 @@ const uploadPhotos = async (postId: string) => {
             />
           </View>
 
+          {/* Submit */}
           <TouchableOpacity
             style={[styles.submitButton, (loading || uploadingPhotos) && styles.disabledButton]}
             onPress={handleSubmit}
@@ -771,14 +772,18 @@ const uploadPhotos = async (postId: string) => {
   );
 };
 
+// ============================================================================
+// STYLES
+// ============================================================================
+
 const styles = createResponsiveStyles({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  characterCount: { 
-    fontSize: 12, 
-    color: '#666', 
-    textAlign: 'right', 
+  characterCount: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'right',
     marginTop: 4,
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
   privacyNote: {
     fontSize: 12,
@@ -806,26 +811,89 @@ const styles = createResponsiveStyles({
     marginLeft: 4,
     fontWeight: '500',
   },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
   loadingText: { marginTop: 16, fontSize: 16, color: '#666' },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0e0e0', alignItems: 'center' },
+  header: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    alignItems: 'center',
+  },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#333' },
   headerSubtitle: { fontSize: 14, color: '#666', marginTop: 4 },
-  roleDescription: { flexDirection: 'row', alignItems: 'center', margin: 16, padding: 16, backgroundColor: '#fff', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#4A90E2' },
-  roleDescriptionText: { flex: 1, fontSize: 14, color: '#666', lineHeight: 20, marginLeft: 12 },
-  requestCategoryBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: '#FFF3E0', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#FF6B35' },
-  requestCategoryText: { flex: 1, fontSize: 13, color: '#D84315', fontWeight: '600', marginLeft: 8 },
+  roleDescription: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4A90E2',
+  },
+  roleDescriptionText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginLeft: 12,
+  },
+  requestCategoryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B35',
+  },
+  requestCategoryText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#D84315',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
   form: { margin: 16 },
-  sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 20, marginBottom: 12 },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 20,
+    marginBottom: 12,
+  },
   inputGroup: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: '600', color: "#4A90E2", marginBottom: 8 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#333' },
+  label: { fontSize: 16, fontWeight: '600', color: '#4A90E2', marginBottom: 8 },
+  input: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+  },
   textArea: { minHeight: 100, paddingTop: 12 },
-  pickerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, overflow: 'hidden' },
+  pickerContainer: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   picker: { height: 50 },
-  
+
   // Photo upload styles
   photoHeader: {
     flexDirection: 'row',
@@ -833,11 +901,7 @@ const styles = createResponsiveStyles({
     alignItems: 'center',
     marginBottom: 8,
   },
-  photoCount: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '600',
-  },
+  photoCount: { fontSize: 14, color: '#666', fontWeight: '600' },
   addPhotoButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -856,14 +920,25 @@ const styles = createResponsiveStyles({
     fontWeight: '600',
     marginLeft: 8,
   },
-  disabledText: {
-    color: '#ccc',
+  disabledText: { color: '#ccc' },
+
+  // Photo grid — cards stack vertically (full width)
+  photoGrid: { marginTop: 12 },
+
+  // Each card: thumbnail row + description input
+  photoPreviewCard: {
+    width: '100%',
+    marginBottom: 14,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 10,
   },
-  photoGrid: {
+  photoPreviewRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 12,
-    gap: 8,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   photoPreview: {
     width: 100,
@@ -884,16 +959,55 @@ const styles = createResponsiveStyles({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
   },
+  photoIndexLabel: {
+    marginLeft: 12,
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+
+  // Per-photo description — NEW
+  photoDescInput: {
+    backgroundColor: '#f9f9f9',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#333',
+    minHeight: 48,
+  },
+  photoDescCount: {
+    fontSize: 11,
+    color: '#aaa',
+    textAlign: 'right',
+    marginTop: 3,
+  },
+
   photoHint: {
     fontSize: 12,
     color: '#666',
     marginTop: 8,
     fontStyle: 'italic',
   },
-  
-  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4A90E2', paddingVertical: 16, borderRadius: 8, marginTop: 20 },
+
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4A90E2',
+    paddingVertical: 16,
+    borderRadius: 8,
+    marginTop: 20,
+  },
   disabledButton: { backgroundColor: '#cccccc' },
-  submitButtonText: { color: '#fff', fontSize: 18, fontWeight: '600', marginLeft: 8 },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
 });
 
 export default PostServiceScreen;

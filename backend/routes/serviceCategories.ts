@@ -31,7 +31,7 @@ router.get("/", async (req: Request, res: Response) => {
     
     const { data, error } = await supabase
       .from('service_categories')
-      .select('category_id, category_name, description')
+      .select('category_id, category_name, description, accepts_payment')
       .eq('is_active', true)
       .order('display_order', { ascending: true })
       .order('category_name', { ascending: true });
