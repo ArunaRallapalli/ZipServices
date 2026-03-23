@@ -135,6 +135,14 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
     console.log(`📊 Querying database for category: ${service_category}`);
     console.log('   Fetching all active posts for distance calculation...');
 
+    // Look up accepts_payment for this category separately
+    const { data: categoryData } = await supabase
+      .from('service_categories')
+      .select('accepts_payment')
+      .eq('category_name', service_category as string)
+      .single();
+    const acceptsPayment = categoryData?.accepts_payment ?? false;
+
     const { data, error } = await supabase
       .from('service_posts')
       .select(`
@@ -218,6 +226,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
           average_rating: post.users?.business_owners?.average_rating || 0,
           review_count: post.users?.business_owners?.review_count || 0,
           photos: post.photos || [],
+          accepts_payment: acceptsPayment,
         };
       })
     );
@@ -350,8 +359,16 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       .range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
-    
+
     if (error) throw error;
+
+    const { data: categoryData } = await supabase
+      .from('service_categories')
+      .select('category_name, accepts_payment');
+
+    const categoryPaymentMap = new Map(
+      (categoryData || []).map((c: any) => [c.category_name, c.accepts_payment ?? false])
+    );
 
     const posts = (data || []).map((post: any) => ({
       ...post,
@@ -361,6 +378,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       business_name: post.users?.business_owners?.business_name,
       average_rating: post.users?.business_owners?.average_rating || 0,
       review_count: post.users?.business_owners?.review_count || 0,
+      accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
     }));
     const total = count || 0;
 
@@ -1199,7 +1217,7 @@ router.post(
       // Verify post ownership
       const { data: post, error: postError } = await supabase
         .from('service_posts')
-        .select('user_id, photos')
+        .select('user_id, photos, photo_descriptions, photo_prices')
         .eq('id', postId)
         .single();
 
@@ -1327,11 +1345,20 @@ try {
       // ============================================================
       // UPDATE DATABASE
       // ============================================================
+      const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
+      const price = parseFloat(req.body.price) || 0;
+
       const updatedPhotos = [...currentPhotos, photoUrl];
-      
+      const updatedDescriptions = [...(post.photo_descriptions || []), description];
+      const updatedPrices = [...(post.photo_prices || []), price];
+
       const { error: updateError } = await supabase
         .from('service_posts')
-        .update({ photos: updatedPhotos })
+        .update({
+          photos: updatedPhotos,
+          photo_descriptions: updatedDescriptions,
+          photo_prices: updatedPrices,
+        })
         .eq('id', postId);
 
       if (updateError) {
@@ -1375,7 +1402,7 @@ router.delete(
 
       const { data: post, error: fetchError } = await supabase
         .from('service_posts')
-        .select('user_id, photos')
+        .select('user_id, photos, photo_descriptions, photo_prices')
         .eq('id', postId)
         .single();
 
@@ -1432,11 +1459,17 @@ router.delete(
         console.warn('⚠️ Storage deletion warning:', storageError);
       }
 
-      const updatedPhotos = post.photos.filter((_, i) => i !== index);
+      const updatedPhotos = post.photos.filter((_: any, i: number) => i !== index);
+      const updatedDescriptions = (post.photo_descriptions || []).filter((_: any, i: number) => i !== index);
+      const updatedPrices = (post.photo_prices || []).filter((_: any, i: number) => i !== index);
 
       const { error: updateError } = await supabase
         .from('service_posts')
-        .update({ photos: updatedPhotos.length > 0 ? updatedPhotos : null })
+        .update({
+          photos: updatedPhotos.length > 0 ? updatedPhotos : null,
+          photo_descriptions: updatedDescriptions,
+          photo_prices: updatedPrices,
+        })
         .eq('id', postId);
 
       if (updateError) {

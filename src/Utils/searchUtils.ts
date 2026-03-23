@@ -54,9 +54,11 @@ export interface ServicePost {
   poster_name?: string;
   business_name?: string;
   distance?: number;
-  photos?: string[];           // ← ADD
-  average_rating?: number;     // ← ADD
-  review_count?: number;       // ← ADD
+  photos?: string[];
+  photo_prices?: number[];        // parallel array: price per photo in dollars
+  photo_descriptions?: string[];  // parallel array: name/description per photo
+  average_rating?: number;
+  review_count?: number;
   is_active?: boolean;
   accepts_payment?: boolean;
 }
@@ -413,6 +415,26 @@ export const searchServicePosts = async (params: SearchParams): Promise<SearchRe
  * @param limit - Number of recent posts to return (default: 5)
  * @returns Promise resolving to array of recent ServicePost objects
  */
+/**
+ * Returns a Set of category names that have accepts_payment = true.
+ * Used by the frontend to decide whether to show the Add to Cart button.
+ */
+export const fetchPaymentCategories = async (): Promise<Set<string>> => {
+  try {
+    const data = await api.get('/api/service-categories');
+    if (data.success && Array.isArray(data.categories)) {
+      return new Set<string>(
+        data.categories
+          .filter((cat: any) => cat.accepts_payment === true)
+          .map((cat: any) => (typeof cat === 'string' ? cat : cat.category_name))
+      );
+    }
+    return new Set();
+  } catch {
+    return new Set();
+  }
+};
+
 export const fetchRecentPosts = async (limit: number = 5): Promise<ServicePost[]> => {
   console.log(`🆕 [searchUtils] Fetching ${limit} most recent posts...`);
   try {

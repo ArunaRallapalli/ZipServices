@@ -2,8 +2,9 @@
  * CheckoutScreen.tsx
  * Order summary showing cart items, service address, and total.
  * Customer confirms before proceeding to payment.
+ * Each item is a per-photo purchase; photo_price is pre-filled if set by provider.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, TextInput,
@@ -14,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { setAgreedAmount } from '../../store/cartSlice';
 import type { RootState } from '../../store/store';
 
+const itemKey = (post_id: number, photo_index: number) => `${post_id}_${photo_index}`;
+
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -22,26 +25,48 @@ const CheckoutScreen: React.FC = () => {
   const { items } = useSelector((state: RootState) => state.cart);
   const activeItems = items.filter(i => !i.saved_for_later);
 
-  // Local amount state for each item
-  const [amounts, setAmounts] = useState<{ [key: number]: string }>({});
+  // Keyed by `${post_id}_${photo_index}`
+  const [amounts, setAmounts] = useState<{ [key: string]: string }>({});
 
-  const handleAmountChange = (post_id: number, value: string) => {
-    setAmounts(prev => ({ ...prev, [post_id]: value }));
+  // Pre-fill amounts from photo_price when screen loads
+  useEffect(() => {
+    const initial: { [key: string]: string } = {};
+    activeItems.forEach(item => {
+      if (item.photo_price && item.photo_price > 0) {
+        const key = itemKey(item.post_id, item.photo_index);
+        initial[key] = item.photo_price.toFixed(2);
+        dispatch(setAgreedAmount({
+          post_id: item.post_id,
+          photo_index: item.photo_index,
+          amount: Math.round(item.photo_price * 100),
+        }));
+      }
+    });
+    if (Object.keys(initial).length > 0) {
+      setAmounts(initial);
+    }
+  }, []);
+
+  const handleAmountChange = (post_id: number, photo_index: number, value: string) => {
+    const key = itemKey(post_id, photo_index);
+    setAmounts(prev => ({ ...prev, [key]: value }));
     const cents = Math.round(parseFloat(value) * 100);
     if (!isNaN(cents) && cents > 0) {
-      dispatch(setAgreedAmount({ post_id, amount: cents }));
+      dispatch(setAgreedAmount({ post_id, photo_index, amount: cents }));
     }
   };
 
   const totalCents = activeItems.reduce((sum, item) => {
-    const amt = amounts[item.post_id];
+    const key = itemKey(item.post_id, item.photo_index);
+    const amt = amounts[key];
     const cents = amt ? Math.round(parseFloat(amt) * 100) : 0;
     return sum + (isNaN(cents) ? 0 : cents);
   }, 0);
 
   const platformFee = Math.round(totalCents * 0.10);
   const allAmountsSet = activeItems.every(item => {
-    const amt = amounts[item.post_id];
+    const key = itemKey(item.post_id, item.photo_index);
+    const amt = amounts[key];
     return amt && !isNaN(parseFloat(amt)) && parseFloat(amt) > 0;
   });
 
@@ -97,29 +122,37 @@ const CheckoutScreen: React.FC = () => {
             <Ionicons name="list" size={18} color="#4A90E2" />
             <Text style={styles.sectionTitle}>Order Items</Text>
           </View>
-          {activeItems.map(item => (
-            <View key={item.post_id} style={styles.orderItem}>
-              <View style={styles.orderItemInfo}>
-                <Text style={styles.orderItemTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.orderItemCategory}>{item.service_category}</Text>
-                {item.price_range && (
-                  <Text style={styles.orderItemPriceRange}>
-                    Listed: {item.price_range}
+          {activeItems.map(item => {
+            const key = itemKey(item.post_id, item.photo_index);
+            return (
+              <View key={key} style={styles.orderItem}>
+                <View style={styles.orderItemInfo}>
+                  <Text style={styles.orderItemTitle} numberOfLines={2}>
+                    {item.photo_description || item.title}
                   </Text>
-                )}
+                  {item.photo_description && (
+                    <Text style={styles.orderItemSubTitle}>{item.title}</Text>
+                  )}
+                  <Text style={styles.orderItemCategory}>{item.service_category}</Text>
+                  {item.photo_price && item.photo_price > 0 && (
+                    <Text style={styles.orderItemPriceRange}>
+                      Provider price: ${item.photo_price.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.amountInputGroup}>
+                  <Text style={styles.amountLabel}>Agreed Amount ($)</Text>
+                  <TextInput
+                    style={styles.amountInput}
+                    value={amounts[key] || ''}
+                    onChangeText={val => handleAmountChange(item.post_id, item.photo_index, val)}
+                    placeholder="0.00"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
               </View>
-              <View style={styles.amountInputGroup}>
-                <Text style={styles.amountLabel}>Agree on Amount ($)</Text>
-                <TextInput
-                  style={styles.amountInput}
-                  value={amounts[item.post_id] || ''}
-                  onChangeText={val => handleAmountChange(item.post_id, val)}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Order Total */}
@@ -129,7 +162,7 @@ const CheckoutScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Order Summary</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Services Total</Text>
+            <Text style={styles.totalLabel}>Items Total</Text>
             <Text style={styles.totalValue}>${(totalCents / 100).toFixed(2)}</Text>
           </View>
           <View style={styles.totalRow}>
@@ -165,7 +198,7 @@ const CheckoutScreen: React.FC = () => {
           <Text style={styles.hintText}>
             {!serviceAddress
               ? '⚠️ Please add a service address'
-              : '⚠️ Please enter an agreed amount for all services'}
+              : '⚠️ Please enter an agreed amount for all items'}
           </Text>
         )}
       </ScrollView>
@@ -203,6 +236,7 @@ const styles = StyleSheet.create({
   orderItem: { marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   orderItemInfo: { marginBottom: 8 },
   orderItemTitle: { fontSize: 14, fontWeight: '700', color: '#222' },
+  orderItemSubTitle: { fontSize: 11, color: '#888', fontStyle: 'italic', marginTop: 1 },
   orderItemCategory: { fontSize: 12, color: '#4A90E2', marginTop: 2 },
   orderItemPriceRange: { fontSize: 12, color: '#888', marginTop: 2 },
   amountInputGroup: {},

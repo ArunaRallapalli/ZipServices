@@ -42,6 +42,7 @@ import API_URL from '../config/apiConfig';
 interface PhotoWithDesc {
   asset: ImagePicker.ImagePickerAsset;
   description: string;
+  price: string;   // price in dollars, optional — empty string means no price
 }
 
 // ============================================================================
@@ -124,7 +125,7 @@ const PostServiceScreen: React.FC = () => {
           );
         }
         // Wrap each asset with an empty description
-        const withDesc: PhotoWithDesc[] = trimmed.map(asset => ({ asset, description: '' }));
+        const withDesc: PhotoWithDesc[] = trimmed.map(asset => ({ asset, description: '', price: '' }));
         setSelectedPhotos([...selectedPhotos, ...withDesc]);
         console.log(`📸 Selected ${trimmed.length} photos`);
       }
@@ -149,6 +150,12 @@ const PostServiceScreen: React.FC = () => {
   const updatePhotoDescription = (index: number, text: string) => {
     const updated = [...selectedPhotos];
     updated[index] = { ...updated[index], description: text };
+    setSelectedPhotos(updated);
+  };
+
+  const updatePhotoPrice = (index: number, text: string) => {
+    const updated = [...selectedPhotos];
+    updated[index] = { ...updated[index], price: text };
     setSelectedPhotos(updated);
   };
 
@@ -224,7 +231,8 @@ const PostServiceScreen: React.FC = () => {
                 photo: base64,
                 filename: `photo_${Date.now()}.${fileExtension}`,
                 mimetype: mimeType,
-                description: photo.description.trim(), // ← NEW
+                description: photo.description.trim(),
+                price: photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0,
               }),
             },
           );
@@ -249,7 +257,8 @@ const PostServiceScreen: React.FC = () => {
             type: mimeType,
             name: `photo.${fileExtension}`,
           } as any);
-          formData.append('description', photo.description.trim()); // ← NEW
+          formData.append('description', photo.description.trim());
+          formData.append('price', String(photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0));
 
           uploadSuccess = await new Promise<boolean>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -668,18 +677,28 @@ const PostServiceScreen: React.FC = () => {
                       <Text style={styles.photoIndexLabel}>Photo {index + 1}</Text>
                     </View>
 
-                    {/* Per-photo description — NEW */}
+                    {/* Per-photo description */}
                     <TextInput
                       style={styles.photoDescInput}
                       value={photo.description}
                       onChangeText={(text) => updatePhotoDescription(index, text)}
-                      placeholder="Add a caption or detail for this photo... (optional)"
+                      placeholder="Item name / description (optional)"
                       maxLength={200}
                       multiline
                     />
                     <Text style={styles.photoDescCount}>
                       {photo.description.length}/200
                     </Text>
+
+                    {/* Per-photo price */}
+                    <TextInput
+                      style={styles.photoPriceInput}
+                      value={photo.price}
+                      onChangeText={(text) => updatePhotoPrice(index, text)}
+                      placeholder="Price (e.g. 25.00)"
+                      keyboardType="decimal-pad"
+                      maxLength={10}
+                    />
                   </View>
                 ))}
               </View>
@@ -983,6 +1002,17 @@ const styles = createResponsiveStyles({
     color: '#aaa',
     textAlign: 'right',
     marginTop: 3,
+  },
+  photoPriceInput: {
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: '#333',
+    backgroundColor: '#F0F7FF',
+    marginTop: 6,
   },
 
   photoHint: {

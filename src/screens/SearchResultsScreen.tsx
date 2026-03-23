@@ -44,6 +44,7 @@ import {
   SearchResults,
   fetchLocationFromZip,
   fetchCategories,
+  fetchPaymentCategories,
   searchServicePosts,
   fetchRecentPosts,
   isValidZipCode,
@@ -97,6 +98,7 @@ const SearchResultsScreen: React.FC = () => {
   const [serviceNeeded, setServiceNeeded] = useState(preselectedCategory || '');
 
   const [categories, setCategories] = useState<string[]>([]);
+  const [paymentCategories, setPaymentCategories] = useState<Set<string>>(new Set());
   const [searchResults, setSearchResults] = useState<SearchResults>({
     exactZipMatches: [],
     nearbyZipMatches: [],
@@ -136,18 +138,27 @@ const SearchResultsScreen: React.FC = () => {
   // CART HANDLER — NEW
   // --------------------------------------------------------------------------
 
-  const handleAddToCart = (item: ServicePost) => {
-  dispatch(addToCart({
-    post_id: item.post_id,
-    title: item.title,
-    service_category: item.service_category,
-    price_range: item.price_range ?? '',
-    provider_user_id: item.user_id,                          // ← was user_id
-    provider_name: item.business_name ?? item.poster_name ?? '', // ← was business_name
-    photos: item.photos ?? [],
-    saved_for_later: false,
-  }));
-};
+  const handleAddToCart = (
+    item: ServicePost,
+    photoIndex: number,
+    photoUrl: string,
+    photoPrice?: number,
+    photoDescription?: string,
+  ) => {
+    dispatch(addToCart({
+      post_id: item.post_id,
+      photo_index: photoIndex,
+      photo_url: photoUrl,
+      photo_price: photoPrice,
+      photo_description: photoDescription,
+      title: item.title,
+      service_category: item.service_category,
+      price_range: item.price_range ?? '',
+      provider_user_id: item.user_id,
+      provider_name: item.business_name ?? item.poster_name ?? '',
+      saved_for_later: false,
+    }));
+  };
 
   // --------------------------------------------------------------------------
   // CHAT HANDLER
@@ -360,8 +371,12 @@ const SearchResultsScreen: React.FC = () => {
     const loadCategories = async () => {
       setLoadingCategories(true);
       try {
-        const fetched = await fetchCategories();
+        const [fetched, paymentSet] = await Promise.all([
+          fetchCategories(),
+          fetchPaymentCategories(),
+        ]);
         setCategories(fetched);
+        setPaymentCategories(paymentSet);
       } catch (error) {
         console.error('Error loading categories:', error);
       } finally {
@@ -424,6 +439,7 @@ const SearchResultsScreen: React.FC = () => {
         state={state}
         onAddToCart={handleAddToCart}
         isAuthenticated={auth.isAuthenticated}
+        paymentCategories={paymentCategories}
       />
     );
   }
@@ -466,8 +482,9 @@ const SearchResultsScreen: React.FC = () => {
           isOwnPost={isOwnPost}
           onChatPress={handleChatPress}
           loading={loadingRecentSection}
-          onAddToCart={handleAddToCart}              // ← NEW
-          isAuthenticated={auth.isAuthenticated}     // ← NEW
+          onAddToCart={handleAddToCart}
+          isAuthenticated={auth.isAuthenticated}
+          paymentCategories={paymentCategories}
           onReviewSubmitted={() => {
             fetchRecentPosts(9).then(setRecentPosts).catch(() => {});
           }}

@@ -1,6 +1,7 @@
 /**
  * CartScreen.tsx
- * Shows items added to cart with add/remove/save for later options.
+ * Shows per-photo items added to cart with add/remove/save for later options.
+ * Each item represents a single photo from a service post.
  * Authenticated users only — guests are redirected to BusinessOwnerHomeScreen.
  */
 import React from 'react';
@@ -13,8 +14,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { removeFromCart, toggleSaveForLater } from '../../store/cartSlice';
-
-// Update this import path to match your store file
 import type { RootState } from '../../store/store';
 
 const CartScreen: React.FC = () => {
@@ -28,22 +27,33 @@ const CartScreen: React.FC = () => {
 
   const renderItem = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      {item.photos?.[0] && (
-        <Image source={{ uri: item.photos[0] }} style={styles.photo} resizeMode="cover" />
+      {item.photo_url ? (
+        <Image source={{ uri: item.photo_url }} style={styles.photo} resizeMode="cover" />
+      ) : (
+        <View style={[styles.photo, styles.noPhoto]}>
+          <Ionicons name="image-outline" size={28} color="#ccc" />
+        </View>
       )}
       <View style={styles.cardContent}>
-        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.category}>{item.service_category}</Text>
-        {item.price_range && (
-          <Text style={styles.price}>{item.price_range}</Text>
+        <Text style={styles.title} numberOfLines={2}>
+          {item.photo_description || item.title}
+        </Text>
+        {item.photo_description && (
+          <Text style={styles.postTitle} numberOfLines={1}>{item.title}</Text>
         )}
+        <Text style={styles.category}>{item.service_category}</Text>
+        {item.photo_price != null && item.photo_price > 0 ? (
+          <Text style={styles.price}>${item.photo_price.toFixed(2)}</Text>
+        ) : item.price_range ? (
+          <Text style={styles.price}>{item.price_range}</Text>
+        ) : null}
         {item.provider_name && (
           <Text style={styles.provider}>by {item.provider_name}</Text>
         )}
         <View style={styles.actions}>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => dispatch(toggleSaveForLater(item.post_id))}
+            onPress={() => dispatch(toggleSaveForLater({ post_id: item.post_id, photo_index: item.photo_index }))}
           >
             <Ionicons name="bookmark-outline" size={16} color="#4A90E2" />
             <Text style={styles.actionText}>
@@ -52,7 +62,7 @@ const CartScreen: React.FC = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, styles.removeBtn]}
-            onPress={() => dispatch(removeFromCart(item.post_id))}
+            onPress={() => dispatch(removeFromCart({ post_id: item.post_id, photo_index: item.photo_index }))}
           >
             <Ionicons name="trash-outline" size={16} color="#E53935" />
             <Text style={[styles.actionText, { color: '#E53935' }]}>Remove</Text>
@@ -95,7 +105,7 @@ const CartScreen: React.FC = () => {
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color="#ccc" />
           <Text style={styles.emptyTitle}>Your Cart Is Empty</Text>
-          <Text style={styles.emptySubtitle}>Browse services and add them to your cart</Text>
+          <Text style={styles.emptySubtitle}>Browse services and add items to your cart</Text>
           <TouchableOpacity
             style={styles.signInBtn}
             onPress={() => navigation.navigate('TabWrapperScreen')}
@@ -114,7 +124,11 @@ const CartScreen: React.FC = () => {
                   <Text style={styles.sectionHeader}>
                     Cart ({activeItems.length} item{activeItems.length !== 1 ? 's' : ''})
                   </Text>
-                  {activeItems.map(item => renderItem({ item }))}
+                  {activeItems.map(item => (
+                    <React.Fragment key={`${item.post_id}_${item.photo_index}`}>
+                      {renderItem({ item })}
+                    </React.Fragment>
+                  ))}
                 </>
               )}
 
@@ -122,7 +136,11 @@ const CartScreen: React.FC = () => {
               {savedItems.length > 0 && (
                 <>
                   <Text style={styles.sectionHeader}>Saved for Later ({savedItems.length})</Text>
-                  {savedItems.map(item => renderItem({ item }))}
+                  {savedItems.map(item => (
+                    <React.Fragment key={`${item.post_id}_${item.photo_index}`}>
+                      {renderItem({ item })}
+                    </React.Fragment>
+                  ))}
                 </>
               )}
 
@@ -167,8 +185,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#e0e0e0', elevation: 1,
   },
   photo: { width: 90, height: 110 },
+  noPhoto: { backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
   cardContent: { flex: 1, padding: 12 },
-  title: { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 4 },
+  title: { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 2 },
+  postTitle: { fontSize: 11, color: '#888', marginBottom: 4, fontStyle: 'italic' },
   category: { fontSize: 12, color: '#4A90E2', fontWeight: '600', marginBottom: 4 },
   price: { fontSize: 13, color: '#2E7D32', fontWeight: '600', marginBottom: 4 },
   provider: { fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 8 },

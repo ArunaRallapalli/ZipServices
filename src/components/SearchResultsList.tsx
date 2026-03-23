@@ -24,6 +24,8 @@
  */
 
 import React, { useState } from "react";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import API_URL from '../config/apiConfig';
 import {
   View,
   Text,
@@ -35,8 +37,8 @@ import {
   ScrollView,
   SafeAreaView,
   Dimensions,
-  Alert,
 } from "react-native";
+import { Alert } from '../Utils/Alert';
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -67,7 +69,18 @@ interface ServicePost {
   average_rating?: number;
   review_count?: number;
   photos?: string[];
+  photo_prices?: number[];
+  photo_descriptions?: string[];
+  accepts_payment?: boolean;
 }
+
+type AddToCartFn = (
+  item: ServicePost,
+  photoIndex: number,
+  photoUrl: string,
+  photoPrice?: number,
+  photoDescription?: string,
+) => void;
 
 interface SearchResults {
   exactZipMatches: ServicePost[];
@@ -86,8 +99,9 @@ interface SearchResultsListProps {
   zipCode: string;
   city: string;
   state: string;
-  onAddToCart?: (item: ServicePost) => void;
+  onAddToCart?: AddToCartFn;
   isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
 }
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -130,63 +144,66 @@ const MiniStars: React.FC<{ rating: number; count?: number }> = ({ rating, count
   </View>
 );
 
-// ADDED (feature/stripe-connect-payments): onAddToCart + isAuthenticated props for cart support
 const MiniServiceCard: React.FC<{
   item: ServicePost;
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
-  onAddToCart?: (item: ServicePost) => void;
+  onAddToCart?: AddToCartFn;
   isAuthenticated?: boolean;
-}> = ({ item, isOwnPost, onChatPress, onAddToCart, isAuthenticated }) => {
+  paymentCategories?: Set<string>;
+}> = ({ item, isOwnPost, onChatPress, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
-  // ADDED: tracks whether this item has been added to cart (shows "Added!" state)
-  const [cartAdded, setCartAdded] = useState(false);
+  const [addedSet, setAddedSet] = useState<Set<number>>(new Set());
+  const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
-  // ADDED: navigation needed to redirect guest users to sign-in
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
 
-  // ADDED (feature/stripe-connect-payments):
-  // Auth guard — guests are sent to BusinessOwnerHomeScreen.
-  // Own posts cannot be added to cart.
-  // On success: dispatches via onAddToCart, shows "Keep Browsing / View Cart" alert.
-  const handleAddToCart = (e: any) => {
-    e.stopPropagation();
-    if (!isAuthenticated) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to add items to your cart.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In',
-            onPress: () => navigation.navigate('BusinessOwnerHomeScreen'),
-          },
-        ],
+  const handleRemovePhoto = async (photoIndex: number) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(
+        `${API_URL}/api/service-posts/${item.post_id}/photos/${photoIndex}`,
+        { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
       );
+      if (response.ok) {
+        setRemovedIndices(prev => new Set([...prev, photoIndex]));
+      } else {
+        Alert.alert('Error', 'Failed to remove item. Please try again.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to remove item. Please try again.');
+    }
+  };
+
+  const handleAddPhotoToCart = (
+    photoIndex: number,
+    photoUrl: string,
+    photoPrice: number,
+    photoDesc: string,
+  ) => {
+    if (!isAuthenticated) {
+      setModalVisible(false);
+      setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
       return;
     }
     if (isOwnPost) {
       Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
       return;
     }
-    onAddToCart?.(item);
-    setCartAdded(true);
+    onAddToCart?.(item, photoIndex, photoUrl, photoPrice, photoDesc);
+    setAddedSet(prev => new Set([...prev, photoIndex]));
     Alert.alert(
       'Added to Cart',
-      `"${item.title}" has been added to your cart.`,
+      `"${photoDesc}" has been added to your cart.`,
       [
-        {
-          text: 'Keep Browsing',
-          style: 'cancel',
-          onPress: () => setCartAdded(false),
-        },
+        { text: 'Keep Browsing', style: 'cancel' },
         {
           text: 'View Cart',
           onPress: () => {
-            setCartAdded(false);
-            navigation.navigate('CartScreen');
+            setModalVisible(false);
+            setTimeout(() => navigation.navigate('CartScreen'), 300);
           },
         },
       ],
@@ -249,24 +266,6 @@ const MiniServiceCard: React.FC<{
             </View>
           )}
 
-          {/* ADDED (feature/stripe-connect-payments): cart button below text content.
-              Only shown for Boutique category. Hidden for own posts. */}
-          {!isOwnPost && item.service_category === 'Boutique' && (
-            <TouchableOpacity
-              style={[cartBtnStyle.btn, cartAdded && cartBtnStyle.btnAdded]}
-              onPress={handleAddToCart}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={cartAdded ? 'checkmark-circle' : 'cart-outline'}
-                size={12}
-                color="#fff"
-              />
-              <Text style={cartBtnStyle.btnText}>
-                {cartAdded ? 'Added!' : 'Add to Cart'}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       </TouchableOpacity>
 
@@ -293,19 +292,35 @@ const MiniServiceCard: React.FC<{
                 setTimeout(() => onChatPress(item), 300);
               }}
             />
-            {/* ADDED (feature/stripe-connect-payments): cart button inside full detail modal.
-                Only shown for Boutique category. */}
-            {!isOwnPost && item.service_category === 'Boutique' && (
-              <TouchableOpacity
-                style={modalStyles.cartBtn}
-                onPress={(e) => {
-                  setModalVisible(false);
-                  setTimeout(() => handleAddToCart(e), 300);
-                }}
-              >
-                <Ionicons name="cart-outline" size={20} color="#fff" />
-                <Text style={modalStyles.cartBtnText}>Add to Cart</Text>
-              </TouchableOpacity>
+            {/* Per-photo cart / remove strip */}
+            {(item.photos ?? []).length > 0 && (isOwnPost || paymentCategories?.has(item.service_category)) && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoStrip}>
+                {(item.photos ?? []).map((photoUrl, i) => {
+                  if (removedIndices.has(i)) return null;
+                  const price = item.photo_prices?.[i] ?? 0;
+                  const desc = item.photo_descriptions?.[i] || `Item ${i + 1}`;
+                  return (
+                    <View key={i} style={modalStyles.photoCard}>
+                      <Image source={{ uri: photoUrl }} style={modalStyles.photoCardImg} resizeMode="cover" />
+                      {price > 0 && <Text style={modalStyles.photoCardPrice}>${price.toFixed(2)}</Text>}
+                      {isOwnPost ? (
+                        <TouchableOpacity style={modalStyles.removeBtn} onPress={() => handleRemovePhoto(i)}>
+                          <Ionicons name="trash-outline" size={12} color="#E53935" />
+                          <Text style={modalStyles.removeBtnText}>Remove</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[modalStyles.photoCartBtn, addedSet.has(i) && modalStyles.photoCartBtnAdded]}
+                          onPress={() => handleAddPhotoToCart(i, photoUrl, price, desc)}
+                        >
+                          <Ionicons name={addedSet.has(i) ? 'checkmark' : 'cart-outline'} size={12} color="#fff" />
+                          <Text style={modalStyles.photoCartBtnText}>{addedSet.has(i) ? 'Added' : 'Add to Cart'}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
             )}
           </ScrollView>
         </SafeAreaView>
@@ -374,36 +389,27 @@ const modalStyles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#222", marginRight: 8 },
   closeBtn: { padding: 4 },
   body: { padding: 16, paddingBottom: 40 },
-  // ADDED (feature/stripe-connect-payments): cart button inside full detail modal
-  cartBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginTop: 16,
-    gap: 8,
+  // Per-photo strip
+  photoStrip: { marginTop: 12 },
+  photoCard: { width: 110, marginRight: 10, alignItems: 'center' },
+  photoCardImg: { width: 100, height: 100, borderRadius: 8 },
+  photoCardPrice: { fontSize: 13, fontWeight: '700', color: '#2E7D32', marginTop: 4 },
+  photoCartBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
+    backgroundColor: '#2E7D32', borderRadius: 6, paddingVertical: 5,
+    paddingHorizontal: 6, marginTop: 5, width: '100%',
   },
-  cartBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  photoCartBtnAdded: { backgroundColor: '#388E3C' },
+  photoCartBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  removeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
+    backgroundColor: '#FFEBEE', borderRadius: 6, paddingVertical: 5,
+    paddingHorizontal: 6, marginTop: 5, width: '100%',
+    borderWidth: 1, borderColor: '#E53935',
+  },
+  removeBtnText: { color: '#E53935', fontSize: 11, fontWeight: '700' },
 });
 
-// ADDED (feature/stripe-connect-payments): cart button styles for mini card
-const cartBtnStyle = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#2E7D32',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  btnAdded: { backgroundColor: '#388E3C' },
-  btnText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-});
 
 // ADDED (feature/stripe-connect-payments): destructure new cart props
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
@@ -416,6 +422,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   state,
   onAddToCart,
   isAuthenticated,
+  paymentCategories,
 }) => {
   const allResults = (searchResults.zipCodeMatches || [])
     .filter(item => item.is_active !== false);
@@ -478,6 +485,7 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
                 onChatPress={onChatPress}
                 onAddToCart={onAddToCart}
                 isAuthenticated={isAuthenticated}
+                paymentCategories={paymentCategories}
               />
             </View>
           ))}

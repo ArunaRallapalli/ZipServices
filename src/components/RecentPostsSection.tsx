@@ -12,6 +12,8 @@
  */
 
 import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import API_URL from '../config/apiConfig';
 import {
   View,
   Text,
@@ -23,8 +25,8 @@ import {
   ScrollView,
   SafeAreaView,
   Dimensions,
-  Alert,
 } from 'react-native';
+import { Alert } from '../Utils/Alert';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,14 +40,23 @@ const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2;
 // TYPES
 // ============================================================================
 
+type AddToCartFn = (
+  item: ServicePost,
+  photoIndex: number,
+  photoUrl: string,
+  photoPrice?: number,
+  photoDescription?: string,
+) => void;
+
 interface RecentPostsSectionProps {
   recentPosts: ServicePost[];
   isOwnPost: (postUserId: number) => boolean;
   onChatPress: (item: ServicePost) => void;
   loading: boolean;
   onReviewSubmitted?: () => void;
-  onAddToCart?: (item: ServicePost) => void;
-  isAuthenticated?: boolean; // ← NEW
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
 }
 
 // ✅ category icon/color map for placeholder
@@ -102,14 +113,37 @@ const DetailModal: React.FC<{
   onClose: () => void;
   onChatPress: (item: ServicePost) => void;
   onReviewSubmitted?: () => void;
-  onAddToCart?: (item: ServicePost) => void;   // ← NEW
-  isAuthenticated?: boolean;                    // ← NEW
-}> = ({ item, visible, isOwnPost, onClose, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated }) => {
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
+}> = ({ item, visible, isOwnPost, onClose, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [zoomVisible, setZoomVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [addedSet, setAddedSet] = useState<Set<number>>(new Set());
+  const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const photos = item.photos ?? [];
+
+  const handleRemovePhoto = async (photoIndex: number) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const response = await fetch(
+        `${API_URL}/api/service-posts/${item.post_id}/photos/${photoIndex}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
+      if (response.ok) {
+        setRemovedIndices(prev => new Set([...prev, photoIndex]));
+      } else {
+        Alert.alert('Error', 'Failed to remove item. Please try again.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to remove item. Please try again.');
+    }
+  };
 
   const openZoom = (index: number) => {
     setSelectedPhotoIndex(index);
@@ -123,34 +157,30 @@ const DetailModal: React.FC<{
     if (selectedPhotoIndex > 0) setSelectedPhotoIndex(i => i - 1);
   };
 
-  const handleCartPress = () => {
+  const handleAddPhotoToCart = (
+    photoIndex: number,
+    photoUrl: string,
+    photoPrice: number,
+    photoDesc: string,
+  ) => {
     if (!isAuthenticated) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to add items to your cart.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In',
-            onPress: () => {
-              onClose();
-              setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
-            },
-          },
-        ],
-      );
+      onClose();
+      setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
       return;
     }
-    onAddToCart?.(item);
-    onClose();
+    onAddToCart?.(item, photoIndex, photoUrl, photoPrice, photoDesc);
+    setAddedSet(prev => new Set([...prev, photoIndex]));
     Alert.alert(
       'Added to Cart',
-      `"${item.title}" has been added to your cart.`,
+      `"${photoDesc}" has been added to your cart.`,
       [
         { text: 'Keep Browsing', style: 'cancel' },
         {
           text: 'View Cart',
-          onPress: () => navigation.navigate('CartScreen'),
+          onPress: () => {
+            onClose();
+            setTimeout(() => navigation.navigate('CartScreen'), 300);
+          },
         },
       ],
     );
@@ -227,7 +257,7 @@ const DetailModal: React.FC<{
             </View>
           )}
 
-          {/* ── PHOTOS — exact ServiceCard pattern ── */}
+          {/* ── PHOTOS with per-item buttons ── */}
           {photos.length > 0 && (
             <View style={modalStyles.photosContainer}>
               <ScrollView
@@ -235,27 +265,44 @@ const DetailModal: React.FC<{
                 showsHorizontalScrollIndicator={false}
                 style={modalStyles.photoScroll}
               >
-                {photos.map((uri, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={modalStyles.photoWrapper}
-                    onPress={() => openZoom(index)}
-                    activeOpacity={0.8}
-                  >
-                    <Image
-                      source={{ uri }}
-                      style={modalStyles.photoImage}
-                      resizeMode="cover"
-                    />
-                    <View style={modalStyles.zoomIndicator}>
-                      <Ionicons name="expand" size={20} color="#fff" />
+                {photos.map((uri, index) => {
+                  if (removedIndices.has(index)) return null;
+                  const price = item.photo_prices?.[index] ?? 0;
+                  const desc = item.photo_descriptions?.[index] || `Item ${index + 1}`;
+                  return (
+                    <View key={index} style={modalStyles.photoCard}>
+                      <TouchableOpacity onPress={() => openZoom(index)} activeOpacity={0.8}>
+                        <Image source={{ uri }} style={modalStyles.photoImage} resizeMode="cover" />
+                        <View style={modalStyles.zoomIndicator}>
+                          <Ionicons name="expand" size={16} color="#fff" />
+                        </View>
+                      </TouchableOpacity>
+                      {price > 0 && (
+                        <Text style={modalStyles.photoPrice}>${price.toFixed(2)}</Text>
+                      )}
+                      {isOwnPost ? (
+                        <TouchableOpacity
+                          style={modalStyles.removeBtn}
+                          onPress={() => handleRemovePhoto(index)}
+                        >
+                          <Ionicons name="trash-outline" size={12} color="#E53935" />
+                          <Text style={modalStyles.removeBtnText}>Remove</Text>
+                        </TouchableOpacity>
+                      ) : paymentCategories?.has(item.service_category) ? (
+                        <TouchableOpacity
+                          style={[modalStyles.photoCartBtn, addedSet.has(index) && modalStyles.photoCartBtnAdded]}
+                          onPress={() => handleAddPhotoToCart(index, uri, price, desc)}
+                        >
+                          <Ionicons name={addedSet.has(index) ? 'checkmark' : 'cart-outline'} size={12} color="#fff" />
+                          <Text style={modalStyles.photoCartBtnText}>
+                            {addedSet.has(index) ? 'Added' : 'Add to Cart'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
-                  </TouchableOpacity>
-                ))}
+                  );
+                })}
               </ScrollView>
-              <Text style={modalStyles.photoCount}>
-                📸 {photos.length} photo{photos.length > 1 ? 's' : ''} · Tap to zoom
-              </Text>
             </View>
           )}
 
@@ -271,14 +318,14 @@ const DetailModal: React.FC<{
             <Text style={modalStyles.noDescriptionText}>No description provided.</Text>
           )}
 
-          {/* ── Contact / Own post / Cart ── */}
+
+          {/* ── Contact / Own post ── */}
           {isOwnPost ? (
             <View style={modalStyles.ownPostNote}>
               <Text style={modalStyles.ownPostNoteText}>This is your post. You cannot contact yourself.</Text>
             </View>
           ) : (
             <View style={modalStyles.actionRow}>
-              {/* Contact Provider */}
               <TouchableOpacity
                 style={[modalStyles.contactButton, { flex: 1 }]}
                 onPress={() => {
@@ -287,19 +334,8 @@ const DetailModal: React.FC<{
                 }}
               >
                 <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
-                <Text style={modalStyles.contactButtonText}> Contact</Text>
+                <Text style={modalStyles.contactButtonText}> Contact Provider</Text>
               </TouchableOpacity>
-
-              {/* Add to Cart — Boutique only */}
-              {item.service_category === 'Boutique' && (
-                <TouchableOpacity
-                  style={modalStyles.cartButton}
-                  onPress={handleCartPress}
-                >
-                  <Ionicons name="cart-outline" size={18} color="#fff" />
-                  <Text style={modalStyles.contactButtonText}> Add to Cart</Text>
-                </TouchableOpacity>
-              )}
             </View>
           )}
 
@@ -390,56 +426,13 @@ const MiniServiceCard: React.FC<{
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
   onReviewSubmitted?: () => void;
-  onAddToCart?: (item: ServicePost) => void;
-  isAuthenticated?: boolean; // ← NEW
-}> = ({ item, isOwnPost, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated }) => {
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
+}> = ({ item, isOwnPost, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
-  const [cartAdded, setCartAdded] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
-  const navigation = useNavigation<NativeStackNavigationProp<any>>();
-
-  const handleAddToCart = (e: any) => {
-    e.stopPropagation();
-    if (!isAuthenticated) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to add items to your cart.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In',
-            onPress: () => navigation.navigate('BusinessOwnerHomeScreen'),
-          },
-        ],
-      );
-      return;
-    }
-    if (isOwnPost) {
-      Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
-      return;
-    }
-    onAddToCart?.(item);
-    setCartAdded(true);
-    Alert.alert(
-      'Added to Cart',
-      `"${item.title}" has been added to your cart.`,
-      [
-        {
-          text: 'Keep Browsing',
-          style: 'cancel',
-          onPress: () => setCartAdded(false),
-        },
-        {
-          text: 'View Cart',
-          onPress: () => {
-            setCartAdded(false);
-            navigation.navigate('CartScreen');
-          },
-        },
-      ],
-    );
-  };
 
   return (
     <>
@@ -504,23 +497,6 @@ const MiniServiceCard: React.FC<{
             </View>
           )}
 
-          {/* ── Cart button — below title/text content, Boutique only ── */}
-          {!isOwnPost && item.service_category === 'Boutique' && (
-            <TouchableOpacity
-              style={[cartBtnStyle.btn, cartAdded && cartBtnStyle.btnAdded]}
-              onPress={handleAddToCart}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={cartAdded ? 'checkmark-circle' : 'cart-outline'}
-                size={12}
-                color="#fff"
-              />
-              <Text style={cartBtnStyle.btnText}>
-                {cartAdded ? 'Added!' : 'Add to Cart'}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       </TouchableOpacity>
 
@@ -533,6 +509,7 @@ const MiniServiceCard: React.FC<{
         onReviewSubmitted={onReviewSubmitted}
         onAddToCart={onAddToCart}
         isAuthenticated={isAuthenticated}
+        paymentCategories={paymentCategories}
       />
 
       {/* ReviewsModal opened directly from mini card stars */}
@@ -560,7 +537,8 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   loading,
   onReviewSubmitted,
   onAddToCart,
-  isAuthenticated, // ← NEW
+  isAuthenticated,
+  paymentCategories,
 }) => {
   if (loading) {
     return (
@@ -621,8 +599,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
               isOwnPost={isOwnPost(post.user_id)}
               onChatPress={onChatPress}
               onReviewSubmitted={onReviewSubmitted}
-              onAddToCart={onAddToCart}           // ← NEW
-              isAuthenticated={isAuthenticated}   // ← NEW
+              onAddToCart={onAddToCart}
+              isAuthenticated={isAuthenticated}
+              paymentCategories={paymentCategories}
             />
           ))}
           {/* Spacer if odd number of posts */}
@@ -892,6 +871,87 @@ const modalStyles = StyleSheet.create({
     borderRadius: 8,
   },
   ownPostNoteText: { color: '#999', fontSize: 13, fontStyle: 'italic' },
+
+  // ── Shop Items section ──
+  shopSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 12,
+  },
+  shopSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  shopItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 8,
+    gap: 10,
+  },
+  shopItemPhoto: { width: 56, height: 56, borderRadius: 6 },
+  shopItemInfo: { flex: 1 },
+  shopItemName: { fontSize: 13, fontWeight: '600', color: '#222', marginBottom: 2 },
+  shopItemPrice: { fontSize: 14, fontWeight: '700', color: '#2E7D32' },
+  shopItemBtn: {
+    backgroundColor: '#2E7D32',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopItemBtnAdded: { backgroundColor: '#388E3C' },
+  shopItemPriceTbd: { fontSize: 12, color: '#999', fontStyle: 'italic' },
+
+  // ── Per-photo inline card ──
+  photoCard: {
+    width: 130,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  photoPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E7D32',
+    marginTop: 5,
+  },
+  photoCartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#2E7D32',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginTop: 5,
+    width: '100%',
+  },
+  photoCartBtnAdded: { backgroundColor: '#388E3C' },
+  photoCartBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  removeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginTop: 5,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E53935',
+  },
+  removeBtnText: { color: '#E53935', fontSize: 11, fontWeight: '700' },
 });
 
 // ============================================================================
@@ -1024,26 +1084,5 @@ const sectionStyles = StyleSheet.create({
   nudgeBold: { fontWeight: '700', color: '#4A90E2' },
 });
 
-// ============================================================================
-// STYLES — CART BUTTON (mini card)
-// ============================================================================
-
-const cartBtnStyle = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#2E7D32',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  btnAdded: {
-    backgroundColor: '#388E3C',
-  },
-  btnText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-});
 
 export default RecentPostsSection;
