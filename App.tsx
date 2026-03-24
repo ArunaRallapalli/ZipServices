@@ -28,7 +28,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ErrorBoundary>  {/* ← ADD THIS WRAPPER */}
-        <NavigationContainer linking={linking}>
+        <NavigationContainer linking={linking} documentTitle={{ formatter: (options, route) => options?.title ?? 'GoZipMarket - Local Services Marketplace' }}>
           <MainStackNavigator />
         </NavigationContainer>
       </ErrorBoundary>  {/* ← CLOSE THE WRAPPER */}
