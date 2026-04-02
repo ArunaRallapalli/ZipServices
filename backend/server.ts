@@ -28,7 +28,6 @@ import serviceCategoriesRouter from "./routes/serviceCategories";
 import servicePostsRouter from './routes/ServicePosts';
 import passwordResetRoutes from './routes/Passwordreset';
 import emailVerificationRoutes from './routes/EmailVerification';
-import stripeRoutes from './routes/stripe';
 import ordersRouter from './routes/orders';
 
 const app = express();
@@ -43,8 +42,6 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).pool = pool;
   next();
 });
-// 1. Webhook FIRST (needs raw body, before express.json)
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 // ✅ MUST ADD THESE - Parse JSON and URL-encoded bodies
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -80,8 +77,6 @@ app.use(cors({
 // ✅ ADDED: Request tracking and performance monitoring
 app.use(requestTracking);
 app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
-// ✅ Stripe routes (after express.json, after CORS)
-app.use('/api/stripe', stripeRoutes);
 // Health check
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
