@@ -55,7 +55,9 @@ interface ServicePost {
   title: string;
   description?: string;
   service_category: string;
-  price_range?: string;
+  price?: string;
+  in_stock?: number;
+  accepts_payment?: boolean;
   phone_number?: string;
   contact_email?: string;
   zip_code?: string;
@@ -83,24 +85,27 @@ interface CustomerInfo {
 const ListingsScreen: React.FC = () => {
   const navigation = useNavigation<AllListingsNavProp>();
   const { isAuthenticated } = useAuth();
-  
+
   // State: All listings fetched from the backend
   const [listings, setListings] = useState<ServicePost[]>([]);
-  
+
   // State: Filtered listings based on search query
   const [filteredListings, setFilteredListings] = useState<ServicePost[]>([]);
-  
+
   // State: Loading indicator for initial data fetch
   const [loading, setLoading] = useState(true);
-  
+
   // State: Refreshing indicator for pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // State: Current search query text
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // State: Current user's information loaded from AsyncStorage
   const [userInfo, setUserInfo] = useState<CustomerInfo | null>(null);
+
+  // State: Number of pending orders — shown as badge on the My Orders button
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
 
   /**
    * Effect: Load user information from AsyncStorage when component mounts
@@ -159,6 +164,12 @@ const ListingsScreen: React.FC = () => {
     useCallback(() => {
       if (userInfo?.user_id) {
         fetchUserListings();
+        api.get('/api/orders/provider')
+          .then((res: any) => {
+            const pending = (res.orders || []).filter((o: any) => o.status === 'pending').length;
+            setPendingOrderCount(pending);
+          })
+          .catch(() => {});
       }
     }, [userInfo?.user_id])
   );
@@ -396,13 +407,21 @@ const ListingsScreen: React.FC = () => {
 })()}
 
       {/* Price/Budget with icon */}
-      {item.price_range && (
+      {item.price && (
         <View style={styles.infoRow}>
           <Ionicons name="cash-outline" size={18} color="#2E7D32" />
           <Text style={styles.priceText}>
             {item.post_type === 'offer' ? 'Price: ' : 'Budget: '}
-            {item.price_range}
+            {item.price}
           </Text>
+        </View>
+      )}
+
+      {/* In Stock — only for payment-enabled categories */}
+      {item.accepts_payment && item.in_stock != null && item.in_stock > 0 && (
+        <View style={styles.infoRow}>
+          <Ionicons name="cube-outline" size={18} color="#2E7D32" />
+          <Text style={styles.priceText}>In stock: {item.in_stock}</Text>
         </View>
       )}
 
@@ -530,13 +549,27 @@ const ListingsScreen: React.FC = () => {
             {String(filteredListings.length)} {filteredListings.length === 1 ? 'listing' : 'listings'}
           </Text>
         </View>
-        {/* ✅ NEW: Calendar button */}
-        <TouchableOpacity 
-          style={styles.calendarIconButton}
-          onPress={() => navigation.navigate('CalendarScreen')}
-        >
-          <Ionicons name="calendar" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <TouchableOpacity
+            style={styles.ordersButton}
+            onPress={() => navigation.navigate('OrdersScreen')}
+          >
+            <Ionicons name="receipt-outline" size={16} color="#fff" />
+            <Text style={styles.ordersButtonText}>Order History</Text>
+            {pendingOrderCount > 0 && (
+              <View style={styles.ordersBadge}>
+                <Text style={styles.ordersBadgeText}>{pendingOrderCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* ✅ NEW: Calendar button */}
+          <TouchableOpacity
+            style={styles.calendarIconButton}
+            onPress={() => navigation.navigate('CalendarScreen')}
+          >
+            <Ionicons name="calendar" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Bar with icon and clear button */}
@@ -697,6 +730,35 @@ const styles = createResponsiveStyles({
     padding: 8,
     width: 40,
     alignItems: 'center',
+  },
+  ordersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  ordersButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ordersBadge: {
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    marginLeft: 2,
+  },
+  ordersBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
   adminResponseBox: { 
   backgroundColor: '#F0F7FF', 

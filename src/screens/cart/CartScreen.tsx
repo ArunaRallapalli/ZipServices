@@ -13,64 +13,92 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
-import { removeFromCart, toggleSaveForLater } from '../../store/cartSlice';
+import { removeFromCart, setQuantity } from '../../store/cartSlice';
 import type { RootState } from '../../store/store';
 
 const CartScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userId } = useAuth();
   const { items } = useSelector((state: RootState) => state.cart);
 
   const activeItems = items.filter(i => !i.saved_for_later);
-  const savedItems = items.filter(i => i.saved_for_later);
 
-  const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      {item.photo_url ? (
-        <Image source={{ uri: item.photo_url }} style={styles.photo} resizeMode="cover" />
-      ) : (
-        <View style={[styles.photo, styles.noPhoto]}>
-          <Ionicons name="image-outline" size={28} color="#ccc" />
-        </View>
-      )}
-      <View style={styles.cardContent}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.photo_description || item.title}
-        </Text>
-        {item.photo_description && (
-          <Text style={styles.postTitle} numberOfLines={1}>{item.title}</Text>
+  const renderItem = ({ item }: { item: any }) => {
+    const qty = item.quantity ?? 1;
+    const stockLimit = item.in_stock != null && item.in_stock > 0 ? item.in_stock : 999;
+    const atStockLimit = qty >= stockLimit;
+    const unitPrice = item.photo_price || item.price || 0;
+    const lineTotal = unitPrice * qty;
+
+    return (
+      <View style={styles.card}>
+        {item.photo_url ? (
+          <Image source={{ uri: item.photo_url }} style={styles.photo} resizeMode="cover" />
+        ) : (
+          <View style={[styles.photo, styles.noPhoto]}>
+            <Ionicons name="image-outline" size={28} color="#ccc" />
+          </View>
         )}
-        <Text style={styles.category}>{item.service_category}</Text>
-        {item.photo_price != null && item.photo_price > 0 ? (
-          <Text style={styles.price}>${item.photo_price.toFixed(2)}</Text>
-        ) : item.price_range ? (
-          <Text style={styles.price}>{item.price_range}</Text>
-        ) : null}
-        {item.provider_name && (
-          <Text style={styles.provider}>by {item.provider_name}</Text>
-        )}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => dispatch(toggleSaveForLater({ post_id: item.post_id, photo_index: item.photo_index }))}
-          >
-            <Ionicons name="bookmark-outline" size={16} color="#4A90E2" />
-            <Text style={styles.actionText}>
-              {item.saved_for_later ? 'Move to Cart' : 'Save for Later'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.removeBtn]}
-            onPress={() => dispatch(removeFromCart({ post_id: item.post_id, photo_index: item.photo_index }))}
-          >
-            <Ionicons name="trash-outline" size={16} color="#E53935" />
-            <Text style={[styles.actionText, { color: '#E53935' }]}>Remove</Text>
-          </TouchableOpacity>
+        <View style={styles.cardContent}>
+          <Text style={styles.title} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={styles.category}>{item.service_category}</Text>
+
+          {/* Price × Qty */}
+          {unitPrice > 0 ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>${unitPrice.toFixed(2)} × {qty}</Text>
+              <Text style={styles.lineTotal}> = ${lineTotal.toFixed(2)}</Text>
+            </View>
+          ) : item.price ? (
+            <Text style={styles.price}>{item.price}</Text>
+          ) : null}
+
+          {item.provider_name && (
+            <Text style={styles.provider}>by {item.provider_name}</Text>
+          )}
+
+          {/* Quantity controls */}
+          <View style={styles.qtyRow}>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => dispatch(setQuantity({ post_id: item.post_id, photo_index: item.photo_index, quantity: qty - 1 }))}
+              disabled={qty <= 1}
+            >
+              <Ionicons name="remove" size={16} color={qty <= 1 ? '#ccc' : '#4A90E2'} />
+            </TouchableOpacity>
+            <Text style={styles.qtyText}>{qty}</Text>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => dispatch(setQuantity({ post_id: item.post_id, photo_index: item.photo_index, quantity: qty + 1 }))}
+              disabled={atStockLimit}
+            >
+              <Ionicons name="add" size={16} color={atStockLimit ? '#ccc' : '#4A90E2'} />
+            </TouchableOpacity>
+            {atStockLimit && (
+              <Text style={styles.stockNote}>Max stock reached</Text>
+            )}
+          </View>
+
+          <View style={styles.actions}>
+            {item.provider_user_id === userId ? (
+              <Text style={styles.ownPostNote}>This is your post</Text>
+            ) : (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.removeBtn]}
+                onPress={() => dispatch(removeFromCart({ post_id: item.post_id, photo_index: item.photo_index }))}
+              >
+                <Ionicons name="trash-outline" size={16} color="#E53935" />
+                <Text style={[styles.actionText, { color: '#E53935' }]}>Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (!isAuthenticated) {
     return (
@@ -101,7 +129,7 @@ const CartScreen: React.FC = () => {
         <View style={{ width: 40 }} />
       </View>
 
-      {activeItems.length === 0 && savedItems.length === 0 ? (
+      {activeItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color="#ccc" />
           <Text style={styles.emptyTitle}>Your Cart Is Empty</Text>
@@ -125,18 +153,6 @@ const CartScreen: React.FC = () => {
                     Cart ({activeItems.length} item{activeItems.length !== 1 ? 's' : ''})
                   </Text>
                   {activeItems.map(item => (
-                    <React.Fragment key={`${item.post_id}_${item.photo_index}`}>
-                      {renderItem({ item })}
-                    </React.Fragment>
-                  ))}
-                </>
-              )}
-
-              {/* Saved for Later */}
-              {savedItems.length > 0 && (
-                <>
-                  <Text style={styles.sectionHeader}>Saved for Later ({savedItems.length})</Text>
-                  {savedItems.map(item => (
                     <React.Fragment key={`${item.post_id}_${item.photo_index}`}>
                       {renderItem({ item })}
                     </React.Fragment>
@@ -190,11 +206,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 2 },
   postTitle: { fontSize: 11, color: '#888', marginBottom: 4, fontStyle: 'italic' },
   category: { fontSize: 12, color: '#4A90E2', fontWeight: '600', marginBottom: 4 },
-  price: { fontSize: 13, color: '#2E7D32', fontWeight: '600', marginBottom: 4 },
-  provider: { fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 8 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  price: { fontSize: 13, color: '#2E7D32', fontWeight: '600' },
+  lineTotal: { fontSize: 13, color: '#2E7D32', fontWeight: '700' },
+  provider: { fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 6 },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  qtyBtn: {
+    width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#4A90E2',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  qtyText: { fontSize: 14, fontWeight: '700', color: '#333', minWidth: 20, textAlign: 'center' },
+  stockNote: { fontSize: 11, color: '#E53935', fontStyle: 'italic' },
   actions: { flexDirection: 'row', gap: 12 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   removeBtn: {},
+  ownPostNote: { fontSize: 12, color: '#aaa', fontStyle: 'italic' },
   actionText: { fontSize: 12, color: '#4A90E2', fontWeight: '600' },
   checkoutContainer: { padding: 16 },
   checkoutBtn: {

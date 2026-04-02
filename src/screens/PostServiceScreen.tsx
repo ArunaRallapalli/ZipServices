@@ -59,9 +59,11 @@ const PostServiceScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [serviceCategory, setServiceCategory] = useState('');
   const [priceRange, setPriceRange] = useState('');
+  const [deliveryTimeline, setDeliveryTimeline] = useState('5 to 7 business days');
   const [zipCode, setZipCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [inStock, setInStock] = useState('1');
 
   // Photo state — each entry is { asset, description }
   const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
@@ -71,7 +73,7 @@ const PostServiceScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number }[]>([]);
+  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number; accepts_payment?: boolean }[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -143,21 +145,6 @@ const PostServiceScreen: React.FC = () => {
     setSelectedPhotos(selectedPhotos.filter((_, i) => i !== index));
   };
 
-  // --------------------------------------------------------------------------
-  // UPDATE PHOTO DESCRIPTION
-  // --------------------------------------------------------------------------
-
-  const updatePhotoDescription = (index: number, text: string) => {
-    const updated = [...selectedPhotos];
-    updated[index] = { ...updated[index], description: text };
-    setSelectedPhotos(updated);
-  };
-
-  const updatePhotoPrice = (index: number, text: string) => {
-    const updated = [...selectedPhotos];
-    updated[index] = { ...updated[index], price: text };
-    setSelectedPhotos(updated);
-  };
 
   // --------------------------------------------------------------------------
   // UPLOAD PHOTOS — sends description alongside each photo
@@ -451,10 +438,12 @@ const PostServiceScreen: React.FC = () => {
         title: title.trim(),
         description: description.trim(),
         service_category: serviceCategory,
-        price_range: priceRange.trim() || null,
+        price: priceRange.trim() || null,
+        delivery_timeline: deliveryTimeline.trim() || null,
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
+        in_stock: parseInt(inStock) || 1,
       };
 
       console.log('📤 Submitting service offer...');
@@ -510,6 +499,7 @@ const PostServiceScreen: React.FC = () => {
     setDescription('');
     setServiceCategory('');
     setPriceRange('');
+    setDeliveryTimeline('5 to 7 business days');
     setSelectedPhotos([]);
   };
 
@@ -677,28 +667,6 @@ const PostServiceScreen: React.FC = () => {
                       <Text style={styles.photoIndexLabel}>Photo {index + 1}</Text>
                     </View>
 
-                    {/* Per-photo description */}
-                    <TextInput
-                      style={styles.photoDescInput}
-                      value={photo.description}
-                      onChangeText={(text) => updatePhotoDescription(index, text)}
-                      placeholder="Item name / description (optional)"
-                      maxLength={200}
-                      multiline
-                    />
-                    <Text style={styles.photoDescCount}>
-                      {photo.description.length}/200
-                    </Text>
-
-                    {/* Per-photo price */}
-                    <TextInput
-                      style={styles.photoPriceInput}
-                      value={photo.price}
-                      onChangeText={(text) => updatePhotoPrice(index, text)}
-                      placeholder="Price (e.g. 25.00)"
-                      keyboardType="decimal-pad"
-                      maxLength={10}
-                    />
                   </View>
                 ))}
               </View>
@@ -714,15 +682,42 @@ const PostServiceScreen: React.FC = () => {
 
           {/* Price */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Price/Rate (Optional)</Text>
+            <Text style={styles.label}>
+              {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
+                ? 'Price per Item ($) *'
+                : 'Price/Rate (Optional)'}
+            </Text>
             <TextInput
               style={styles.input}
               value={priceRange}
               onChangeText={setPriceRange}
-              placeholder="e.g., $50/hour, $200-300, Starting at $100"
+              placeholder={
+                serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
+                  ? 'e.g., 9.00'
+                  : 'e.g., $50/hour, $200-300, Starting at $100'
+              }
+              keyboardType={
+                serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
+                  ? 'decimal-pad'
+                  : 'default'
+              }
               maxLength={100}
             />
           </View>
+
+          {/* Delivery Time — only for payment-enabled categories */}
+          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Delivery Time (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={deliveryTimeline}
+                onChangeText={setDeliveryTimeline}
+                placeholder="e.g., 5 to 7 business days"
+                maxLength={100}
+              />
+            </View>
+          )}
 
           <Text style={styles.sectionHeader}>Contact Information</Text>
 
@@ -764,6 +759,22 @@ const PostServiceScreen: React.FC = () => {
               maxLength={20}
             />
           </View>
+
+          {/* In Stock — only for payment-enabled categories */}
+          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Quantity Available</Text>
+              <TextInput
+                style={styles.input}
+                value={inStock}
+                onChangeText={setInStock}
+                placeholder="1"
+                keyboardType="numeric"
+                maxLength={4}
+              />
+              <Text style={styles.helperText}>Set to 0 to mark as "Not Available"</Text>
+            </View>
+          )}
 
           {/* Submit */}
           <TouchableOpacity
@@ -893,6 +904,7 @@ const styles = createResponsiveStyles({
   },
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 16, fontWeight: '600', color: '#4A90E2', marginBottom: 8 },
+  helperText: { fontSize: 12, color: '#888', marginTop: 4 },
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,

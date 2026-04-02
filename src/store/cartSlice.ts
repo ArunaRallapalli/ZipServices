@@ -1,8 +1,37 @@
 /**
  * cartSlice.ts
- * Redux slice for managing service cart state.
- * Each CartItem represents a single photo/item from a service post.
- * Uniqueness key: (post_id, photo_index)
+ * v2.0 — March 2026
+ *
+ * PURPOSE:
+ * Redux slice that owns the shopping cart — what items the user intends to buy.
+ * Each CartItem represents a single photo/listing from a service post.
+ * Uniqueness key per item: (post_id, photo_index).
+ *
+ * RESPONSIBILITY (single):
+ * Manage cart items only. Checkout-specific state (Zelle ID, shipping address)
+ * lives in checkoutSlice.ts so each slice has one clear job.
+ *
+ * STATE:
+ *   items — array of CartItem objects currently in the cart
+ *
+ * REDUCERS:
+ *   addToCart        — add a new item; silently ignored if already in cart
+ *   removeFromCart   — remove item by (post_id, photo_index)
+ *   toggleSaveForLater — move item between active cart and saved-for-later
+ *   setAgreedAmount  — record the negotiated price in cents for an item
+ *                      (used during checkout to confirm the final price)
+ *   clearCart        — empty all items after a successful order
+ *
+ * USED BY:
+ *   RecentPostsSection  — dispatches addToCart
+ *   SearchResultsList   — dispatches addToCart
+ *   CartScreen          — reads items, dispatches removeFromCart
+ *   CheckoutScreen      — reads items to build order summary
+ *   PaymentScreen       — reads items for confirmation display
+ *
+ * SEE ALSO:
+ *   checkoutSlice.ts — zelleId and shippingAddress (delivery + payment method)
+ *   store.ts         — combines cart + checkout reducers
  */
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
@@ -11,15 +40,16 @@ export interface CartItem {
   photo_index: number;           // which photo in the post (0-based)
   photo_url: string;             // URL of this specific photo
   title: string;                 // post title (for display)
-  photo_description?: string;    // per-photo name/description from provider
   photo_price?: number;          // price in dollars set by provider
   service_category: string;
-  price_range?: string;
   provider_user_id: number;
   provider_name?: string;
   provider_stripe_account_id?: string;
   agreed_amount?: number;        // in cents, set during checkout
   saved_for_later: boolean;
+  quantity: number;              // how many the buyer wants (min 1)
+  in_stock?: number;             // copied from post to enforce quantity cap
+  price?: number;                // flat price per item in dollars (fallback when photo_price unset)
 }
 
 interface CartState {
@@ -39,7 +69,21 @@ const cartSlice = createSlice({
         i => i.post_id === action.payload.post_id && i.photo_index === action.payload.photo_index
       );
       if (!exists) {
-        state.items.push({ ...action.payload, saved_for_later: false });
+        state.items.push({ ...action.payload, quantity: action.payload.quantity ?? 1, saved_for_later: false });
+      } else {
+        // Refresh stock and price in case provider updated them since item was added
+        exists.in_stock = action.payload.in_stock;
+        exists.price = action.payload.price;
+        exists.photo_price = action.payload.photo_price;
+      }
+    },
+    setQuantity: (state, action: PayloadAction<{ post_id: number; photo_index: number; quantity: number }>) => {
+      const item = state.items.find(
+        i => i.post_id === action.payload.post_id && i.photo_index === action.payload.photo_index
+      );
+      if (item) {
+        const max = item.in_stock != null && item.in_stock > 0 ? item.in_stock : 999;
+        item.quantity = Math.max(1, Math.min(action.payload.quantity, max));
       }
     },
     removeFromCart: (state, action: PayloadAction<{ post_id: number; photo_index: number }>) => {
@@ -65,5 +109,5 @@ const cartSlice = createSlice({
   },
 });
 
-export const { addToCart, removeFromCart, toggleSaveForLater, setAgreedAmount, clearCart } = cartSlice.actions;
+export const { addToCart, removeFromCart, toggleSaveForLater, setAgreedAmount, setQuantity, clearCart } = cartSlice.actions;
 export default cartSlice.reducer;

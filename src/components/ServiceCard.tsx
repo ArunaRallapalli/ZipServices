@@ -22,7 +22,7 @@ interface ServicePost {
   title: string;
   description?: string;
   service_category: string;
-  price_range?: string;
+  price?: string;
   phone_number?: string;
   contact_email?: string;
   zip_code?: string;
@@ -163,9 +163,9 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
       )}
       {/* ========== END PHOTO DISPLAY ========== */}
       
-      {item.price_range && (
+      {item.price && (
         <Text style={styles.priceText}>
-          <Ionicons name="cash" size={14} color="#2E7D32" /> {item.price_range}
+          <Ionicons name="cash" size={14} color="#2E7D32" /> {item.price}
         </Text>
       )}
 

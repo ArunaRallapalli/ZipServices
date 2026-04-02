@@ -45,7 +45,8 @@ export interface ServicePost {
   title: string;
   description?: string;
   service_category: string;
-  price_range?: string;
+  price?: string;
+  delivery_timeline?: string;
   phone_number?: string;
   contact_email?: string;
   zip_code?: string;
@@ -56,11 +57,12 @@ export interface ServicePost {
   distance?: number;
   photos?: string[];
   photo_prices?: number[];        // parallel array: price per photo in dollars
-  photo_descriptions?: string[];  // parallel array: name/description per photo
   average_rating?: number;
   review_count?: number;
   is_active?: boolean;
   accepts_payment?: boolean;
+  provider_accepts_zelle?: boolean;
+  in_stock?: number;        // 0 = not available, 1+ = available (default 1)
 }
 
 /**

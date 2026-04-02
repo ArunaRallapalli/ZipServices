@@ -149,7 +149,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
         )
       `)
       .eq('service_category', service_category as string)
@@ -227,6 +227,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
           review_count: post.users?.business_owners?.review_count || 0,
           photos: post.photos || [],
           accepts_payment: acceptsPayment,
+          provider_accepts_zelle: post.users?.business_owners?.accepts_zelle_payment ?? false,
         };
       })
     );
@@ -280,7 +281,7 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
         )
       `)
       .order('created_at', { ascending: false });
@@ -345,7 +346,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
         )
       `, { count: 'exact' })
       .eq('status', POST_STATUS.ACTIVE);
@@ -379,6 +380,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       average_rating: post.users?.business_owners?.average_rating || 0,
       review_count: post.users?.business_owners?.review_count || 0,
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
+      provider_accepts_zelle: post.users?.business_owners?.accepts_zelle_payment ?? false,
     }));
     const total = count || 0;
 
@@ -420,13 +422,26 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
         )
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
+
+    // Build accepts_payment map from service_categories
+    const uniqueCategories = [...new Set((data || []).map((p: any) => p.service_category).filter(Boolean))];
+    let categoryPaymentMap = new Map<string, boolean>();
+    if (uniqueCategories.length > 0) {
+      const { data: catData } = await supabase
+        .from('service_categories')
+        .select('category_name, accepts_payment')
+        .in('category_name', uniqueCategories);
+      categoryPaymentMap = new Map(
+        (catData || []).map((c: any) => [c.category_name, c.accepts_payment ?? false])
+      );
+    }
 
     const posts = (data || []).map((post: any) => ({
       id: post.id,
@@ -436,7 +451,7 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
       title: post.title,
       description: post.description,
       service_category: post.service_category,
-      price_range: post.price_range,
+      price: post.price,
       phone_number: post.phone_number,
       contact_email: post.contact_email,
       zip_code: post.zip_code,
@@ -446,6 +461,8 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
       created_at: post.created_at,
       updated_at: post.updated_at,
       is_active: post.status === POST_STATUS.ACTIVE,
+      in_stock: post.in_stock,
+      accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
       poster_name: post.users?.business_owners?.business_name || post.users?.email,
       business_name: post.users?.business_owners?.business_name,
       average_rating: post.users?.business_owners?.average_rating || 0,
@@ -483,10 +500,12 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
       title,
       description,
       service_category,
-      price_range,
+      price,
+      delivery_timeline,
       phone_number,
       contact_email,
-      zip_code
+      zip_code,
+      in_stock,
     } = req.body;
 
     console.log('📝 Creating new service post');
@@ -551,14 +570,16 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         title,
         description,
         service_category,
-        price_range,
+        price,
+        delivery_timeline,
         phone_number,
         contact_email,
         zip_code,
         city,
         state,
         status: POST_STATUS.ACTIVE,
-        request_status: post_type === 'request' ? 'pending' : null
+        request_status: post_type === 'request' ? 'pending' : null,
+        in_stock: in_stock !== undefined ? in_stock : 1,
       }])
       .select()
       .single();
@@ -642,7 +663,7 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
         )
       `)
       .eq('id', postId)
@@ -697,11 +718,13 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
       title,
       description,
       service_category,
-      price_range,
+      price,
+      delivery_timeline,
       phone_number,
       contact_email,
       zip_code,
-      post_type
+      post_type,
+      in_stock,
     } = req.body;
 
     console.log('🔄 Updating service post:', postId);
@@ -768,13 +791,15 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
         title,
         description,
         service_category,
-        price_range,
+        price,
+        delivery_timeline,
         phone_number,
         contact_email,
         zip_code,
         city,
         state,
         post_type,
+        ...(in_stock !== undefined && { in_stock }),
         updated_at: new Date().toISOString()
       })
       .eq('id', postId)
@@ -1217,7 +1242,7 @@ router.post(
       // Verify post ownership
       const { data: post, error: postError } = await supabase
         .from('service_posts')
-        .select('user_id, photos, photo_descriptions, photo_prices')
+        .select('user_id, photos, photo_prices')
         .eq('id', postId)
         .single();
 
@@ -1345,18 +1370,15 @@ try {
       // ============================================================
       // UPDATE DATABASE
       // ============================================================
-      const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
       const price = parseFloat(req.body.price) || 0;
 
       const updatedPhotos = [...currentPhotos, photoUrl];
-      const updatedDescriptions = [...(post.photo_descriptions || []), description];
       const updatedPrices = [...(post.photo_prices || []), price];
 
       const { error: updateError } = await supabase
         .from('service_posts')
         .update({
           photos: updatedPhotos,
-          photo_descriptions: updatedDescriptions,
           photo_prices: updatedPrices,
         })
         .eq('id', postId);
@@ -1402,7 +1424,7 @@ router.delete(
 
       const { data: post, error: fetchError } = await supabase
         .from('service_posts')
-        .select('user_id, photos, photo_descriptions, photo_prices')
+        .select('user_id, photos, photo_prices')
         .eq('id', postId)
         .single();
 
@@ -1460,14 +1482,12 @@ router.delete(
       }
 
       const updatedPhotos = post.photos.filter((_: any, i: number) => i !== index);
-      const updatedDescriptions = (post.photo_descriptions || []).filter((_: any, i: number) => i !== index);
       const updatedPrices = (post.photo_prices || []).filter((_: any, i: number) => i !== index);
 
       const { error: updateError } = await supabase
         .from('service_posts')
         .update({
           photos: updatedPhotos.length > 0 ? updatedPhotos : null,
-          photo_descriptions: updatedDescriptions,
           photo_prices: updatedPrices,
         })
         .eq('id', postId);

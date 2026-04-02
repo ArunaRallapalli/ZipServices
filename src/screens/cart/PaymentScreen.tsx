@@ -1,80 +1,71 @@
 /**
  * PaymentScreen.tsx
- * Final payment step. Calls backend to create PaymentIntent,
- * then uses Stripe to confirm payment.
- * 
- * Requires: npm install @stripe/stripe-react-native
- * Then add to app.json plugins: ["@stripe/stripe-react-native"]
+ * v4.0 — March 2026
+ *
+ * Zelle payment flow.
+ * - Receives providerZelleId from CheckoutScreen route params (read-only)
+ * - Fetches business name for order report
+ * - Shipping address read from Redux (checkoutSlice)
+ * - "Confirm Order" saves order then navigates to OrderReportScreen
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Alert } from '../../Utils/Alert';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearCart } from '../../store/cartSlice';
-import API_URL from '../../config/apiConfig';
+import { clearCheckout } from '../../store/checkoutSlice';
+import type { RootState } from '../../store/store';
+import api from '../../api';
 
 const PaymentScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const dispatch = useDispatch();
-  const { serviceAddress, totalCents, items } = route.params || {};
+
+  const { shippingAddress } = useSelector((state: RootState) => state.checkout);
+  const { totalCents, items, providerZelleId } = route.params || {};
 
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'saved'>('card');
+  const [businessName, setBusinessName] = useState<string | null>(null);
 
-  const handlePayment = async () => {
+  // Fetch provider's business name for the order report
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    const providerUserId = items[0]?.provider_user_id;
+    if (!providerUserId) return;
+    api.get(`/business-owners/by-user/${providerUserId}`)
+      .then((data: any) => { if (data?.business_name) setBusinessName(data.business_name); })
+      .catch(() => {});
+  }, []);
+
+  const handleConfirmOrder = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const token = await AsyncStorage.getItem('access_token');
-
-      // For each item, create a payment intent
-      for (const item of items) {
-        if (!item.provider_stripe_account_id) {
-          Alert.alert(
-            'Provider Not Ready',
-            `${item.title}: This provider hasn't set up payments yet. Please contact them directly.`
-          );
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch(`${API_URL}/api/stripe/payment/create`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            amount: item.agreed_amount,
-            providerStripeAccountId: item.provider_stripe_account_id,
-          }),
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Payment failed');
-
-        // TODO: Use @stripe/stripe-react-native to confirm payment with clientSecret
-        // const { error } = await confirmPayment(data.clientSecret, { paymentMethodType: 'Card' });
-        // if (error) throw new Error(error.message);
-        
-        console.log('✅ Payment intent created:', data.clientSecret);
-      }
-
-      // Success
+      const result: any = await api.post('/api/orders', {
+        provider_user_id:          items?.[0]?.provider_user_id,
+        service_provider_zelle_id: providerZelleId || null,
+        total_cents:               totalCents || 0,
+        items:                     items,
+        shipping_address:          shippingAddress || null,
+      });
       dispatch(clearCart());
-      Alert.alert(
-        '🎉 Order Placed!',
-        'Your service has been booked successfully. The provider will contact you shortly.',
-        [{ text: 'OK', onPress: () => navigation.navigate('TabWrapperScreen') }]
-      );
+      dispatch(clearCheckout());
+      navigation.navigate('OrderReportScreen', {
+        orderId:        result?.id || result?.order_id || null,
+        orderDate:      new Date().toISOString(),
+        businessName:   businessName,
+        items:          items,
+        totalCents:     totalCents || 0,
+        providerZelleId,
+        shippingAddress,
+      });
     } catch (error: any) {
-      Alert.alert('Payment Failed', error.message || 'Please try again.');
+      Alert.alert('Error', 'Failed to confirm order. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -92,80 +83,120 @@ const PaymentScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* Order Total Summary */}
+        {/* Order Summary — table layout */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="receipt-outline" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Order Total</Text>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
           </View>
-          <Text style={styles.totalAmount}>
-            ${(totalCents / 100).toFixed(2)}
-          </Text>
-          <Text style={styles.totalNote}>Includes 10% platform fee</Text>
+
+          {/* Table header */}
+          <View style={styles.tableHeader}>
+            <Text style={[styles.colTitle, styles.colHeaderText]}>Item</Text>
+            <Text style={[styles.colQty, styles.colHeaderText]}>Qty</Text>
+            <Text style={[styles.colPrice, styles.colHeaderText]}>Price</Text>
+            <Text style={[styles.colAmount, styles.colHeaderText]}>Amount</Text>
+          </View>
+
+          {/* Item rows */}
+          {(items || []).map((item: any) => {
+            const u = item.photo_price || item.price || 0;
+            const qty = item.quantity ?? 1;
+            return (
+              <View key={`${item.post_id}_${item.photo_index}`} style={styles.tableRow}>
+                <Text style={[styles.colTitle, styles.colBodyText]} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.colQty, styles.colBodyText]}>{qty}</Text>
+                <Text style={[styles.colPrice, styles.colBodyText]}>
+                  {u > 0 ? `$${u.toFixed(2)}` : '—'}
+                </Text>
+                <Text style={[styles.colAmount, styles.colBodyText, u > 0 && styles.amountValue]}>
+                  {u > 0 ? `$${(u * qty).toFixed(2)}` : '—'}
+                </Text>
+              </View>
+            );
+          })}
+
+          {/* Divider + Total */}
+          <View style={styles.tableDivider} />
+          <View style={styles.totalRow}>
+            <Text style={styles.grandTotalLabel}>Total</Text>
+            <Text style={styles.grandTotalValue}>${((totalCents || 0) / 100).toFixed(2)}</Text>
+          </View>
         </View>
 
-        {/* Service Address Summary */}
-        {serviceAddress && (
+        {/* Zelle Payment Instructions */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="phone-portrait-outline" size={18} color="#4A90E2" />
+            <Text style={styles.sectionTitle}>Pay via Zelle</Text>
+          </View>
+
+          {providerZelleId ? (
+            <View style={styles.zelleBox}>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#2E7D32" />
+              <Text style={[styles.zelleInfo, { color: '#2E7D32' }]}>
+                Send{' '}
+                <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
+                {' '}via Zelle to:{'  '}
+                <Text style={styles.bold}>{providerZelleId}</Text>
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.zelleBox}>
+              <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
+              <Text style={styles.zelleInfo}>
+                After confirming, the provider will contact you with their Zelle ID to complete payment.
+              </Text>
+            </View>
+          )}
+
+        </View>
+
+        {/* Shipping Address */}
+        {shippingAddress && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Ionicons name="location-outline" size={18} color="#4A90E2" />
-              <Text style={styles.sectionTitle}>Service At</Text>
+              <Text style={styles.sectionTitle}>Deliver To</Text>
             </View>
-            <Text style={styles.addressText}>{serviceAddress.fullName}</Text>
-            <Text style={styles.addressText}>{serviceAddress.street}</Text>
+            {shippingAddress.fullName ? (
+              <Text style={styles.addressText}>{shippingAddress.fullName}</Text>
+            ) : null}
+            <Text style={styles.addressText}>{shippingAddress.street}</Text>
             <Text style={styles.addressText}>
-              {serviceAddress.city}, {serviceAddress.state} {serviceAddress.zipCode}
+              {shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}
             </Text>
           </View>
         )}
 
-        {/* Payment Method */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="card-outline" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Payment Method</Text>
-          </View>
-
-          <View style={styles.cardPlaceholder}>
-            <Ionicons name="card" size={32} color="#4A90E2" />
-            <Text style={styles.cardPlaceholderText}>
-              Secure payment powered by Stripe
-            </Text>
-            <Text style={styles.cardNote}>
-              Install @stripe/stripe-react-native to enable card input
-            </Text>
-          </View>
-        </View>
-
-        {/* Stripe logo / security note */}
-        <View style={styles.securityNote}>
-          <Ionicons name="shield-checkmark" size={16} color="#4CAF50" />
-          <Text style={styles.securityText}>
-            Your payment is secured and encrypted by Stripe
-          </Text>
-        </View>
-
-        {/* Confirm & Pay */}
+        {/* Confirm Button */}
         <TouchableOpacity
-          style={[styles.payBtn, loading && styles.disabledBtn]}
-          onPress={handlePayment}
+          style={[styles.confirmBtn, loading && styles.disabledBtn]}
+          onPress={handleConfirmOrder}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Ionicons name="lock-closed" size={20} color="#fff" />
-              <Text style={styles.payBtnText}>
-                Confirm & Pay ${(totalCents / 100).toFixed(2)}
-              </Text>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={styles.confirmBtnText}>Confirm Order</Text>
             </>
           )}
         </TouchableOpacity>
 
         <Text style={styles.termsNote}>
-          By placing your order you agree to our Terms of Service
+          By confirming you agree to our Terms of Service
         </Text>
+
+        <TouchableOpacity
+          style={styles.cancelBtn}
+          onPress={() => navigation.navigate('CartScreen')}
+        >
+          <Text style={styles.cancelBtnText}>Cancel Order</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -188,26 +219,51 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
   totalAmount: { fontSize: 36, fontWeight: '800', color: '#4A90E2', textAlign: 'center' },
-  totalNote: { fontSize: 13, color: '#888', textAlign: 'center', marginTop: 4 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  itemName: { fontSize: 14, color: '#444', flex: 1, marginRight: 8 },
+  itemPrice: { fontSize: 14, color: '#2E7D32', fontWeight: '600' },
+  zelleBox: {
+    flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+    backgroundColor: '#F0F7FF', borderRadius: 8, padding: 12, marginBottom: 12,
+  },
+  zelleInfo: { fontSize: 13, color: '#444', flex: 1, lineHeight: 20 },
+  bold: { fontWeight: '700', color: '#333' },
+  yourZelleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  yourZelleLabel: { fontSize: 13, color: '#666', fontWeight: '600' },
+  yourZelleValue: { fontSize: 13, color: '#4A90E2', fontWeight: '700' },
   addressText: { fontSize: 14, color: '#444', lineHeight: 22 },
-  cardPlaceholder: {
-    alignItems: 'center', padding: 24, backgroundColor: '#F0F7FF',
-    borderRadius: 10, borderWidth: 1, borderColor: '#4A90E2', borderStyle: 'dashed',
-  },
-  cardPlaceholderText: { fontSize: 14, color: '#4A90E2', fontWeight: '600', marginTop: 8 },
-  cardNote: { fontSize: 12, color: '#888', marginTop: 6, textAlign: 'center' },
-  securityNote: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#E8F5E9', padding: 12, borderRadius: 8, marginBottom: 16,
-  },
-  securityText: { fontSize: 13, color: '#2E7D32', flex: 1 },
-  payBtn: {
-    backgroundColor: '#4A90E2', borderRadius: 12, paddingVertical: 18,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  confirmBtn: {
+    backgroundColor: '#4A90E2', borderRadius: 12, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginBottom: 12,
   },
   disabledBtn: { backgroundColor: '#ccc' },
-  payBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  termsNote: { textAlign: 'center', fontSize: 12, color: '#aaa', marginTop: 16 },
+  confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  termsNote: { textAlign: 'center', fontSize: 12, color: '#aaa' },
+
+  // Order Summary table
+  tableHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#e0e0e0',
+    marginBottom: 4,
+  },
+  tableRow: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
+  },
+  colTitle: { flex: 3, paddingRight: 4 },
+  colQty: { flex: 1, textAlign: 'center' },
+  colPrice: { flex: 1.5, textAlign: 'right' },
+  colAmount: { flex: 1.5, textAlign: 'right' },
+  colHeaderText: { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase' },
+  colBodyText: { fontSize: 13, color: '#333' },
+  amountValue: { color: '#2E7D32', fontWeight: '600' },
+  tableDivider: { borderTopWidth: 1.5, borderTopColor: '#e0e0e0', marginVertical: 10 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  grandTotalLabel: { fontSize: 16, fontWeight: '700', color: '#333' },
+  grandTotalValue: { fontSize: 18, fontWeight: '700', color: '#4A90E2' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  cancelBtnText: { fontSize: 14, color: '#E53935', fontWeight: '600' },
 });
 
 export default PaymentScreen;

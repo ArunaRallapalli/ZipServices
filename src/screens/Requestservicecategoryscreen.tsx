@@ -195,7 +195,7 @@ const RequestServiceCategoryScreen: React.FC = () => {
         service_category: 'Other',
         zip_code: zipCode.trim(),
         contact_email: contactEmail.trim(),
-        price_range: null,
+        price: null,
         phone_number: null,
       };
 

@@ -25,9 +25,12 @@
  */
 
 import { Router, Request, Response } from "express";
+import { Resend } from 'resend';
 import { supabase } from "../config/Supabase";
 // ADDED: January 5, 2026 - Import authentication middleware
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const router = Router();
 
@@ -496,11 +499,94 @@ if (String(sender_id) !== String(req.user?.user_id)) {
     };
 
     res.status(201).json(message);
+
+    // Send email notification to receiver (non-blocking)
+    sendMessageEmail(
+      parseInt(sender_id, 10),
+      parseInt(receiver_id, 10),
+      message_text,
+    ).catch(err => console.error('❌ Message email error:', err));
+
   } catch (err) {
     console.error("Send message error:", err);
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+async function sendMessageEmail(
+  senderId: number,
+  receiverId: number,
+  messageText: string,
+): Promise<void> {
+  // Fetch sender and receiver details (email + business name if applicable)
+  const { data: users, error } = await supabase
+    .from('users')
+    .select(`
+      user_id,
+      email,
+      full_name,
+      user_type,
+      business_owners!business_owners_user_id_fkey(business_name)
+    `)
+    .in('user_id', [senderId, receiverId]);
+
+  if (error || !users) {
+    console.error('❌ Failed to fetch user details for message email:', error);
+    return;
+  }
+
+  const senderRow   = users.find((u: any) => parseInt(u.user_id, 10) === senderId);
+  const receiverRow = users.find((u: any) => parseInt(u.user_id, 10) === receiverId);
+
+  if (!senderRow || !receiverRow) return;
+
+  const senderName   = senderRow.business_owners?.[0]?.business_name
+                     || senderRow.full_name
+                     || 'GoZipMarket User';
+  const receiverName = receiverRow.business_owners?.[0]?.business_name
+                     || receiverRow.full_name
+                     || 'there';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+          .wrap { max-width: 560px; margin: 0 auto; padding: 20px; }
+          .header { background: #4A90E2; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+          .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
+          .message-box { background: #f5f8ff; border-left: 4px solid #4A90E2; border-radius: 4px; padding: 14px 16px; margin: 16px 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
+          .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="header">
+            <h2 style="margin:0">New Message — GoZipMarket</h2>
+          </div>
+          <div class="body">
+            <p>Hi ${receiverName},</p>
+            <p>You have a new message from <strong>${senderName}</strong>:</p>
+            <div class="message-box">${messageText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            <p>Log in to GoZipMarket to reply.</p>
+          </div>
+          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
+        </div>
+      </body>
+    </html>`;
+
+  await resend.emails.send({
+    from:    'GoZipMarket <noreply@gozipmarket.com>',
+    replyTo: 'support@gozipmarket.com',
+    to:      receiverRow.email,
+    subject: `New message from ${senderName} — GoZipMarket`,
+    html,
+  });
+
+  console.log(`📧 Message notification sent to ${receiverRow.email} from ${senderName}`);
+}
 
 /**
  * PUT /messages/mark-read

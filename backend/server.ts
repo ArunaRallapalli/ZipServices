@@ -29,6 +29,7 @@ import servicePostsRouter from './routes/ServicePosts';
 import passwordResetRoutes from './routes/Passwordreset';
 import emailVerificationRoutes from './routes/EmailVerification';
 import stripeRoutes from './routes/stripe';
+import ordersRouter from './routes/orders';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -107,6 +108,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 app.use("/api/service-categories", serviceCategoriesRouter);
 app.use("/api/users", usersRouter);
 app.use('/', servicePostsRouter);
+app.use('/', ordersRouter);
 
 // ✅ EXISTING ROUTES (keep these for backward compatibility)
 app.use("/users", usersRouter);

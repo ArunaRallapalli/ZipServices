@@ -69,6 +69,8 @@ import CartScreen from '../screens/cart/CartScreen';
 import CheckoutScreen from '../screens/cart/CheckoutScreen';
 import ServiceAddressScreen from '../screens/cart/ServiceAddressScreen';
 import PaymentScreen from '../screens/cart/PaymentScreen';
+import OrdersScreen from '../screens/cart/OrdersScreen';
+import OrderReportScreen from '../screens/cart/OrderReportScreen';
 
 
 /**
@@ -156,10 +158,20 @@ export type RootStackParamList = {
   CartScreen: undefined;
   CheckoutScreen: { serviceAddress?: any };
   ServiceAddressScreen: undefined;
-  PaymentScreen: { serviceAddress: any; totalCents: number; items: any[] };
+  PaymentScreen: { totalCents: number; items: any[]; providerZelleId?: string | null };
+  OrderReportScreen: {
+    orderId?: string | number | null;
+    orderDate?: string;
+    businessName?: string | null;
+    items?: any[];
+    totalCents?: number;
+    providerZelleId?: string | null;
+    shippingAddress?: any;
+  };
   
   // Listings & Posts - Service management
   ListingsScreen: undefined;  // View all user's posted services
+  OrdersScreen: undefined;
    CalendarScreen: undefined;                      
   EditListing: { postId: number };                  // Edit existing service post
   PostServiceScreen: undefined;                     // Create new service post
@@ -365,8 +377,12 @@ const NavigationStack: React.FC = () => {
         </RootStack.Group>
 
         <RootStack.Group screenOptions={{ headerShown: false }}>
-          <RootStack.Screen 
-            name="ListingsScreen" 
+          <RootStack.Screen
+            name="OrdersScreen"
+            component={OrdersScreen}
+          />
+          <RootStack.Screen
+            name="ListingsScreen"
             component={ListingsScreen}
             options={{ headerTitle: 'My Listings' }}
           />
@@ -422,6 +438,11 @@ const NavigationStack: React.FC = () => {
             name="PaymentScreen"
             component={PaymentScreen}
             options={{ headerTitle: 'Payment' }}
+          />
+          <RootStack.Screen
+            name="OrderReportScreen"
+            component={OrderReportScreen}
+            options={{ headerTitle: 'Order Confirmation' }}
           />
         </RootStack.Group>
       </RootStack.Navigator>
