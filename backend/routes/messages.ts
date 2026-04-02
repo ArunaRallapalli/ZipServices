@@ -426,6 +426,9 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
 
     console.log(`Marked ${markedMessages?.length || 0} messages as read`);
 
+    // Update last_seen_at — user is active in chat, reset notification state
+    updateLastSeen(currentId).catch(err => console.error('❌ updateLastSeen error:', err));
+
     const messages = (data || []).map((row: any) => ({
       ...row,
       id: parseInt(row.id, 10),
@@ -500,11 +503,10 @@ if (String(sender_id) !== String(req.user?.user_id)) {
 
     res.status(201).json(message);
 
-    // Send email notification to receiver (non-blocking)
-    sendMessageEmail(
+    // Send smart email notification to receiver (non-blocking)
+    sendSmartNotification(
       parseInt(sender_id, 10),
       parseInt(receiver_id, 10),
-      message_text,
     ).catch(err => console.error('❌ Message email error:', err));
 
   } catch (err) {
@@ -513,39 +515,114 @@ if (String(sender_id) !== String(req.user?.user_id)) {
   }
 });
 
-async function sendMessageEmail(
+// ---------------------------------------------------------------------------
+// updateLastSeen
+// Called when a user opens a chat or marks messages as read.
+// Resets notification state so follow-up emails are not sent to active users.
+// ---------------------------------------------------------------------------
+async function updateLastSeen(userId: number): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  if (error) console.error(`❌ updateLastSeen failed for user ${userId}:`, error);
+}
+
+// ---------------------------------------------------------------------------
+// sendSmartNotification
+//
+// Implements the full email notification lifecycle:
+//
+//   1. First unread message  → send immediately
+//        Subject: "New message about your listing"
+//
+//   2. Follow-up messages    → send at most once per hour (batched)
+//        Subject: "You have N new messages waiting"
+//        Only if now − last_email_sent_at >= 60 minutes
+//
+// Guards:
+//   • Active users  — skip if last_seen_at < 10 minutes ago
+//   • Cooldown      — skip if last_email_sent_at < 60 minutes ago (for batched)
+//   • Reset         — last_seen_at is set to NOW() whenever user opens chat
+//                     or marks messages as read (see updateLastSeen calls above)
+// ---------------------------------------------------------------------------
+async function sendSmartNotification(
   senderId: number,
   receiverId: number,
-  messageText: string,
 ): Promise<void> {
-  // Fetch sender and receiver details (email + business name if applicable)
-  const { data: users, error } = await supabase
+  // 1. Fetch sender + receiver details
+  const { data: users, error: usersError } = await supabase
     .from('users')
     .select(`
       user_id,
       email,
       full_name,
-      user_type,
+      last_seen_at,
+      last_email_sent_at,
       business_owners!business_owners_user_id_fkey(business_name)
     `)
     .in('user_id', [senderId, receiverId]);
 
-  if (error || !users) {
-    console.error('❌ Failed to fetch user details for message email:', error);
+  if (usersError || !users) {
+    console.error('❌ Failed to fetch user details for notification:', usersError);
     return;
   }
 
   const senderRow   = users.find((u: any) => parseInt(u.user_id, 10) === senderId);
   const receiverRow = users.find((u: any) => parseInt(u.user_id, 10) === receiverId);
 
-  if (!senderRow || !receiverRow) return;
+  if (!senderRow || !receiverRow || !receiverRow.email) return;
 
+  // 2. Skip if receiver is currently active (last_seen_at within 10 minutes)
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  if (receiverRow.last_seen_at) {
+    const msSinceSeen = Date.now() - new Date(receiverRow.last_seen_at).getTime();
+    if (msSinceSeen < TEN_MINUTES_MS) {
+      console.log(`⏭️ Skipping email — user ${receiverId} is active (last seen ${Math.round(msSinceSeen / 1000)}s ago)`);
+      return;
+    }
+  }
+
+  // 3. Count total unread messages for receiver
+  const { count, error: countError } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('receiver_id', receiverId)
+    .eq('is_read', false);
+
+  if (countError) {
+    console.error('❌ Failed to count unread messages:', countError);
+    return;
+  }
+
+  const unreadCount = count ?? 0;
+
+  // 4. Cooldown check for batched follow-up emails (only applies when > 1 unread)
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  if (unreadCount > 1 && receiverRow.last_email_sent_at) {
+    const msSinceEmail = Date.now() - new Date(receiverRow.last_email_sent_at).getTime();
+    if (msSinceEmail < ONE_HOUR_MS) {
+      console.log(`⏭️ Skipping email — within 1-hour cooldown (${unreadCount} unread, last email ${Math.round(msSinceEmail / 60000)}m ago)`);
+      return;
+    }
+  }
+
+  // 5. Compose email content
   const senderName   = senderRow.business_owners?.[0]?.business_name
                      || senderRow.full_name
                      || 'GoZipMarket User';
   const receiverName = receiverRow.business_owners?.[0]?.business_name
                      || receiverRow.full_name
                      || 'there';
+
+  const isFirst = unreadCount <= 1;
+  const subject = isFirst
+    ? 'New message about your listing — GoZipMarket'
+    : `You have ${unreadCount} new messages waiting — GoZipMarket`;
+  const bodyLine = isFirst
+    ? `You have a new message from <strong>${senderName}</strong>. Check it on GoZipMarket.`
+    : `You have <strong>${unreadCount} new messages</strong> waiting. Check them on GoZipMarket.`;
 
   const html = `
     <!DOCTYPE html>
@@ -557,35 +634,39 @@ async function sendMessageEmail(
           .wrap { max-width: 560px; margin: 0 auto; padding: 20px; }
           .header { background: #4A90E2; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
           .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
-          .message-box { background: #f5f8ff; border-left: 4px solid #4A90E2; border-radius: 4px; padding: 14px 16px; margin: 16px 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
           .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 20px; }
         </style>
       </head>
       <body>
         <div class="wrap">
           <div class="header">
-            <h2 style="margin:0">New Message — GoZipMarket</h2>
+            <h2 style="margin:0">${isFirst ? 'New Message' : 'Messages Waiting'} — GoZipMarket</h2>
           </div>
           <div class="body">
             <p>Hi ${receiverName},</p>
-            <p>You have a new message from <strong>${senderName}</strong>:</p>
-            <div class="message-box">${messageText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-            <p>Log in to GoZipMarket to reply.</p>
+            <p>${bodyLine}</p>
           </div>
-          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
+          <div class="footer">© 2026 GoZipMarket — Zip Market LLC</div>
         </div>
       </body>
     </html>`;
 
+  // 6. Send the email
   await resend.emails.send({
     from:    'GoZipMarket <noreply@gozipmarket.com>',
     replyTo: 'support@gozipmarket.com',
     to:      receiverRow.email,
-    subject: `New message from ${senderName} — GoZipMarket`,
+    subject,
     html,
   });
 
-  console.log(`📧 Message notification sent to ${receiverRow.email} from ${senderName}`);
+  // 7. Record send time to enforce cooldown on next message
+  await supabase
+    .from('users')
+    .update({ last_email_sent_at: new Date().toISOString() })
+    .eq('user_id', receiverId);
+
+  console.log(`📧 ${isFirst ? 'Instant' : `Batched (${unreadCount})`} notification sent to ${receiverRow.email}`);
 }
 
 /**
@@ -643,9 +724,12 @@ router.put("/mark-read", authenticateToken, async (req: AuthRequest, res: Respon
     if (error) throw error;
 
     console.log(`[mark-read] Successfully marked ${data?.length || 0} messages as read`);
-    
-    res.json({ 
-      success: true, 
+
+    // Update last_seen_at — user is reading messages, reset notification state
+    updateLastSeen(userId).catch(err => console.error('❌ updateLastSeen error:', err));
+
+    res.json({
+      success: true,
       marked_count: data?.length || 0,
       message_ids: (data || []).map((row: any) => parseInt(row.id, 10))
     });

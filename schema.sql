@@ -413,6 +413,8 @@ CREATE TABLE public.users (
     email character varying(255),
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     full_name character varying(255),
+    last_seen_at timestamp without time zone,
+    last_email_sent_at timestamp without time zone,
     CONSTRAINT user_type_check CHECK (((user_type)::text = ANY ((ARRAY['customer'::character varying, 'business_owner'::character varying])::text[])))
 );
 
