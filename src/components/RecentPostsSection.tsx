@@ -1,10 +1,23 @@
 /**
  * RecentPostsSection.tsx
  *
- * UPDATED March 2026 v4.0:
+ * UPDATED March 2026 v5.0:
+ * - Cart button added below text content (right side of mini card)
+ * - Auth guard: guests redirected to BusinessOwnerHomeScreen on cart tap
+ * - DetailModal: Add to Cart + Contact Provider side by side
+ * - isAuthenticated prop added throughout
  * - 2-column mini card grid (home page): 1 photo thumbnail, title, stars, location
  * - Tap → DetailModal: full ServiceCard-style photo gallery + zoom + description + Contact Provider
  * - Photo rendering copied exactly from production ServiceCard (fixed pixel dims, no width:'100%')
+ *
+ * UPDATED March 2026 v5.1:
+ * - DetailModal: removed category/type badges (Boutique, OFFER)
+ * - DetailModal: removed "About this service" section label
+ * - DetailModal: new display order — photo → title → description → reviews → price → delivery → buttons
+ * - DetailModal: Add to Cart + Contact Provider now stacked vertically (full width each)
+ * - DetailModal: single Add to Cart per listing (removed per-photo buttons)
+ * - delivery_timeline field displayed after price
+ * - Header now shows close button only (title moved into body below photos)
  */
 
 import React, { useState } from 'react';
@@ -20,25 +33,39 @@ import {
   SafeAreaView,
   Dimensions,
 } from 'react-native';
+import { Alert } from '../Utils/Alert';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ServicePost } from '../Utils/searchUtils';
 import ReviewsModal from './Reviewsmodal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2; // 2 columns with padding
+const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2;
 
 // ============================================================================
 // TYPES
 // ============================================================================
+
+type AddToCartFn = (
+  item: ServicePost,
+  photoIndex: number,
+  photoUrl: string,
+  photoPrice?: number,
+) => void;
 
 interface RecentPostsSectionProps {
   recentPosts: ServicePost[];
   isOwnPost: (postUserId: number) => boolean;
   onChatPress: (item: ServicePost) => void;
   loading: boolean;
-  onReviewSubmitted?: () => void;   // ← triggers parent re-fetch after review
+  onReviewSubmitted?: () => void;
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
 }
-// ✅ ADD THIS - category icon/color map for placeholder
+
+// ✅ category icon/color map for placeholder
 const CATEGORY_META: Record<string, { icon: any; color: string }> = {
   "Cleaning":        { icon: "sparkles",       color: "#4A90E2" },
   "Catering":        { icon: "restaurant",      color: "#E67E22" },
@@ -60,6 +87,7 @@ const CATEGORY_META: Record<string, { icon: any; color: string }> = {
   "Other":           { icon: "apps",            color: "#607D8B" },
 };
 const DEFAULT_META = { icon: "briefcase", color: "#607D8B" };
+
 // ============================================================================
 // MINI STARS
 // ============================================================================
@@ -91,10 +119,15 @@ const DetailModal: React.FC<{
   onClose: () => void;
   onChatPress: (item: ServicePost) => void;
   onReviewSubmitted?: () => void;
-}> = ({ item, visible, isOwnPost, onClose, onChatPress, onReviewSubmitted }) => {
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
+}> = ({ item, visible, isOwnPost, onClose, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [zoomVisible, setZoomVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const photos = item.photos ?? [];
 
   const openZoom = (index: number) => {
@@ -109,12 +142,36 @@ const DetailModal: React.FC<{
     if (selectedPhotoIndex > 0) setSelectedPhotoIndex(i => i - 1);
   };
 
+  const handleAddListingToCart = () => {
+    if (!isAuthenticated) {
+      onClose();
+      setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
+      return;
+    }
+    const firstPhotoUrl = photos[0] ?? '';
+    onAddToCart?.(item, 0, firstPhotoUrl, item.photo_prices?.[0] || undefined);
+    setAddedToCart(true);
+    Alert.alert(
+      'Added to Cart',
+      `"${item.title}" has been added to your cart.`,
+      [
+        { text: 'Keep Browsing', style: 'cancel', onPress: onClose },
+        {
+          text: 'View Cart',
+          onPress: () => {
+            onClose();
+            setTimeout(() => navigation.navigate('CartScreen'), 300);
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        {/* Header */}
+        {/* Header — close button only (title moved into body) */}
         <View style={modalStyles.header}>
-          <Text style={modalStyles.headerTitle} numberOfLines={2}>{item.title}</Text>
           <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn}>
             <Ionicons name="close" size={26} color="#333" />
           </TouchableOpacity>
@@ -122,34 +179,42 @@ const DetailModal: React.FC<{
 
         <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
 
-          {/* ── Category + Type badges ── */}
-          <View style={modalStyles.metaRow}>
-            <View style={modalStyles.categoryBadge}>
-              <Text style={modalStyles.categoryText}>{item.service_category}</Text>
+          {/* 1. Photos */}
+          {photos.length > 0 && (
+            <View style={modalStyles.photosContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
+                {photos.map((uri, index) => {
+                  return (
+                    <View key={index} style={modalStyles.photoCard}>
+                      <TouchableOpacity onPress={() => openZoom(index)} activeOpacity={0.8}>
+                        <Image source={{ uri }} style={modalStyles.photoImage} resizeMode="cover" />
+                        <View style={modalStyles.zoomIndicator}>
+                          <Ionicons name="expand" size={16} color="#fff" />
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
-            <View style={[
-              modalStyles.typeBadge,
-              item.post_type === 'offer' ? modalStyles.offerBadge : modalStyles.requestBadge
-            ]}>
-              <Text style={modalStyles.typeBadgeText}>
-                {item.post_type?.toUpperCase() ?? 'OFFER'}
-              </Text>
-            </View>
-          </View>
+          )}
 
-          {/* ── Rating — tap to open reviews ── */}
-          <TouchableOpacity
-            style={modalStyles.ratingRow}
-            onPress={() => setShowReviewsModal(true)}
-            activeOpacity={0.7}
-          >
+          {/* 2. Title */}
+          <Text style={modalStyles.postTitle}>{item.title}</Text>
+
+          {/* 3. Description */}
+          {item.description ? (
+            <Text style={modalStyles.descriptionText}>
+              {item.description.replace(/\s+/g, ' ').trim()}
+            </Text>
+          ) : (
+            <Text style={modalStyles.noDescriptionText}>No description provided.</Text>
+          )}
+
+          {/* 4. Reviews — tap to open */}
+          <TouchableOpacity style={modalStyles.ratingRow} onPress={() => setShowReviewsModal(true)} activeOpacity={0.7}>
             {[1,2,3,4,5].map(s => (
-              <Ionicons
-                key={s}
-                name={(item.average_rating ?? 0) >= s ? 'star' : 'star-outline'}
-                size={15}
-                color="#FFA500"
-              />
+              <Ionicons key={s} name={(item.average_rating ?? 0) >= s ? 'star' : 'star-outline'} size={15} color="#FFA500" />
             ))}
             <Text style={modalStyles.ratingText}>
               {item.review_count ? `(${item.review_count} reviews)` : '(No reviews yet)'}
@@ -157,14 +222,10 @@ const DetailModal: React.FC<{
             <Ionicons name="chevron-forward" size={14} color="#999" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
 
-          {/* ── Business name ── */}
+          {/* Business name + Location */}
           {(item.business_name || item.poster_name) && (
-            <Text style={modalStyles.businessName}>
-              by {item.business_name || item.poster_name}
-            </Text>
+            <Text style={modalStyles.businessName}>by {item.business_name || item.poster_name}</Text>
           )}
-
-          {/* ── Location ── */}
           {item.city && item.state && (
             <View style={modalStyles.locationRow}>
               <Ionicons name="location-outline" size={14} color="#666" />
@@ -172,74 +233,65 @@ const DetailModal: React.FC<{
             </View>
           )}
 
-          {/* ── Price ── */}
-          {item.price_range && (
+          {/* 5. Price */}
+          {item.price && (
             <View style={modalStyles.priceRow}>
               <Ionicons name="cash-outline" size={14} color="#2E7D32" />
-              <Text style={modalStyles.priceText}> {item.price_range}</Text>
+              <Text style={modalStyles.priceText}> {item.price}</Text>
             </View>
           )}
 
-          {/* ── PHOTOS — exact ServiceCard pattern ── */}
-          {photos.length > 0 && (
-            <View style={modalStyles.photosContainer}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={modalStyles.photoScroll}
-              >
-                {photos.map((uri, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={modalStyles.photoWrapper}
-                    onPress={() => openZoom(index)}
-                    activeOpacity={0.8}
-                  >
-                    <Image
-                      source={{ uri }}
-                      style={modalStyles.photoImage}   // 120×120 fixed pixels — same as ServiceCard
-                      resizeMode="cover"
-                    />
-                    <View style={modalStyles.zoomIndicator}>
-                      <Ionicons name="expand" size={20} color="#fff" />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <Text style={modalStyles.photoCount}>
-                📸 {photos.length} photo{photos.length > 1 ? 's' : ''} · Tap to zoom
-              </Text>
+          {/* 6. In Stock — only for payment-enabled categories */}
+          {paymentCategories?.has(item.service_category) && item.in_stock != null && item.in_stock > 0 && (
+            <View style={modalStyles.deliveryRow}>
+              <Ionicons name="cube-outline" size={14} color="#555" />
+              <Text style={modalStyles.deliveryText}> In stock: {item.in_stock}</Text>
             </View>
           )}
 
-          {/* ── Description ── */}
-          {item.description ? (
-            <View style={modalStyles.descriptionBox}>
-              <Text style={modalStyles.descriptionLabel}>About this service</Text>
-              <Text style={modalStyles.descriptionText}>
-                {item.description.replace(/\s+/g, ' ').trim()}
-              </Text>
+          {/* 7. Delivery Timeline — only for payment-enabled categories */}
+          {paymentCategories?.has(item.service_category) && item.delivery_timeline && (
+            <View style={modalStyles.deliveryRow}>
+              <Ionicons name="time-outline" size={14} color="#555" />
+              <Text style={modalStyles.deliveryText}> Delivery: {item.delivery_timeline}</Text>
             </View>
-          ) : (
-            <Text style={modalStyles.noDescriptionText}>No description provided.</Text>
           )}
 
-          {/* ── Contact / Own post ── */}
+          {/* 7. Add to Cart  8. Contact Provider — stacked full width */}
           {isOwnPost ? (
             <View style={modalStyles.ownPostNote}>
               <Text style={modalStyles.ownPostNoteText}>This is your post. You cannot contact yourself.</Text>
             </View>
           ) : (
-            <TouchableOpacity
-              style={modalStyles.contactButton}
-              onPress={() => {
-                onClose();
-                setTimeout(() => onChatPress(item), 300);
-              }}
-            >
-              <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
-              <Text style={modalStyles.contactButtonText}> Contact Provider</Text>
-            </TouchableOpacity>
+            <View style={modalStyles.actionCol}>
+              {paymentCategories?.has(item.service_category) && item.provider_accepts_zelle && (
+                item.in_stock === 0 ? (
+                  <View style={modalStyles.unavailableBox}>
+                    <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
+                    <TouchableOpacity onPress={onClose} style={modalStyles.keepBrowsingBtn}>
+                      <Text style={modalStyles.keepBrowsingText}>Keep Browsing</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[modalStyles.cartButton, addedToCart && modalStyles.cartButtonAdded]}
+                    onPress={addedToCart
+                      ? () => { onClose(); setTimeout(() => navigation.navigate('CartScreen'), 300); }
+                      : handleAddListingToCart}
+                  >
+                    <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
+                    <Text style={modalStyles.buttonText}>{addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
+                  </TouchableOpacity>
+                )
+              )}
+              <TouchableOpacity
+                style={modalStyles.contactButton}
+                onPress={() => { onClose(); setTimeout(() => onChatPress(item), 300); }}
+              >
+                <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+                <Text style={modalStyles.buttonText}> Contact Provider</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <View style={{ height: 30 }} />
@@ -253,9 +305,16 @@ const DetailModal: React.FC<{
         providerName={item.business_name || item.poster_name || 'Provider'}
         onClose={() => {
           setShowReviewsModal(false);
-          onReviewSubmitted?.();   // ← refresh parent data
+          onReviewSubmitted?.();
+        }}
+        onSignIn={() => {
+          setShowReviewsModal(false);
+          onClose();
+          setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
         }}
       />
+
+      {/* ── Fullscreen zoom ── */}
       <Modal
         visible={zoomVisible}
         transparent
@@ -269,19 +328,16 @@ const DetailModal: React.FC<{
             onPress={() => setZoomVisible(false)}
           >
             <View style={zoomStyles.content}>
-              {/* Close */}
               <TouchableOpacity style={zoomStyles.closeBtn} onPress={() => setZoomVisible(false)}>
                 <Ionicons name="close" size={32} color="#fff" />
               </TouchableOpacity>
 
-              {/* Counter */}
               <View style={zoomStyles.counter}>
                 <Text style={zoomStyles.counterText}>
                   {selectedPhotoIndex + 1} / {photos.length}
                 </Text>
               </View>
 
-              {/* Pinch-to-zoom image — SCREEN_WIDTH × SCREEN_HEIGHT*0.8, same as ServiceCard */}
               <ScrollView
                 style={{ width: SCREEN_WIDTH }}
                 contentContainerStyle={zoomStyles.scrollContent}
@@ -292,12 +348,11 @@ const DetailModal: React.FC<{
               >
                 <Image
                   source={{ uri: photos[selectedPhotoIndex] }}
-                  style={zoomStyles.fullPhoto}   // SCREEN_WIDTH × SCREEN_HEIGHT*0.8
+                  style={zoomStyles.fullPhoto}
                   resizeMode="contain"
                 />
               </ScrollView>
 
-              {/* Prev / Next arrows */}
               {photos.length > 1 && selectedPhotoIndex > 0 && (
                 <TouchableOpacity
                   style={[zoomStyles.navBtn, zoomStyles.prevBtn]}
@@ -323,7 +378,7 @@ const DetailModal: React.FC<{
 };
 
 // ============================================================================
-// MINI CARD — single thumbnail (fixed 120×120) + title + stars + location
+// MINI CARD — single thumbnail + title + stars + location + cart button
 // ============================================================================
 
 const MiniServiceCard: React.FC<{
@@ -331,7 +386,10 @@ const MiniServiceCard: React.FC<{
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
   onReviewSubmitted?: () => void;
-}> = ({ item, isOwnPost, onChatPress, onReviewSubmitted }) => {
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
+}> = ({ item, isOwnPost, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
@@ -355,29 +413,29 @@ const MiniServiceCard: React.FC<{
               <Ionicons name="expand" size={14} color="#fff" />
             </View>
           </View>
-       ) : (
-  <View style={[
-    miniStyles.noPhotoBox, 
-    { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color + '22' }
-  ]}>
-    <View style={[
-      miniStyles.noPhotoIconCircle,
-      { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color }
-    ]}>
-      <Ionicons 
-        name={(CATEGORY_META[item.service_category] ?? DEFAULT_META).icon} 
-        size={22} 
-        color="#fff" 
-      />
-    </View>
-  </View>
-)}
+        ) : (
+          <View style={[
+            miniStyles.noPhotoBox,
+            { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color + '22' }
+          ]}>
+            <View style={[
+              miniStyles.noPhotoIconCircle,
+              { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color }
+            ]}>
+              <Ionicons
+                name={(CATEGORY_META[item.service_category] ?? DEFAULT_META).icon}
+                size={22}
+                color="#fff"
+              />
+            </View>
+          </View>
+        )}
 
-        {/* Text */}
+        {/* Text content — right side */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
 
-          {/* Stars — tap opens ReviewsModal directly, stops card press */}
+          {/* Stars — tap opens ReviewsModal */}
           <TouchableOpacity
             onPress={(e) => {
               e.stopPropagation();
@@ -398,6 +456,7 @@ const MiniServiceCard: React.FC<{
               </Text>
             </View>
           )}
+
         </View>
       </TouchableOpacity>
 
@@ -408,6 +467,9 @@ const MiniServiceCard: React.FC<{
         onClose={() => setModalVisible(false)}
         onChatPress={onChatPress}
         onReviewSubmitted={onReviewSubmitted}
+        onAddToCart={onAddToCart}
+        isAuthenticated={isAuthenticated}
+        paymentCategories={paymentCategories}
       />
 
       {/* ReviewsModal opened directly from mini card stars */}
@@ -417,7 +479,7 @@ const MiniServiceCard: React.FC<{
         providerName={item.business_name || item.poster_name || 'Provider'}
         onClose={() => {
           setShowReviewsModal(false);
-          onReviewSubmitted?.();   // ← refresh parent data
+          onReviewSubmitted?.();
         }}
       />
     </>
@@ -434,6 +496,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   onChatPress,
   loading,
   onReviewSubmitted,
+  onAddToCart,
+  isAuthenticated,
+  paymentCategories,
 }) => {
   if (loading) {
     return (
@@ -456,7 +521,7 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
     );
   }
 
-// Group into rows of 2 for the grid — offers only, no requests
+  // Group into rows of 2 — offers only, no requests
   const offers = recentPosts.filter(p => p.post_type !== 'request' && p.is_active !== false);
   const rows: ServicePost[][] = [];
   for (let i = 0; i < offers.length; i += 2) {
@@ -494,6 +559,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
               isOwnPost={isOwnPost(post.user_id)}
               onChatPress={onChatPress}
               onReviewSubmitted={onReviewSubmitted}
+              onAddToCart={onAddToCart}
+              isAuthenticated={isAuthenticated}
+              paymentCategories={paymentCategories}
             />
           ))}
           {/* Spacer if odd number of posts */}
@@ -533,19 +601,19 @@ const miniStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
-    padding: 8,                  // ← inner padding so photo sits inside card
-    flexDirection: 'row',        // ← photo left, text right
+    padding: 8,
+    flexDirection: 'row',
     alignItems: 'flex-start',
   },
   photoWrapper: {
     position: 'relative',
     marginRight: 8,
   },
- photoImage: {
-  width: 70,
-  height: 70,
-  borderRadius: 8,
-},
+  photoImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+  },
   expandHint: {
     position: 'absolute',
     top: 4,
@@ -554,33 +622,33 @@ const miniStyles = StyleSheet.create({
     borderRadius: 10,
     padding: 3,
   },
-noPhotoBox: {
-  width: 70,
-  height: 70,
-  borderRadius: 8,
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: 8,
-},
-noPhotoIconCircle: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-content: {        // ← ADD THIS BACK
-  flex: 1,
-  justifyContent: 'flex-start',
-},
-title: {
-  fontSize: 12,
-  fontWeight: '700',
-  color: '#1a1a1a',
-  lineHeight: 17,      // ← slightly more breathing room for 2 lines
-  marginBottom: 4,
-  minHeight: 34,       // ← reserves space for 2 lines always
-},
+  noPhotoBox: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  noPhotoIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  title: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    lineHeight: 17,
+    marginBottom: 4,
+    minHeight: 34,
+  },
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -673,8 +741,36 @@ const modalStyles = StyleSheet.create({
     marginBottom: 8,
   },
   priceText: { fontSize: 14, color: '#2E7D32', fontWeight: '600' },
+  deliveryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  deliveryText: { fontSize: 13, color: '#555', fontWeight: '600' },
+  cartButtonAdded: { backgroundColor: '#388E3C' },
+  postTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  actionCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginTop: 16,
+    gap: 10,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
-  // Photos — identical to ServiceCard
+  // Photos
   photosContainer: { paddingHorizontal: 16, marginBottom: 12, marginTop: 8 },
   photoScroll: { marginBottom: 4 },
   photoWrapper: {
@@ -684,8 +780,8 @@ const modalStyles = StyleSheet.create({
     position: 'relative',
   },
   photoImage: {
-    width: 120,    // exact same as ServiceCard
-    height: 120,   // exact same as ServiceCard
+    width: 120,
+    height: 120,
     borderRadius: 8,
   },
   zoomIndicator: {
@@ -717,7 +813,7 @@ const modalStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  descriptionText: { fontSize: 14, color: '#444', lineHeight: 21 },
+  descriptionText: { fontSize: 14, color: '#444', lineHeight: 21, paddingHorizontal: 16, marginBottom: 8 },
   noDescriptionText: {
     fontSize: 13,
     color: '#bbb',
@@ -726,18 +822,36 @@ const modalStyles = StyleSheet.create({
     marginTop: 8,
   },
 
+  // ── Action row: Contact + Cart side by side ──
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
   contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4A90E2',
-    marginHorizontal: 16,
-    marginTop: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
     borderRadius: 10,
-    gap: 8,
+    gap: 6,
+    width: 180,
   },
-  contactButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  cartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2E7D32',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    gap: 6,
+    width: 180,
+  },
+  contactButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   ownPostNote: {
     alignItems: 'center',
@@ -748,10 +862,80 @@ const modalStyles = StyleSheet.create({
     borderRadius: 8,
   },
   ownPostNoteText: { color: '#999', fontSize: 13, fontStyle: 'italic' },
+
+  // ── Shop Items section ──
+  shopSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 12,
+  },
+  shopSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  shopItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 8,
+    gap: 10,
+  },
+  shopItemPhoto: { width: 56, height: 56, borderRadius: 6 },
+  shopItemInfo: { flex: 1 },
+  shopItemName: { fontSize: 13, fontWeight: '600', color: '#222', marginBottom: 2 },
+  shopItemPrice: { fontSize: 14, fontWeight: '700', color: '#2E7D32' },
+  shopItemBtn: {
+    backgroundColor: '#2E7D32',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopItemBtnAdded: { backgroundColor: '#388E3C' },
+  shopItemPriceTbd: { fontSize: 12, color: '#999', fontStyle: 'italic' },
+
+  // ── Per-photo inline card ──
+  photoCard: {
+    width: 130,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  photoPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E7D32',
+    marginTop: 5,
+  },
+  photoCartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#2E7D32',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginTop: 5,
+    width: '100%',
+  },
+  photoCartBtnAdded: { backgroundColor: '#388E3C' },
+  photoCartBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+unavailableBox: { width: 180, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#ddd' },
+  unavailableText: { color: '#999', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  keepBrowsingBtn: { backgroundColor: '#4A90E2', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
+  keepBrowsingText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });
 
 // ============================================================================
-// STYLES — FULLSCREEN ZOOM (identical to ServiceCard)
+// STYLES — FULLSCREEN ZOOM
 // ============================================================================
 
 const zoomStyles = StyleSheet.create({
@@ -791,7 +975,7 @@ const zoomStyles = StyleSheet.create({
   },
   fullPhoto: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.8,   // exact same as ServiceCard
+    height: SCREEN_HEIGHT * 0.8,
   },
   navBtn: {
     position: 'absolute',
@@ -879,5 +1063,6 @@ const sectionStyles = StyleSheet.create({
   nudgeText: { flex: 1, fontSize: 13, color: '#444', lineHeight: 18, marginLeft: 6 },
   nudgeBold: { fontWeight: '700', color: '#4A90E2' },
 });
+
 
 export default RecentPostsSection;

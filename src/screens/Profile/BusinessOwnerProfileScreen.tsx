@@ -59,6 +59,7 @@ interface BusinessOwnerProfile {
   street: string;
   city: string;
   state: string;
+  zelle_id?: string;
   is_admin?: boolean;
 }
 
@@ -143,6 +144,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         state: profile.state,
         email: profile.email,
         password: profile.password,
+        zelle_id: profile.zelle_id || null,
       };
 
       console.log(`💾 Saving profile for user_id: ${user_id}`);
@@ -228,6 +230,8 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           <TextInput style={[styles.input, { height: 80 }]} value={profile.description || ""} multiline numberOfLines={4} onChangeText={(text) => setProfile({ ...profile, description: text })} />
           <Text style={styles.label}>Phone Number:</Text>
           <TextInput style={styles.input} value={profile.phone_number || ""} keyboardType="phone-pad" onChangeText={(text) => setProfile({ ...profile, phone_number: text })} />
+          <Text style={styles.label}>Zelle ID (email or phone number for receiving payments):</Text>
+          <TextInput style={styles.input} value={profile.zelle_id || ""} autoCapitalize="none" autoCorrect={false} keyboardType="default" onChangeText={(text) => setProfile({ ...profile, zelle_id: text })} />
 
           {/* Location */}
           <Text style={styles.sectionHeader}>Location & Service Area</Text>

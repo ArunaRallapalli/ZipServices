@@ -82,10 +82,6 @@ const SearchForm: React.FC<SearchFormProps> = ({
       Alert.alert("Invalid ZIP Code", "Please enter a complete 5-digit ZIP code.", [{ text: "OK" }]);
       return;
     }
-    if (!isZipValid) {
-      Alert.alert("Invalid ZIP Code", "The ZIP code you entered could not be validated. Please check and try again.", [{ text: "OK" }]);
-      return;
-    }
     if (!serviceNeeded) {
       Alert.alert("Service Category Required", "Please select a service category to search.", [{ text: "OK" }]);
       return;
@@ -236,7 +232,7 @@ const styles = StyleSheet.create({
   },
 
   searchRowPicker: {
-    flex: 2,                      // picker gets twice as much space as ZIP
+    flex: 3,                      // picker gets more space; ZIP is narrower
     borderWidth: 1,
     borderColor: "#ffffff",
     borderRadius: 8,
@@ -252,7 +248,7 @@ const styles = StyleSheet.create({
   },
 
   zipInputInline: {
-    flex: 1,
+    flex: 0.7,
     height: 46,
     borderWidth: 1,
     borderColor: "#ffffff",

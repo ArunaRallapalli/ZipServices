@@ -70,13 +70,15 @@ interface ServicePost {
   title: string;
   description?: string;
   service_category: string;
-  price_range?: string;
+  price?: string;
+  delivery_timeline?: string;
   phone_number?: string;
   contact_email?: string;
   zip_code?: string;
   city?: string;
   state?: string;
   photos?: string[];                    // ADDED: February 19, 2026 - array of photo URLs
+  in_stock?: number;
 }
 
 const EditListing: React.FC = () => {
@@ -99,7 +101,8 @@ const EditListing: React.FC = () => {
   const [saving, setSaving] = useState(false);
   
   // State: Service categories fetched from API
-  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number }[]>([]);
+  const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number; accepts_payment?: boolean }[]>([]);
+  const [inStock, setInStock] = useState('1');
   
   // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
@@ -107,6 +110,7 @@ const EditListing: React.FC = () => {
   const [description, setDescription] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
   const [priceRange, setPriceRange] = useState("");
+  const [deliveryTimeline, setDeliveryTimeline] = useState("5 to 7 business days");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [zipCode, setZipCode] = useState("");
@@ -413,10 +417,12 @@ const EditListing: React.FC = () => {
         setTitle(post.title || "");
         setDescription(post.description || "");
         setServiceCategory(post.service_category || "");
-        setPriceRange(post.price_range || "");
+        setPriceRange(post.price || "");
+        setDeliveryTimeline(post.delivery_timeline || "5 to 7 business days");
         setPhoneNumber(post.phone_number || "");
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
+        setInStock(String(post.in_stock ?? 1));
 
         // ADDED: February 19, 2026 - Load existing photos from the post data
         if (Array.isArray(post.photos) && post.photos.length > 0) {
@@ -500,16 +506,20 @@ const EditListing: React.FC = () => {
       setSaving(true);
       console.log("Saving post with ID:", postId);
 
+      const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
+
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
         title: title.trim(),
         description: description.trim() || null,
         service_category: serviceCategory,
-        price_range: priceRange.trim() || null,
+        price: priceRange.trim() || null,
+        delivery_timeline: deliveryTimeline.trim() || null,
         phone_number: phoneNumber.replace(/\D/g, "") || null, // Remove formatting
         contact_email: contactEmail.trim(),
         zip_code: zipCode.trim() || null,
         post_type: postType,
+        ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
       };
 
       console.log("Update data:", updateData);
@@ -740,20 +750,52 @@ const EditListing: React.FC = () => {
             <Text style={styles.charCount}>{description.length}/500</Text>
           </View>
 
-          {/* Price Range / Budget field - Optional, label changes based on post type */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
-              {postType === "offer" ? "Price Range" : "Budget"}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., $50-$100 per hour"
-              value={priceRange}
-              onChangeText={setPriceRange}
-              maxLength={50}
-              editable={!saving}
-            />
-          </View>
+          {/* Price Range / Budget field */}
+          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>
+                Price per Item ($) <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., 9.00"
+                value={priceRange}
+                onChangeText={setPriceRange}
+                keyboardType="decimal-pad"
+                maxLength={20}
+                editable={!saving}
+              />
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.label}>
+                {postType === "offer" ? "Price Range" : "Budget"}
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., $50-$100 per hour"
+                value={priceRange}
+                onChangeText={setPriceRange}
+                maxLength={50}
+                editable={!saving}
+              />
+            </View>
+          )}
+
+          {/* Delivery Timeline — only for payment-enabled categories */}
+          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Delivery Timeline</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., 5 to 7 business days"
+                value={deliveryTimeline}
+                onChangeText={setDeliveryTimeline}
+                maxLength={100}
+                editable={!saving}
+              />
+            </View>
+          )}
 
           {/* Contact Email field - Required */}
           <View style={styles.section}>
@@ -809,6 +851,25 @@ const EditListing: React.FC = () => {
             {/* Show error message if validation fails */}
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
           </View>
+
+          {/* Quantity — only for payment-enabled categories */}
+          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Quantity Available</Text>
+              <TextInput
+                style={styles.input}
+                value={inStock}
+                onChangeText={setInStock}
+                placeholder="1"
+                keyboardType="numeric"
+                maxLength={4}
+                editable={!saving}
+              />
+              <Text style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                Set to 0 to mark as "Not Available"
+              </Text>
+            </View>
+          )}
 
           {/* ====================================================================
             ADDED: February 19, 2026 - Photos section

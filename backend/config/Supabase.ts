@@ -1,3 +1,10 @@
+/**
+ * SUPABASE JAVASCRIPT CLIENT — FOR AUTH & REALTIME ONLY
+ * Use this for: user authentication, storage, realtime subscriptions.
+ * Do NOT use for raw SQL queries — use database.ts pool instead.
+ * Usage: import { supabase } from '../config/supabase';
+ */
+
 import { createClient } from '@supabase/supabase-js';
 
 // Render injects env vars directly - only use dotenv in development
@@ -17,10 +24,11 @@ console.log('🔍 SUPABASE_URL raw value:', process.env.SUPABASE_URL);
 
 const supabaseUrl = process.env.SUPABASE_URL?.trim();
 
-// Support both SUPABASE_KEY (Render) and SUPABASE_SERVICE_ROLE_KEY (local dev)
+// Backend server should always use service role key to bypass RLS.
+// Prioritise SUPABASE_SERVICE_ROLE_KEY; fall back to SUPABASE_KEY for Render.
 const supabaseKey = (
-  process.env.SUPABASE_KEY || 
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_KEY
 )?.trim();
 
 console.log('🔍 SUPABASE_KEY exists:', !!supabaseKey);

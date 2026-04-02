@@ -68,6 +68,7 @@ interface ReviewsModalProps {
   providerId: number;
   providerName: string;
   onClose: () => void;
+  onSignIn?: () => void;
 }
 
 interface UnreviewedBooking {
@@ -95,6 +96,7 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   providerId,
   providerName,
   onClose,
+  onSignIn,
 }) => {
   // ========================================================================
   // STATE MANAGEMENT
@@ -312,7 +314,11 @@ const navigation = useNavigation<any>();
     <TouchableOpacity
       onPress={() => {
         onClose();
-        navigation.navigate('BusinessOwnerHomeScreen');
+        if (onSignIn) {
+          onSignIn();
+        } else {
+          navigation.navigate('BusinessOwnerHomeScreen');
+        }
       }}
       style={styles.guestSignInButton}
     >

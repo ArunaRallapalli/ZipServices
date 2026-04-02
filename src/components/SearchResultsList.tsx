@@ -1,15 +1,39 @@
 /**
  * SearchResultsList.tsx
  *
- * @updated March 2026
- * @version 2.8.0
+ * OVERVIEW:
+ * Renders the search results grid after a user submits a category + ZIP search.
+ * Displays results as 2-column mini cards with photo, title, rating, location.
+ * Tapping a card opens a full-detail modal (ServiceCard) with contact + cart options.
  *
- * Changes from v2.7.0:
- * - Stars on mini card now open ReviewsModal directly (same as RecentPostsSection)
- * - Card tap still opens full ServiceCard modal
+ * CART INTEGRATION (added March 2026 - feature/stripe-connect-payments):
+ * - Each mini card now shows an "Add to Cart" button below the text content
+ * - Auth guard: guests are redirected to BusinessOwnerHomeScreen on cart tap
+ * - Cart button also appears inside the full detail modal
+ * - Requires onAddToCart and isAuthenticated props from SearchResultsScreen
+ *
+ * @updated March 2026
+ * @version 2.9.0
+ *
+ * Changes from v2.8.0:
+ * - Added cart button to MiniServiceCard (below text content)
+ * - Added cart button inside full detail modal
+ * - Added onAddToCart + isAuthenticated props to SearchResultsListProps
+ * - Auth guard: unauthenticated cart tap navigates to BusinessOwnerHomeScreen
+ * - Added Alert, useNavigation, NativeStackNavigationProp imports
+ *
+ * UPDATED March 2026 v3.0:
+ * - Detail modal: replaced ServiceCard + per-photo strip with inline layout
+ * - Detail modal now matches RecentPostsSection order: photo → title → description → reviews → price → delivery → buttons
+ * - Removed category/type badges and "About this service" label from detail modal
+ * - Single Add to Cart button per listing (not per photo)
+ * - Add to Cart + Contact Provider stacked vertically (full width)
+ * - delivery_timeline field added to ServicePost interface and displayed after price
+ * - Header shows close button only (title in body below photos)
  */
 
 import React, { useState } from "react";
+import API_URL from '../config/apiConfig';
 import {
   View,
   Text,
@@ -20,14 +44,13 @@ import {
   Modal,
   ScrollView,
   SafeAreaView,
-  Dimensions,
 } from "react-native";
+import { Alert } from '../Utils/Alert';
 import { Ionicons } from "@expo/vector-icons";
-import ServiceCard from "./ServiceCard";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import ReviewsModal from "./Reviewsmodal";
 import { createResponsiveStyles } from "../Utils/globalStyles";
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ServicePost {
   post_id: number;
@@ -37,7 +60,8 @@ interface ServicePost {
   title: string;
   description?: string;
   service_category: string;
-  price_range?: string;
+  price?: string;
+  delivery_timeline?: string;
   phone_number?: string;
   contact_email?: string;
   zip_code?: string;
@@ -50,7 +74,18 @@ interface ServicePost {
   average_rating?: number;
   review_count?: number;
   photos?: string[];
+  photo_prices?: number[];
+  accepts_payment?: boolean;
+  provider_accepts_zelle?: boolean;
+  in_stock?: number;
 }
+
+type AddToCartFn = (
+  item: ServicePost,
+  photoIndex: number,
+  photoUrl: string,
+  photoPrice?: number,
+) => void;
 
 interface SearchResults {
   exactZipMatches: ServicePost[];
@@ -69,6 +104,9 @@ interface SearchResultsListProps {
   zipCode: string;
   city: string;
   state: string;
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
 }
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -115,11 +153,45 @@ const MiniServiceCard: React.FC<{
   item: ServicePost;
   isOwnPost: boolean;
   onChatPress: (item: ServicePost) => void;
-}> = ({ item, isOwnPost, onChatPress }) => {
+  onAddToCart?: AddToCartFn;
+  isAuthenticated?: boolean;
+  paymentCategories?: Set<string>;
+}> = ({ item, isOwnPost, onChatPress, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const [showReviewsModal, setShowReviewsModal] = useState(false);  // ← NEW
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+
+  const handleAddListingToCart = () => {
+    if (!isAuthenticated) {
+      setModalVisible(false);
+      setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
+      return;
+    }
+    if (isOwnPost) {
+      Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
+      return;
+    }
+    const firstPhotoUrl = item.photos?.[0] ?? '';
+    onAddToCart?.(item, 0, firstPhotoUrl, item.photo_prices?.[0]);
+    setAddedToCart(true);
+    Alert.alert(
+      'Added to Cart',
+      `"${item.title}" has been added to your cart.`,
+      [
+        { text: 'Keep Browsing', style: 'cancel', onPress: () => setModalVisible(false) },
+        {
+          text: 'View Cart',
+          onPress: () => {
+            setModalVisible(false);
+            setTimeout(() => navigation.navigate('CartScreen'), 300);
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <>
@@ -176,10 +248,11 @@ const MiniServiceCard: React.FC<{
               </Text>
             </View>
           )}
+
         </View>
       </TouchableOpacity>
 
-      {/* Full detail Modal with ServiceCard */}
+      {/* Full detail Modal — inline layout matching RecentPostsSection */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -187,21 +260,119 @@ const MiniServiceCard: React.FC<{
         onRequestClose={() => setModalVisible(false)}
       >
         <SafeAreaView style={modalStyles.safeArea}>
+          {/* Header — close button only */}
           <View style={modalStyles.header}>
-            <Text style={modalStyles.headerTitle} numberOfLines={1}>{item.title}</Text>
             <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.closeBtn}>
               <Ionicons name="close" size={26} color="#333" />
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
-            <ServiceCard
-              item={item}
-              isOwnPost={isOwnPost}
-              onChatPress={(item) => {
-                setModalVisible(false);
-                setTimeout(() => onChatPress(item), 300);
-              }}
-            />
+
+            {/* 1. Photos */}
+            {(item.photos ?? []).length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
+                {(item.photos ?? []).map((uri, index) => (
+                  <View key={index} style={modalStyles.photoCard}>
+                    <Image source={{ uri }} style={modalStyles.photoCardImg} resizeMode="cover" />
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* 2. Title */}
+            <Text style={modalStyles.postTitle}>{item.title}</Text>
+
+            {/* 3. Description */}
+            {item.description ? (
+              <Text style={modalStyles.descriptionText}>{item.description.replace(/\s+/g, ' ').trim()}</Text>
+            ) : (
+              <Text style={modalStyles.noDescText}>No description provided.</Text>
+            )}
+
+            {/* 4. Reviews */}
+            <TouchableOpacity style={modalStyles.ratingRow} onPress={() => setShowReviewsModal(true)} activeOpacity={0.7}>
+              {[1,2,3,4,5].map(s => (
+                <Ionicons key={s} name={(item.average_rating ?? 0) >= s ? 'star' : 'star-outline'} size={15} color="#FFA500" />
+              ))}
+              <Text style={modalStyles.ratingText}>
+                {item.review_count ? `(${item.review_count} reviews)` : '(No reviews yet)'}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#999" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+
+            {/* Business name + Location */}
+            {(item.business_name || item.poster_name) && (
+              <Text style={modalStyles.businessName}>by {item.business_name || item.poster_name}</Text>
+            )}
+            {item.city && item.state && (
+              <View style={modalStyles.locationRow}>
+                <Ionicons name="location-outline" size={14} color="#666" />
+                <Text style={modalStyles.locationText}> {item.city}, {item.state}</Text>
+              </View>
+            )}
+
+            {/* 5. Price */}
+            {item.price && (
+              <View style={modalStyles.priceRow}>
+                <Ionicons name="cash-outline" size={14} color="#2E7D32" />
+                <Text style={modalStyles.priceText}> {item.price}</Text>
+              </View>
+            )}
+
+            {/* 6. In Stock — only for payment-enabled categories */}
+            {paymentCategories?.has(item.service_category) && item.in_stock != null && item.in_stock > 0 && (
+              <View style={modalStyles.deliveryRow}>
+                <Ionicons name="cube-outline" size={14} color="#555" />
+                <Text style={modalStyles.deliveryText}> In stock: {item.in_stock}</Text>
+              </View>
+            )}
+
+            {/* 7. Delivery Timeline — only for payment-enabled categories */}
+            {paymentCategories?.has(item.service_category) && item.delivery_timeline && (
+              <View style={modalStyles.deliveryRow}>
+                <Ionicons name="time-outline" size={14} color="#555" />
+                <Text style={modalStyles.deliveryText}> Delivery: {item.delivery_timeline}</Text>
+              </View>
+            )}
+
+            {/* 7+8. Add to Cart + Contact Provider stacked */}
+            {isOwnPost ? (
+              <View style={modalStyles.ownPostNote}>
+                <Text style={modalStyles.ownPostNoteText}>This is your post. You cannot contact yourself.</Text>
+              </View>
+            ) : (
+              <View style={modalStyles.actionCol}>
+                {paymentCategories?.has(item.service_category) && item.provider_accepts_zelle && (
+                  item.in_stock === 0 ? (
+                    <View style={modalStyles.unavailableBox}>
+                      <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
+                      <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.keepBrowsingBtn}>
+                        <Text style={modalStyles.keepBrowsingText}>Keep Browsing</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[modalStyles.cartButton, addedToCart && modalStyles.cartButtonAdded]}
+                      onPress={addedToCart
+                        ? () => { setModalVisible(false); setTimeout(() => navigation.navigate('CartScreen'), 300); }
+                        : handleAddListingToCart}
+                    >
+                      <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
+                      <Text style={modalStyles.buttonText}>{addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
+                    </TouchableOpacity>
+                  )
+                )}
+                <TouchableOpacity
+                  style={modalStyles.contactButton}
+                  onPress={() => { setModalVisible(false); setTimeout(() => onChatPress(item), 300); }}
+                >
+                  <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+                  <Text style={modalStyles.buttonText}> Contact Provider</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={{ height: 30 }} />
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -212,6 +383,11 @@ const MiniServiceCard: React.FC<{
         providerId={item.user_id}
         providerName={item.business_name || item.poster_name || 'Provider'}
         onClose={() => setShowReviewsModal(false)}
+        onSignIn={() => {
+          setShowReviewsModal(false);
+          setModalVisible(false);
+          setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
+        }}
       />
     </>
   );
@@ -260,17 +436,64 @@ const miniStyles = StyleSheet.create({
 });
 
 const modalStyles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f5f5f5" },
+  safeArea: { flex: 1, backgroundColor: '#fff' },
   header: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#eee",
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#eee',
   },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#222", marginRight: 8 },
   closeBtn: { padding: 4 },
-  body: { padding: 16, paddingBottom: 40 },
+  body: { paddingBottom: 40 },
+  photoScroll: { marginBottom: 4 },
+  photoCard: { width: 130, marginRight: 10, alignItems: 'center' },
+  photoCardImg: { width: 120, height: 120, borderRadius: 8 },
+  postTitle: {
+    fontSize: 14, fontWeight: '700', color: '#1a1a1a',
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8,
+  },
+  descriptionText: {
+    fontSize: 14, color: '#444', lineHeight: 21,
+    paddingHorizontal: 16, marginBottom: 10,
+  },
+  noDescText: { fontSize: 13, color: '#bbb', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 8 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 },
+  ratingText: { fontSize: 13, color: '#888', marginLeft: 4 },
+  businessName: { fontSize: 13, color: '#666', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 4 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 },
+  locationText: { fontSize: 13, color: '#888' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+  priceText: { fontSize: 14, color: '#2E7D32', fontWeight: '600' },
+  deliveryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+  deliveryText: { fontSize: 13, color: '#555', fontWeight: '600' },
+  actionCol: {
+    flexDirection: 'column', alignItems: 'flex-start',
+    marginHorizontal: 16, marginTop: 16, gap: 10,
+  },
+  cartButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#2E7D32', paddingVertical: 10, paddingHorizontal: 20,
+    borderRadius: 10, gap: 6, width: 180,
+  },
+  cartButtonAdded: { backgroundColor: '#388E3C' },
+  contactButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#4A90E2', paddingVertical: 10, paddingHorizontal: 20,
+    borderRadius: 10, gap: 6, width: 180,
+  },
+  buttonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  ownPostNote: {
+    alignItems: 'center', marginTop: 16, marginHorizontal: 16,
+    padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8,
+  },
+  ownPostNoteText: { color: '#999', fontSize: 13, fontStyle: 'italic' },
+unavailableBox: { width: 180, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, alignItems: 'center' as const, borderWidth: 1, borderColor: '#ddd' },
+  unavailableText: { color: '#999', fontSize: 12, fontWeight: '600' as const, marginBottom: 8 },
+  keepBrowsingBtn: { backgroundColor: '#4A90E2', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
+  keepBrowsingText: { color: '#fff', fontSize: 12, fontWeight: '700' as const },
 });
 
+
+// ADDED (feature/stripe-connect-payments): destructure new cart props
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
   searchResults,
   isOwnPost,
@@ -279,6 +502,9 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
   zipCode,
   city,
   state,
+  onAddToCart,
+  isAuthenticated,
+  paymentCategories,
 }) => {
   const allResults = (searchResults.zipCodeMatches || [])
     .filter(item => item.is_active !== false);
@@ -334,10 +560,14 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
         <View style={styles.gridContainer}>
           {allResults.map((item) => (
             <View key={item.post_id} style={styles.gridItem}>
+              {/* ADDED (feature/stripe-connect-payments): pass cart props to each card */}
               <MiniServiceCard
                 item={item}
                 isOwnPost={isOwnPost(item.user_id)}
                 onChatPress={onChatPress}
+                onAddToCart={onAddToCart}
+                isAuthenticated={isAuthenticated}
+                paymentCategories={paymentCategories}
               />
             </View>
           ))}

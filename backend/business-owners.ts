@@ -53,6 +53,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
         bo.street,
         bo.city,
         bo.state,
+        bo.zelle_id,
         u.email,
         u.user_type,
         u.created_at,
@@ -87,6 +88,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
       user_type: data.user_type,
       created_at: data.created_at,
       updated_at: data.updated_at,
+      zelle_id: data.zelle_id || null,
     };
 
     console.log(`[business-owner-profile] ✅ Successfully fetched profile for user ${userId}`);
@@ -114,7 +116,8 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
     city,
     state,
     email,
-    password
+    password,
+    zelle_id,
   } = req.body;
 
   // ✅ ADDED: Debug logging
@@ -141,6 +144,9 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
         street,
         city,
         state,
+        zelle_id: zelle_id || null,
+        // Auto-enable Zelle payments when provider sets a Zelle ID, disable when cleared
+        accepts_zelle_payment: !!(zelle_id?.trim()),
       })
       .eq('user_id', userId)
       .select()

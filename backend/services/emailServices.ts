@@ -479,6 +479,184 @@ export async function sendBookingStatusUpdate({
   }
 }
 // ============================================================================
+// ORDER STATUS UPDATE EMAILS (to Customer, Provider, and Admin)
+// ============================================================================
+
+interface OrderStatusEmailParams {
+  orderId: string | number;
+  status: 'completed' | 'cancelled';
+  customerEmail: string;
+  customerName: string;
+  providerEmail: string;
+  providerName: string;
+  adminEmails: string[];
+  items: any[];
+  totalCents: number;
+  orderDate?: string;
+  businessName?: string | null;
+}
+
+function buildOrderStatusHtml(params: {
+  recipientLabel: string;
+  role: 'customer' | 'provider' | 'admin';
+  orderId: string | number;
+  status: 'completed' | 'cancelled';
+  customerName: string;
+  providerName: string;
+  items: any[];
+  totalCents: number;
+  orderDate: string;
+  businessName?: string | null;
+}): string {
+  const { recipientLabel, role, orderId, status, customerName, providerName, items, totalCents, orderDate, businessName } = params;
+
+  const displayId = String(orderId).slice(0, 8).toUpperCase();
+  const isCompleted = status === 'completed';
+  const headerColor = isCompleted ? '#4CAF50' : '#F44336';
+  const statusIcon = isCompleted ? '✅' : '❌';
+  const statusLabel = isCompleted ? 'Completed' : 'Cancelled';
+
+  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  const itemRows = (items || []).map((item: any) => {
+    const unitPrice = item.photo_price || item.price || 0;
+    const qty = item.quantity ?? 1;
+    const amount = unitPrice * qty;
+    return `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0">${item.title || '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center">${qty}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">${unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">${amount > 0 ? `$${amount.toFixed(2)}` : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  const roleMessage = {
+    customer: isCompleted
+      ? `<p>Great news! Your order has been marked as <strong>completed</strong> by the service provider. Thank you for using GoZipMarket!</p>`
+      : `<p>Your order has been <strong>cancelled</strong> by the service provider. If you have questions, please contact support.</p>`,
+    provider: isCompleted
+      ? `<p>You have marked order <strong>#${displayId}</strong> as <strong>completed</strong>. Thank you for providing great service!</p>`
+      : `<p>You have <strong>cancelled</strong> order <strong>#${displayId}</strong>. The customer has been notified.</p>`,
+    admin: `<p>Order <strong>#${displayId}</strong> has been updated to <strong>${statusLabel}</strong>.<br/>Customer: ${customerName} &nbsp;|&nbsp; Provider: ${providerName}</p>`,
+  }[role];
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+          .wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: ${headerColor}; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+          .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; color: #777; }
+          th:last-child, th:nth-child(3) { text-align: right; }
+          th:nth-child(2) { text-align: center; }
+          .total-row td { font-weight: 700; font-size: 15px; padding-top: 12px; }
+          .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 24px; }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="header">
+            <h2 style="margin:0">${statusIcon} Order ${statusLabel} — GoZipMarket</h2>
+          </div>
+          <div class="body">
+            <p>Hi ${recipientLabel},</p>
+            ${roleMessage}
+
+            <table>
+              <tr><th>Order ID</th><td>#${displayId}</td></tr>
+              <tr><th>Date</th><td>${formattedDate}</td></tr>
+              <tr><th>Status</th><td style="color:${headerColor};font-weight:bold">${statusLabel}</td></tr>
+              ${businessName ? `<tr><th>Boutique</th><td>${businessName}</td></tr>` : ''}
+            </table>
+
+            <h3 style="margin-top:20px">Items</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th><th style="text-align:center">Qty</th>
+                  <th style="text-align:right">Price</th><th style="text-align:right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemRows}
+                <tr class="total-row">
+                  <td colspan="3" style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0">Total:</td>
+                  <td style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0;color:#4A90E2">
+                    $${(totalCents / 100).toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
+        </div>
+      </body>
+    </html>`;
+}
+
+/**
+ * Send order status update emails to customer, provider, and admins
+ */
+export async function sendOrderStatusEmails({
+  orderId,
+  status,
+  customerEmail,
+  customerName,
+  providerEmail,
+  providerName,
+  adminEmails,
+  items,
+  totalCents,
+  orderDate,
+  businessName,
+}: OrderStatusEmailParams): Promise<void> {
+  const date = orderDate || new Date().toISOString();
+  const displayOrderId = String(orderId).slice(0, 8).toUpperCase();
+  const subject = status === 'completed'
+    ? `✅ Order #${displayOrderId} Completed — GoZipMarket`
+    : `❌ Order #${displayOrderId} Cancelled — GoZipMarket`;
+
+  const recipients: Array<{ email: string; label: string; role: 'customer' | 'provider' | 'admin' }> = [
+    { email: customerEmail, label: customerName || 'Customer',          role: 'customer' },
+    { email: providerEmail, label: providerName || 'Service Provider',  role: 'provider' },
+    ...adminEmails.map(e => ({ email: e, label: 'Admin', role: 'admin' as const })),
+  ];
+
+  console.log(`📧 Sending order ${status} emails for #${orderId} to: ${recipients.map(r => r.email).join(', ')}`);
+
+  await Promise.all(recipients.map(({ email, label, role }) =>
+    resend.emails.send({
+      from:    'GoZipMarket <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to:      email,
+      subject,
+      html: buildOrderStatusHtml({
+        recipientLabel: label,
+        role,
+        orderId,
+        status,
+        customerName,
+        providerName,
+        items,
+        totalCents,
+        orderDate: date,
+        businessName,
+      }),
+    })
+    .then(() => console.log(`✅ Order ${status} email sent to ${email}`))
+    .catch(err  => console.error(`❌ Failed to send order ${status} email to ${email}:`, err)),
+  ));
+}
+
+// ============================================================================
 // CATEGORY REQUEST NOTIFICATION EMAIL (to Admin)
 // ============================================================================
 

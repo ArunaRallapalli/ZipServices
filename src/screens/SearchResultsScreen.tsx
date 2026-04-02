@@ -11,10 +11,12 @@
  *      • "Can't find it? Search 100+ categories" nudge
  *  - Added fetchRecentPosts to load on mount
  *  - Header is now shorter (see SearchHeader.tsx)
- *
- * No backend changes required.
+ *  - Added handleAddToCart wired to Redux cartSlice
+ *  - isAuthenticated passed to RecentPostsSection for cart auth guard
  */
-
+import { useDispatch, useSelector } from 'react-redux';
+import { addToCart } from '../store/cartSlice';
+import type { RootState } from '../store/store';
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -24,9 +26,11 @@ import {
   SafeAreaView,
   RefreshControl,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { Alert } from '../Utils/Alert';
 import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useRoute, RouteProp, useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -36,15 +40,16 @@ import { RootStackParamList, TabParamList } from '../navigation/MainStackNavigat
 import Header from '../components/SearchHeader';
 import SearchForm from '../components/SearchForm';
 import SearchResultsList from '../components/SearchResultsList';
-import RecentPostsSection from '../components/RecentPostsSection'; // ← NEW
+import RecentPostsSection from '../components/RecentPostsSection';
 
 import {
   ServicePost,
   SearchResults,
   fetchLocationFromZip,
   fetchCategories,
+  fetchPaymentCategories,
   searchServicePosts,
-  fetchRecentPosts,        // ← this is the new one
+  fetchRecentPosts,
   isValidZipCode,
 } from '../Utils/searchUtils';
 
@@ -78,6 +83,10 @@ const SearchResultsScreen: React.FC = () => {
   const route = useRoute<SearchResultsRouteProp>();
   const navigation = useNavigation<SearchResultsNavProp>();
   const auth = useAuth();
+  const dispatch = useDispatch(); // ← NEW
+  const cartCount = useSelector((state: RootState) =>
+    state.cart.items.filter(i => !i.saved_for_later).length
+  );
 
   const routeParams = route.params || {};
   const customerInfo: CustomerInfo | undefined = routeParams.customerInfo;
@@ -95,6 +104,7 @@ const SearchResultsScreen: React.FC = () => {
   const [serviceNeeded, setServiceNeeded] = useState(preselectedCategory || '');
 
   const [categories, setCategories] = useState<string[]>([]);
+  const [paymentCategories, setPaymentCategories] = useState<Set<string>>(new Set());
   const [searchResults, setSearchResults] = useState<SearchResults>({
     exactZipMatches: [],
     nearbyZipMatches: [],
@@ -104,7 +114,7 @@ const SearchResultsScreen: React.FC = () => {
     hasStateMatches: false,
   });
 
-  // NEW: recent-posts section state
+  // recent-posts section state
   const [recentPosts, setRecentPosts] = useState<ServicePost[]>([]);
   const [loadingRecentSection, setLoadingRecentSection] = useState(true);
 
@@ -129,6 +139,32 @@ const SearchResultsScreen: React.FC = () => {
 
   const isOwnPost = (postUserId: number): boolean =>
     String(auth.userInfo?.user_id) === String(postUserId);
+
+  // --------------------------------------------------------------------------
+  // CART HANDLER — NEW
+  // --------------------------------------------------------------------------
+
+  const handleAddToCart = (
+    item: ServicePost,
+    photoIndex: number,
+    photoUrl: string,
+    photoPrice?: number,
+  ) => {
+    dispatch(addToCart({
+      post_id: item.post_id,
+      photo_index: photoIndex,
+      photo_url: photoUrl,
+      photo_price: photoPrice || undefined,
+      title: item.title,
+      service_category: item.service_category,
+      price: parseFloat(String(item.price || '').replace(/[^0-9.]/g, '')) || undefined,
+      provider_user_id: item.user_id,
+      provider_name: item.business_name ?? item.poster_name ?? '',
+      saved_for_later: false,
+      quantity: 1,
+      in_stock: item.in_stock,
+    }));
+  };
 
   // --------------------------------------------------------------------------
   // CHAT HANDLER
@@ -204,7 +240,6 @@ const SearchResultsScreen: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     const refreshTasks: Promise<any>[] = [
-      // Always refresh recent-posts section
       fetchRecentPosts(9).then(setRecentPosts).catch(() => {}),
     ];
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
@@ -270,12 +305,6 @@ const SearchResultsScreen: React.FC = () => {
         Alert.alert('Invalid ZIP Code', 'Please enter a complete 5-digit ZIP code.');
       return;
     }
-    if (!isZipValid) {
-      if (!silentRefresh)
-        Alert.alert('Invalid ZIP Code', 'The ZIP code you entered is not valid.');
-      return;
-    }
-
     setLoading(true);
     try {
       const results = await searchServicePosts({
@@ -300,7 +329,7 @@ const SearchResultsScreen: React.FC = () => {
   const handleSearch = () => performSearch(false);
 
   // --------------------------------------------------------------------------
-  // CATEGORY PRESS — used by both RecentPostsSection chips/cards
+  // CATEGORY PRESS
   // --------------------------------------------------------------------------
 
   const handleCategoryPress = (categoryName: string) => {
@@ -330,7 +359,6 @@ const SearchResultsScreen: React.FC = () => {
   // EFFECTS
   // --------------------------------------------------------------------------
 
-  /** Refresh search results when screen regains focus */
   useFocusEffect(
     useCallback(() => {
       if (hasSearched && showResults && serviceNeeded && zipCode && isZipValid) {
@@ -339,13 +367,16 @@ const SearchResultsScreen: React.FC = () => {
     }, [hasSearched, showResults, serviceNeeded, zipCode, isZipValid]),
   );
 
-  /** Load categories (for picker) on mount */
   useEffect(() => {
     const loadCategories = async () => {
       setLoadingCategories(true);
       try {
-        const fetched = await fetchCategories();
+        const [fetched, paymentSet] = await Promise.all([
+          fetchCategories(),
+          fetchPaymentCategories(),
+        ]);
         setCategories(fetched);
+        setPaymentCategories(paymentSet);
       } catch (error) {
         console.error('Error loading categories:', error);
       } finally {
@@ -355,23 +386,23 @@ const SearchResultsScreen: React.FC = () => {
     loadCategories();
   }, []);
 
-  /** NEW: Load recent posts + active category names on mount */
-  useEffect(() => {
-    const loadRecentSection = async () => {
-      setLoadingRecentSection(true);
-      try {
-        const posts = await fetchRecentPosts(9);
-        setRecentPosts(posts);
-      } catch (error) {
-        console.error('Error loading recent section:', error);
-      } finally {
-        setLoadingRecentSection(false);
-      }
-    };
-    loadRecentSection();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      const loadRecentSection = async () => {
+        setLoadingRecentSection(true);
+        try {
+          const posts = await fetchRecentPosts(9);
+          setRecentPosts(posts);
+        } catch (error) {
+          console.error('Error loading recent section:', error);
+        } finally {
+          setLoadingRecentSection(false);
+        }
+      };
+      loadRecentSection();
+    }, []),
+  );
 
-  /** Auto-search with preselected category */
   useFocusEffect(
     useCallback(() => {
       if (preselectedCategory && isZipValid && !hasSearched && categories.length > 0) {
@@ -380,7 +411,6 @@ const SearchResultsScreen: React.FC = () => {
     }, [preselectedCategory, isZipValid, hasSearched, categories]),
   );
 
-  /** Mark component as past initial mount */
   useEffect(() => {
     isInitialMount.current = false;
   }, []);
@@ -399,15 +429,29 @@ const SearchResultsScreen: React.FC = () => {
 
   if (showResults) {
     return (
-      <SearchResultsList
-        searchResults={searchResults}
-        isOwnPost={isOwnPost}
-        onChatPress={handleChatPress}
-        onBackPress={handleBackPress}
-        zipCode={zipCode}
-        city={city}
-        state={state}
-      />
+      <View style={{ flex: 1 }}>
+        <SearchResultsList
+          searchResults={searchResults}
+          isOwnPost={isOwnPost}
+          onChatPress={handleChatPress}
+          onBackPress={handleBackPress}
+          zipCode={zipCode}
+          city={city}
+          state={state}
+          onAddToCart={handleAddToCart}
+          isAuthenticated={auth.isAuthenticated}
+          paymentCategories={paymentCategories}
+        />
+        {cartCount > 0 && (
+          <TouchableOpacity
+            style={styles.cartFab}
+            onPress={() => navigation.navigate('CartScreen')}
+          >
+            <Ionicons name="cart" size={22} color="#fff" />
+            <Text style={styles.cartFabText}>Cart ({cartCount})</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   }
 
@@ -443,17 +487,18 @@ const SearchResultsScreen: React.FC = () => {
           onZipChange={handleZipChange}
         />
 
-        {/*
-          NEW: RecentPostsSection
-          Replaces the popular category tiles.
-          Shows real active categories + latest 5 posts.
-          onCategoryPress wires into the same search flow.
-        */}
+        {/* RecentPostsSection — now with cart props */}
         <RecentPostsSection
           recentPosts={recentPosts}
           isOwnPost={isOwnPost}
           onChatPress={handleChatPress}
           loading={loadingRecentSection}
+          onAddToCart={handleAddToCart}
+          isAuthenticated={auth.isAuthenticated}
+          paymentCategories={paymentCategories}
+          onReviewSubmitted={() => {
+            fetchRecentPosts(9).then(setRecentPosts).catch(() => {});
+          }}
         />
 
         {/* Support line */}
@@ -461,6 +506,16 @@ const SearchResultsScreen: React.FC = () => {
           For questions or support, please contact us at support@gozipmarket.com
         </Text>
       </ScrollView>
+
+      {cartCount > 0 && (
+        <TouchableOpacity
+          style={styles.cartFab}
+          onPress={() => navigation.navigate('CartScreen')}
+        >
+          <Ionicons name="cart" size={22} color="#fff" />
+          <Text style={styles.cartFabText}>Cart ({cartCount})</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -489,6 +544,28 @@ const styles = createResponsiveStyles({
     marginTop: 16,
     marginBottom: 24,
     paddingHorizontal: 20,
+  },
+  cartFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    backgroundColor: '#4A90E2',
+    borderRadius: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  cartFabText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 
