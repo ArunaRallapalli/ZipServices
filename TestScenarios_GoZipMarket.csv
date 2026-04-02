@@ -1,0 +1,146 @@
+Test ID,Module,Feature,Test Scenario,Pre-condition,Test Steps,Expected Result,Priority,Status,Notes
+TC-001,Authentication,Sign Up,Successful business owner sign up,App is open on sign-up screen,"1. Enter valid full name
+2. Enter valid email
+3. Enter valid password
+4. Accept Terms of Service
+5. Tap Sign Up",Account created successfully and user is navigated to home screen,High,,
+TC-002,Authentication,Sign Up,Sign up with already registered email,App is open on sign-up screen,"1. Enter email already in use
+2. Fill remaining fields
+3. Tap Sign Up",Error message shown: email already exists,High,,
+TC-003,Authentication,Sign Up,Sign up with invalid email format,App is open on sign-up screen,"1. Enter invalid email (e.g. abc@)
+2. Fill remaining fields
+3. Tap Sign Up",Validation error shown for invalid email,Medium,,
+TC-004,Authentication,Sign Up,Sign up with weak/short password,App is open on sign-up screen,"1. Enter password less than required length
+2. Fill remaining fields
+3. Tap Sign Up",Validation error shown for weak password,Medium,,
+TC-005,Authentication,Sign In,Successful sign in with valid credentials,User is registered,"1. Enter valid email
+2. Enter valid password
+3. Tap Sign In",User is signed in and navigated to home tab,High,,
+TC-006,Authentication,Sign In,Sign in with wrong password,User is registered,"1. Enter valid email
+2. Enter incorrect password
+3. Tap Sign In",Error message shown: invalid credentials,High,,
+TC-007,Authentication,Sign In,Sign in with unregistered email,App is open on sign-in screen,"1. Enter email not in system
+2. Enter any password
+3. Tap Sign In",Error message shown: account not found,High,,
+TC-008,Authentication,Sign Out,User can sign out successfully,User is signed in,"1. Go to Settings/Profile tab
+2. Tap Sign Out",User is signed out and returned to guest home screen,High,,
+TC-009,Authentication,Email Verification,Email verification link works,User signed up with valid email,"1. Open verification email
+2. Click verification link",Email verified and user can sign in normally,Medium,,
+TC-010,Authentication,Password Reset,Reset password via email,User is on forgot password screen,"1. Enter registered email
+2. Tap Send Reset Link
+3. Open email and click reset link
+4. Enter new password",Password reset successfully and user can sign in with new password,Medium,,
+TC-011,Authentication,Session,Session persists after app restart,User is signed in,"1. Close and reopen the app",User remains signed in without needing to re-enter credentials,High,,
+TC-012,Authentication,Session,Session expiration redirects to home,User session has expired,"1. Leave app idle past session timeout
+2. Attempt to use authenticated feature",User is redirected to home/sign-in screen with appropriate message,Medium,,
+TC-013,Home/Search,Search,Search by category and zip code,User is on home screen,"1. Enter valid 5-digit zip code
+2. Select a service category
+3. Tap Search",Search results displayed showing matching service posts,High,,
+TC-014,Home/Search,Search,Search with invalid zip code,User is on home screen,"1. Enter invalid zip code (e.g. 00000 or letters)
+2. Select a category
+3. Tap Search",Error message shown: invalid zip code,High,,
+TC-015,Home/Search,Search,Search with no results,User is on home screen,"1. Enter zip code with no nearby providers
+2. Select a rare category
+3. Tap Search",No results message displayed,Medium,,
+TC-016,Home/Search,Search,Search without selecting category,User is on home screen,"1. Enter valid zip code
+2. Leave category blank
+3. Tap Search",Validation message: please select a service category,High,,
+TC-017,Home/Search,Search,Search without zip code,User is on home screen,"1. Select a category
+2. Leave zip code blank
+3. Tap Search",Validation message: zip code required,High,,
+TC-018,Home/Search,Search,Zip code auto-fills city and state,User is on home screen,"1. Enter valid 5-digit zip code","City and state fields auto-populate based on zip code",Medium,,
+TC-019,Home/Search,Recent Posts,Recent posts load on home screen,User is on home screen,"1. Open home screen","Recent service posts displayed in the recent posts section",High,,
+TC-020,Home/Search,Recent Posts,Pull to refresh updates recent posts,User is on home screen,"1. Pull down on home screen to refresh","Recent posts list refreshes with latest data",Medium,,
+TC-021,Home/Search,Category Filter,Tapping a category chip runs search,User has valid zip code entered,"1. Enter valid zip code
+2. Tap a category chip in recent posts section","Search is triggered for selected category and results shown",Medium,,
+TC-022,Home/Search,Category Filter,Tapping category without zip shows error,User is on home screen with no zip code,"1. Tap any category chip without entering zip code","Error shown: zip code required before selecting category",Medium,,
+TC-023,Home/Search,Navigation,Back button from search results returns to home,User is viewing search results,"1. Tap back/back arrow on search results","User is returned to the home screen with search form",High,,
+TC-024,Cart,Add to Cart,Add Boutique item to cart (authenticated),User is signed in and viewing a Boutique listing,"1. Open a Boutique listing
+2. Tap Add to Cart","Item added to cart, alert shown with Keep Browsing / View Cart options",High,,
+TC-025,Cart,Add to Cart,Add to cart prompts sign in for guest user,User is NOT signed in and viewing a Boutique listing,"1. Open a Boutique listing
+2. Tap Add to Cart","User is prompted to sign in before adding to cart",High,,
+TC-026,Cart,Add to Cart,Non-Boutique listings do not show Add to Cart,User is viewing a non-Boutique service post,"1. Open any non-payment service listing","Add to Cart button is NOT shown",High,,
+TC-027,Cart,Add to Cart,Keep Browsing closes modal after adding to cart,User added item to cart,"1. Add a Boutique item to cart
+2. Tap Keep Browsing in the alert","Alert dismisses and listing modal closes returning user to browse page",High,,
+TC-028,Cart,Add to Cart,View Cart navigates to CartScreen after adding,User added item to cart,"1. Add a Boutique item to cart
+2. Tap View Cart in the alert","User is navigated to CartScreen showing the added item",High,,
+TC-029,Cart,Add to Cart,Out-of-stock item shows unavailable message,User viewing a Boutique listing with in_stock = 0,"1. Open a Boutique listing with no stock","Add to Cart button replaced with 'Sorry not available' message and Keep Browsing button",High,,
+TC-030,Cart,Cart FAB,Cart FAB appears on home when cart has items,User has 1+ items in cart,"1. Add an item to cart
+2. Navigate to Home tab","Floating cart button with item count appears at bottom of screen",High,,
+TC-031,Cart,Cart FAB,Cart FAB is hidden when cart is empty,User has no items in cart,"1. Ensure cart is empty
+2. View home screen","Cart FAB button is NOT visible",High,,
+TC-032,Cart,Cart FAB,Cart FAB count updates when items added,User is on home screen,"1. Add first item to cart (FAB shows 1)
+2. Add second item to cart","FAB count updates from 1 to 2",Medium,,
+TC-033,Cart,Cart FAB,Cart FAB navigates to CartScreen,User has items in cart on home screen,"1. Tap the Cart FAB button","User navigated to CartScreen",High,,
+TC-034,Cart,Cart FAB,Cart FAB visible on search results view,User has items in cart and is viewing search results,"1. Add item to cart
+2. Perform a search","Cart FAB visible on search results screen",High,,
+TC-035,Cart,Remove Item,Remove item from cart,User has items in CartScreen,"1. Open CartScreen
+2. Tap Remove/trash icon on an item","Item removed from cart list",High,,
+TC-036,Cart,Quantity,Increase item quantity,User is on CartScreen,"1. Tap + button on a cart item","Quantity increases by 1 and line total updates",High,,
+TC-037,Cart,Quantity,Decrease item quantity,User is on CartScreen with qty > 1,"1. Tap - button on a cart item","Quantity decreases by 1 and line total updates",High,,
+TC-038,Cart,Quantity,Cannot decrease quantity below 1,User is on CartScreen,"1. Tap - button when quantity is already 1","Minus button is disabled and quantity stays at 1",High,,
+TC-039,Cart,Quantity,Max stock limit enforced,User is on CartScreen with item that has limited stock,"1. Tap + repeatedly until stock limit reached","Plus button is disabled and 'Max stock reached' message shown",Medium,,
+TC-040,Cart,Empty State,Empty cart shows browse message,User has no items in cart,"1. Open CartScreen with empty cart","Empty cart illustration and 'Browse Services' button shown",Medium,,
+TC-041,Cart,Empty State,Browse Services from empty cart goes to Home,User is on empty CartScreen,"1. Tap Browse Services button","User navigated to Home tab",Medium,,
+TC-042,Checkout,Address,User can add shipping address,User is on CheckoutScreen,"1. Tap Add Shipping Address
+2. Enter full address details
+3. Save","Address saved and shown on checkout screen",High,,
+TC-043,Checkout,Address,User can change shipping address,User has address saved on CheckoutScreen,"1. Tap Change Address
+2. Update address details
+3. Save","Updated address shown on checkout screen",Medium,,
+TC-044,Checkout,Zelle,Provider Zelle ID displayed on checkout,Provider has Zelle ID set in profile,"1. Add Boutique item to cart
+2. Proceed to CheckoutScreen","Provider's Zelle ID displayed in Payment Method section",High,,
+TC-045,Checkout,Zelle,Message shown when provider has no Zelle ID,Provider has NO Zelle ID in profile,"1. Add Boutique item to cart
+2. Proceed to CheckoutScreen","Message shown: provider will contact you with Zelle details",Medium,,
+TC-046,Checkout,Place Order,Place Order button disabled without address,User is on CheckoutScreen without shipping address,"1. View CheckoutScreen without adding address","Place Order button is greyed out / disabled",High,,
+TC-047,Checkout,Place Order,Place Order enabled after adding address,User adds shipping address on CheckoutScreen,"1. Add shipping address
+2. View Place Order button","Place Order button becomes active/enabled",High,,
+TC-048,Checkout,Order Total,Order total calculated correctly,User has items in cart with prices,"1. View CheckoutScreen order summary","Total shown matches sum of (unit price × quantity) for all items",High,,
+TC-049,Payment,Confirm Order,Confirm order places order successfully,User is on PaymentScreen with valid items,"1. Review order details on PaymentScreen
+2. Tap Confirm Order","Order saved to database, cart cleared, user navigated to OrderReportScreen",High,,
+TC-050,Payment,Confirm Order,Cart is cleared after successful order,User confirms order successfully,"1. Confirm order
+2. Navigate back to CartScreen","Cart is empty after order confirmation",High,,
+TC-051,Payment,Confirm Order,Confirm Order shows loading state,User taps Confirm Order,"1. Tap Confirm Order button","Loading spinner shown while order is being placed",Medium,,
+TC-052,Payment,Confirm Order,Error handled if order placement fails,Network/server error during order placement,"1. Simulate network failure
+2. Tap Confirm Order","Error alert shown: 'Failed to confirm order. Please try again.'",High,,
+TC-053,Order Report,Display,Order report shows correct details,Order placed successfully,"1. View OrderReportScreen after confirming order","Order ID, date, business name, items, total, and shipping address all displayed correctly",High,,
+TC-054,Order Report,Zelle Reminder,Zelle payment reminder shown when ID available,Provider has Zelle ID set,"1. View OrderReportScreen","'Action Required: Send Zelle Payment' section shown with provider Zelle ID and amount",High,,
+TC-055,Order Report,Navigation,Done button returns to Home tab,User is on OrderReportScreen,"1. Tap Done button","User navigated back to Home (TabWrapperScreen)",High,,
+TC-056,Order Report,Display,Order items table shows unit price and total,Order has items with prices,"1. View items table on OrderReportScreen","Each row shows item name, quantity, unit price, and line total",Medium,,
+TC-057,Orders,History,User can view order history,User has placed orders,"1. Navigate to OrdersScreen","List of past orders displayed",Medium,,
+TC-058,Service Posts,Create,Business owner can create a service post,User is signed in as business owner,"1. Go to Post tab
+2. Tap Post a Service
+3. Fill in all required fields
+4. Submit","Service post created and appears in listings",High,,
+TC-059,Service Posts,Create,Required fields validated on post creation,User is on PostServiceScreen,"1. Leave required fields blank
+2. Tap Submit","Validation errors shown for missing required fields",High,,
+TC-060,Service Posts,Edit,Business owner can edit existing listing,User has an existing service post,"1. Go to Listings tab
+2. Tap edit on a listing
+3. Update details
+4. Save","Listing updated with new details",High,,
+TC-061,Service Posts,Photos,Business owner can upload photos to Boutique listing,User has a Boutique service post,"1. Open listing in edit mode
+2. Upload a photo with a price","Photo and price saved to photo_prices array in DB",High,,
+TC-062,Service Posts,Photos,Business owner can delete a photo from listing,User has a listing with photos,"1. Open listing in edit mode
+2. Delete a specific photo","Photo and its associated price removed from arrays",High,,
+TC-063,Service Posts,Listing View,Listings screen shows all user's posts,User has created service posts,"1. Navigate to Listings tab","All posts created by the user are listed",High,,
+TC-064,Service Posts,Status,Inactive listings not shown in search,Provider has an inactive (is_active = false) post,"1. Search for the category of an inactive post","Inactive post does not appear in search results",High,,
+TC-065,Messages,Chat,Authenticated user can open chat with provider,User is signed in and viewing a service listing,"1. Tap Chat/Contact button on a listing","Chat screen opens with the provider",High,,
+TC-066,Messages,Chat,Guest user is prompted to sign in to chat,User is NOT signed in,"1. Tap Chat/Contact button on a listing","Prompt shown to sign in before chatting",High,,
+TC-067,Messages,Chat,User cannot chat with their own post,User is viewing their own service listing,"1. Tap Chat on own listing","Error message: cannot contact yourself",Medium,,
+TC-068,Messages,Unread Badge,Unread message count shown on Messages tab,User has unread messages,"1. Receive a message from another user
+2. View bottom tab bar","Red badge with unread count visible on Messages tab icon",High,,
+TC-069,Messages,Unread Badge,Badge clears after reading messages,User has unread messages,"1. Open Messages tab and read messages","Badge count reduces or disappears",Medium,,
+TC-070,Profile,View,Business owner profile screen loads correctly,User is signed in as business owner,"1. Navigate to Settings/Profile tab","Profile information displayed (name, business, category, contact info)",High,,
+TC-071,Profile,Edit,Business owner can update Zelle ID,User is on profile/settings screen,"1. Navigate to profile settings
+2. Update Zelle ID field
+3. Save","Zelle ID saved and used in checkout for future orders",High,,
+TC-072,Profile,View,Public profile visible to other users,Any user views a business owner's profile,"1. Tap on provider name/profile link from search results","Business owner's public profile screen loads with their details",Medium,,
+TC-073,Navigation,Tabs,All bottom tabs navigate to correct screens,User is signed in,"1. Tap each bottom tab (Home, Post, Listings, Messages, Settings)","Each tab navigates to its corresponding screen",High,,
+TC-074,Navigation,Guest,Guest user sees placeholder on restricted tabs,User is NOT signed in,"1. Tap Post / Messages / Settings tab as guest","Sign-in placeholder screen shown instead of authenticated content",High,,
+TC-075,Navigation,Deep Link,Cart FAB on search results navigates to cart,User has cart items and is on search results,"1. Perform search
+2. Tap Cart FAB button","User navigated to CartScreen",High,,
+TC-076,Security,Auth Guard,Unauthenticated API calls rejected,No valid token present,"1. Attempt any authenticated action without signing in","401 error returned and user prompted to sign in",High,,
+TC-077,Security,Auth Guard,CartScreen requires authentication,User is not signed in,"1. Navigate to CartScreen","Sign-in required message shown with Sign In button",High,,
+TC-078,Performance,Load Time,Home screen loads within acceptable time,App is freshly opened,"1. Launch app and navigate to home","Home screen with recent posts loads within 3 seconds",Medium,,
+TC-079,Performance,Search,Search results returned within acceptable time,User performs a search,"1. Trigger a search with valid inputs","Results appear within 3 seconds",Medium,,
+TC-080,Performance,Refresh,Pull-to-refresh completes without error,User is on home screen,"1. Pull down to refresh","Data refreshes and spinner disappears within 5 seconds",Low,,
