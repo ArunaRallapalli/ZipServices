@@ -149,7 +149,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
         )
       `)
       .eq('service_category', service_category as string)
@@ -228,6 +228,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
           photos: post.photos || [],
           accepts_payment: acceptsPayment,
           provider_accepts_zelle: acceptsPayment,
+          payment_method: post.users?.business_owners?.payment_method || null,
         };
       })
     );
@@ -281,7 +282,7 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
         )
       `)
       .order('created_at', { ascending: false });
@@ -346,7 +347,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
         )
       `, { count: 'exact' })
       .eq('status', POST_STATUS.ACTIVE);
@@ -381,6 +382,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       review_count: post.users?.business_owners?.review_count || 0,
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
       provider_accepts_zelle: categoryPaymentMap.get(post.service_category) ?? false,
+      payment_method: post.users?.business_owners?.payment_method || null,
     }));
     const total = count || 0;
 
@@ -422,7 +424,7 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
         )
       `)
       .eq('user_id', userId)
@@ -663,7 +665,7 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
         )
       `)
       .eq('id', postId)

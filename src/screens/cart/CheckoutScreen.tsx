@@ -28,6 +28,7 @@ const CheckoutScreen: React.FC = () => {
   const activeItems = items.filter(i => !i.saved_for_later);
 
   const [providerZelleId, setProviderZelleId] = useState<string | null>(null);
+  const [providerPaymentMethod, setProviderPaymentMethod] = useState<string | null>(null);
   const [loadingZelle, setLoadingZelle] = useState(false);
 
   // Auto-set agreed amounts from photo_price on mount
@@ -49,7 +50,10 @@ const CheckoutScreen: React.FC = () => {
     if (!providerUserId) return;
     setLoadingZelle(true);
     api.get(`/business-owners/by-user/${providerUserId}`)
-      .then((data: any) => { if (data?.zelle_id) setProviderZelleId(data.zelle_id); })
+      .then((data: any) => {
+        if (data?.zelle_id) setProviderZelleId(data.zelle_id);
+        if (data?.payment_method) setProviderPaymentMethod(data.payment_method);
+      })
       .catch(() => {})
       .finally(() => setLoadingZelle(false));
   }, []);
@@ -117,23 +121,31 @@ const CheckoutScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Payment Method — provider Zelle ID (read-only) */}
+        {/* Payment Method */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="card" size={18} color="#4A90E2" />
             <Text style={styles.sectionTitle}>Payment Method</Text>
           </View>
-          <Text style={styles.paymentLabel}>Pay via Zelle to:</Text>
           {loadingZelle ? (
             <ActivityIndicator size="small" color="#4A90E2" style={{ marginTop: 8 }} />
+          ) : providerPaymentMethod === 'cash' || providerPaymentMethod === 'check' ? (
+            <Text style={styles.paymentLabel}>
+              Payment by {providerPaymentMethod === 'cash' ? 'Cash' : 'Check'} — provider will contact you after order is placed.
+            </Text>
           ) : providerZelleId ? (
-            <View style={styles.zelleReadOnly}>
-              <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
-              <Text style={styles.zelleReadOnlyText}>{providerZelleId}</Text>
-            </View>
+            <>
+              <Text style={styles.paymentLabel}>
+                Pay via {({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App' } as Record<string, string>)[providerPaymentMethod || 'zelle'] || 'Zelle'} to:
+              </Text>
+              <View style={styles.zelleReadOnly}>
+                <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
+                <Text style={styles.zelleReadOnlyText}>{providerZelleId}</Text>
+              </View>
+            </>
           ) : (
             <Text style={styles.zelleUnavailable}>
-              Provider Zelle ID not set — they will contact you after order is placed.
+              Provider payment details not set — they will contact you after order is placed.
             </Text>
           )}
         </View>
@@ -185,6 +197,7 @@ const CheckoutScreen: React.FC = () => {
               totalCents,
               items: activeItems,
               providerZelleId,
+              providerPaymentMethod,
             })}
           >
             <Text style={styles.placeOrderBtnText}>Place Order</Text>

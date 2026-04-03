@@ -28,7 +28,10 @@ const PaymentScreen: React.FC = () => {
   const dispatch = useDispatch();
 
   const { shippingAddress } = useSelector((state: RootState) => state.checkout);
-  const { totalCents, items, providerZelleId } = route.params || {};
+  const { totalCents, items, providerZelleId, providerPaymentMethod } = route.params || {};
+
+  const paymentMethodName = ({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' } as Record<string, string>)[providerPaymentMethod || ''] || 'Zelle';
+  const isOfflineMethod = providerPaymentMethod === 'cash' || providerPaymentMethod === 'check';
 
   const [loading, setLoading] = useState(false);
   const [businessName, setBusinessName] = useState<string | null>(null);
@@ -62,6 +65,7 @@ const PaymentScreen: React.FC = () => {
         items:          items,
         totalCents:     totalCents || 0,
         providerZelleId,
+        providerPaymentMethod,
         shippingAddress,
       });
     } catch (error: any) {
@@ -126,20 +130,29 @@ const PaymentScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Zelle Payment Instructions */}
+        {/* Payment Instructions */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="phone-portrait-outline" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Pay via Zelle</Text>
+            <Text style={styles.sectionTitle}>Pay via {paymentMethodName}</Text>
           </View>
 
-          {providerZelleId ? (
+          {isOfflineMethod ? (
+            <View style={styles.zelleBox}>
+              <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
+              <Text style={styles.zelleInfo}>
+                Provider will contact you to arrange{' '}
+                <Text style={styles.bold}>{paymentMethodName.toLowerCase()}</Text>{' '}
+                payment after the order is confirmed.
+              </Text>
+            </View>
+          ) : providerZelleId ? (
             <View style={styles.zelleBox}>
               <Ionicons name="checkmark-circle-outline" size={20} color="#2E7D32" />
               <Text style={[styles.zelleInfo, { color: '#2E7D32' }]}>
                 Send{' '}
                 <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
-                {' '}via Zelle to:{'  '}
+                {' '}via {paymentMethodName} to:{'  '}
                 <Text style={styles.bold}>{providerZelleId}</Text>
               </Text>
             </View>
@@ -147,7 +160,7 @@ const PaymentScreen: React.FC = () => {
             <View style={styles.zelleBox}>
               <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
               <Text style={styles.zelleInfo}>
-                After confirming, the provider will contact you with their Zelle ID to complete payment.
+                After confirming, the provider will contact you with their {paymentMethodName} details to complete payment.
               </Text>
             </View>
           )}

@@ -38,6 +38,15 @@ import { useUser } from '../../contexts/UserContext';
 import { ContactSupportSection } from '../../components/ContactSupportSection';
 import { fetchPaymentCategories } from '../../Utils/searchUtils';
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
+  { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
+  { value: 'paypal',  label: 'PayPal',   handleLabel: 'PayPal email or phone' },
+  { value: 'cashapp', label: 'Cash App', handleLabel: 'Cash App $cashtag' },
+  { value: 'cash',    label: 'Cash',     handleLabel: null },
+  { value: 'check',   label: 'Check',    handleLabel: null },
+] as const;
+
 
 // Type definitions
 type BusinessOwnerProfileRouteProp = RouteProp<RootStackParamList, "BusinessOwnerProfileScreen">;
@@ -61,6 +70,7 @@ interface BusinessOwnerProfile {
   city: string;
   state: string;
   zelle_id?: string;
+  payment_method?: string;
   is_admin?: boolean;
 }
 
@@ -76,6 +86,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paymentCategories, setPaymentCategories] = useState<Set<string>>(new Set());
+  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
 
   // Prevent double fetch in React 18 strict mode
   const didFetch = useRef(false);
@@ -148,6 +159,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         email: profile.email,
         password: profile.password,
         zelle_id: profile.zelle_id || null,
+        payment_method: profile.payment_method || null,
       };
 
       console.log(`💾 Saving profile for user_id: ${user_id}`);
@@ -233,15 +245,57 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           <TextInput style={[styles.input, { height: 80 }]} value={profile.description || ""} multiline numberOfLines={4} onChangeText={(text) => setProfile({ ...profile, description: text })} />
           <Text style={styles.label}>Phone Number:</Text>
           <TextInput style={styles.input} value={profile.phone_number || ""} keyboardType="phone-pad" onChangeText={(text) => setProfile({ ...profile, phone_number: text })} />
-          {paymentCategories.has(profile.service_category) && !profile.zelle_id?.trim() && (
+          {paymentCategories.has(profile.service_category) && !profile.payment_method && (
             <View style={styles.zelleBanner}>
               <Text style={styles.zelleBannerText}>
-                Your category supports payments. Add your Zelle ID below so customers can purchase from your listing.
+                Your category supports payments. Select a payment method below so customers can purchase from your listing.
               </Text>
             </View>
           )}
-          <Text style={styles.label}>Zelle ID (email or phone number for receiving payments):</Text>
-          <TextInput style={styles.input} value={profile.zelle_id || ""} autoCapitalize="none" autoCorrect={false} keyboardType="default" onChangeText={(text) => setProfile({ ...profile, zelle_id: text })} />
+          <Text style={styles.label}>Payment Method:</Text>
+          <TouchableOpacity
+            style={styles.dropdownBtn}
+            onPress={() => setShowPaymentDropdown(!showPaymentDropdown)}
+          >
+            <Text style={styles.dropdownBtnText}>
+              {PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.label || 'Select a payment method...'}
+            </Text>
+            <Text style={styles.dropdownArrow}>{showPaymentDropdown ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {showPaymentDropdown && (
+            <View style={styles.dropdownList}>
+              {PAYMENT_METHOD_OPTIONS.map(option => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.dropdownItem, profile.payment_method === option.value && styles.dropdownItemSelected]}
+                  onPress={() => {
+                    setProfile({ ...profile, payment_method: option.value });
+                    setShowPaymentDropdown(false);
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, profile.payment_method === option.value && styles.dropdownItemTextSelected]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {profile.payment_method && profile.payment_method !== 'cash' && profile.payment_method !== 'check' && (
+            <>
+              <Text style={styles.label}>
+                {PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.handleLabel || 'Payment handle'}:
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={profile.zelle_id || ''}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="default"
+                placeholder={PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.handleLabel || ''}
+                onChangeText={(text) => setProfile({ ...profile, zelle_id: text })}
+              />
+            </>
+          )}
 
           {/* Location */}
           <Text style={styles.sectionHeader}>Location & Service Area</Text>
@@ -313,6 +367,14 @@ const styles = createResponsiveStyles({
   input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginTop: 5, borderRadius: 5 },
   zelleBanner: { backgroundColor: '#FFF8E1', borderLeftWidth: 4, borderLeftColor: '#F59E0B', borderRadius: 6, padding: 12, marginTop: 16, marginBottom: 4 },
   zelleBannerText: { fontSize: 13, color: '#92400E', lineHeight: 18 },
+  dropdownBtn: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginTop: 5, borderRadius: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff' },
+  dropdownBtnText: { fontSize: 15, color: '#333' },
+  dropdownArrow: { fontSize: 14, color: '#888' },
+  dropdownList: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 2, backgroundColor: '#fff' },
+  dropdownItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  dropdownItemSelected: { backgroundColor: '#EEF2FF' },
+  dropdownItemText: { fontSize: 15, color: '#333' },
+  dropdownItemTextSelected: { color: '#4f46e5', fontWeight: '700' },
   legalMenuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#e0e0e0' },
   legalMenuText: { fontSize: 16, color: '#333', fontWeight: '500' },
   arrow: { fontSize: 20, color: '#999' },

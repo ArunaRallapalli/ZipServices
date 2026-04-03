@@ -28,8 +28,12 @@ const OrderReportScreen: React.FC = () => {
     items,
     totalCents,
     providerZelleId,
+    providerPaymentMethod,
     shippingAddress,
   } = route.params || {};
+
+  const paymentMethodName = ({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' } as Record<string, string>)[providerPaymentMethod || ''] || 'Zelle';
+  const isOfflineMethod = providerPaymentMethod === 'cash' || providerPaymentMethod === 'check';
 
   const formattedDate = orderDate
     ? new Date(orderDate).toLocaleDateString('en-US', {
@@ -130,19 +134,30 @@ const OrderReportScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Zelle Payment Reminder */}
-        {providerZelleId && (
+        {/* Payment Reminder */}
+        {(providerZelleId || isOfflineMethod) && (
           <View style={styles.zelleReminder}>
             <Ionicons name="phone-portrait-outline" size={20} color="#1565C0" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.zelleReminderTitle}>Action Required: Send Zelle Payment</Text>
-              <Text style={styles.zelleReminderBody}>
-                Please send{' '}
-                <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
-                {' '}via Zelle to{' '}
-                <Text style={styles.bold}>{providerZelleId}</Text>
-                {' '}to complete your purchase.
-              </Text>
+              {isOfflineMethod ? (
+                <>
+                  <Text style={styles.zelleReminderTitle}>Payment: {paymentMethodName}</Text>
+                  <Text style={styles.zelleReminderBody}>
+                    The provider will contact you to arrange {paymentMethodName.toLowerCase()} payment.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.zelleReminderTitle}>Action Required: Send Payment</Text>
+                  <Text style={styles.zelleReminderBody}>
+                    Please send{' '}
+                    <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
+                    {' '}via {paymentMethodName} to{' '}
+                    <Text style={styles.bold}>{providerZelleId}</Text>
+                    {' '}to complete your purchase.
+                  </Text>
+                </>
+              )}
             </View>
           </View>
         )}

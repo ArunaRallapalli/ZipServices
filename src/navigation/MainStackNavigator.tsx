@@ -158,7 +158,7 @@ export type RootStackParamList = {
   CartScreen: undefined;
   CheckoutScreen: { serviceAddress?: any };
   ServiceAddressScreen: undefined;
-  PaymentScreen: { totalCents: number; items: any[]; providerZelleId?: string | null };
+  PaymentScreen: { totalCents: number; items: any[]; providerZelleId?: string | null; providerPaymentMethod?: string | null };
   OrderReportScreen: {
     orderId?: string | number | null;
     orderDate?: string;
@@ -166,6 +166,7 @@ export type RootStackParamList = {
     items?: any[];
     totalCents?: number;
     providerZelleId?: string | null;
+    providerPaymentMethod?: string | null;
     shippingAddress?: any;
   };
   

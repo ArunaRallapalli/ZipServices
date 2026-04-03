@@ -54,6 +54,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
         bo.city,
         bo.state,
         bo.zelle_id,
+        bo.payment_method,
         u.email,
         u.user_type,
         u.created_at,
@@ -89,6 +90,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
       created_at: data.created_at,
       updated_at: data.updated_at,
       zelle_id: data.zelle_id || null,
+      payment_method: data.payment_method || null,
     };
 
     console.log(`[business-owner-profile] ✅ Successfully fetched profile for user ${userId}`);
@@ -118,6 +120,7 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
     email,
     password,
     zelle_id,
+    payment_method,
   } = req.body;
 
   // ✅ ADDED: Debug logging
@@ -145,8 +148,11 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
         city,
         state,
         zelle_id: zelle_id || null,
-        // Auto-enable Zelle payments when provider sets a Zelle ID, disable when cleared
-        accepts_zelle_payment: !!(zelle_id?.trim()),
+        payment_method: payment_method || null,
+        accepts_zelle_payment:
+          payment_method === 'cash' || payment_method === 'check'
+            ? true
+            : !!(zelle_id?.trim()),
       })
       .eq('user_id', userId)
       .select()
