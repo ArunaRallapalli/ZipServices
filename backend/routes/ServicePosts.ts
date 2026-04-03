@@ -227,7 +227,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
           review_count: post.users?.business_owners?.review_count || 0,
           photos: post.photos || [],
           accepts_payment: acceptsPayment,
-          provider_accepts_zelle: post.users?.business_owners?.accepts_zelle_payment ?? false,
+          provider_accepts_zelle: acceptsPayment,
         };
       })
     );
@@ -380,7 +380,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       average_rating: post.users?.business_owners?.average_rating || 0,
       review_count: post.users?.business_owners?.review_count || 0,
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
-      provider_accepts_zelle: post.users?.business_owners?.accepts_zelle_payment ?? false,
+      provider_accepts_zelle: categoryPaymentMap.get(post.service_category) ?? false,
     }));
     const total = count || 0;
 

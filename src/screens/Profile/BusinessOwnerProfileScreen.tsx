@@ -36,6 +36,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import api from '../../api';
 import { useUser } from '../../contexts/UserContext';
 import { ContactSupportSection } from '../../components/ContactSupportSection';
+import { fetchPaymentCategories } from '../../Utils/searchUtils';
 
 
 // Type definitions
@@ -74,6 +75,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
   const [profile, setProfile] = useState<BusinessOwnerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paymentCategories, setPaymentCategories] = useState<Set<string>>(new Set());
 
   // Prevent double fetch in React 18 strict mode
   const didFetch = useRef(false);
@@ -126,6 +128,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
 };
 
     fetchProfile();
+    fetchPaymentCategories().then(setPaymentCategories).catch(() => {});
   }, [user_id]);
 
   const handleSave = async () => {
@@ -230,6 +233,13 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           <TextInput style={[styles.input, { height: 80 }]} value={profile.description || ""} multiline numberOfLines={4} onChangeText={(text) => setProfile({ ...profile, description: text })} />
           <Text style={styles.label}>Phone Number:</Text>
           <TextInput style={styles.input} value={profile.phone_number || ""} keyboardType="phone-pad" onChangeText={(text) => setProfile({ ...profile, phone_number: text })} />
+          {paymentCategories.has(profile.service_category) && !profile.zelle_id?.trim() && (
+            <View style={styles.zelleBanner}>
+              <Text style={styles.zelleBannerText}>
+                Your category supports payments. Add your Zelle ID below so customers can purchase from your listing.
+              </Text>
+            </View>
+          )}
           <Text style={styles.label}>Zelle ID (email or phone number for receiving payments):</Text>
           <TextInput style={styles.input} value={profile.zelle_id || ""} autoCapitalize="none" autoCorrect={false} keyboardType="default" onChangeText={(text) => setProfile({ ...profile, zelle_id: text })} />
 
@@ -301,6 +311,8 @@ const styles = createResponsiveStyles({
   sectionHeader: { fontWeight: "bold", fontSize: 18, marginTop: 25, marginBottom: 15, color: "#333", borderBottomWidth: 1, borderBottomColor: "#ddd", paddingBottom: 5 },
   label: { fontWeight: "bold", marginTop: 15 },
   input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginTop: 5, borderRadius: 5 },
+  zelleBanner: { backgroundColor: '#FFF8E1', borderLeftWidth: 4, borderLeftColor: '#F59E0B', borderRadius: 6, padding: 12, marginTop: 16, marginBottom: 4 },
+  zelleBannerText: { fontSize: 13, color: '#92400E', lineHeight: 18 },
   legalMenuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#e0e0e0' },
   legalMenuText: { fontSize: 16, color: '#333', fontWeight: '500' },
   arrow: { fontSize: 20, color: '#999' },

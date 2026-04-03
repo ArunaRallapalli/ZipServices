@@ -342,7 +342,7 @@ const MiniServiceCard: React.FC<{
               </View>
             ) : (
               <View style={modalStyles.actionCol}>
-                {paymentCategories?.has(item.service_category) && item.provider_accepts_zelle && (
+                {paymentCategories?.has(item.service_category) && (
                   item.in_stock === 0 ? (
                     <View style={modalStyles.unavailableBox}>
                       <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
