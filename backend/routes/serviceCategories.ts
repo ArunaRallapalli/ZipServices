@@ -33,7 +33,6 @@ router.get("/", async (req: Request, res: Response) => {
       .from('service_categories')
       .select('category_id, category_name, description, accepts_payment')
       .eq('is_active', true)
-      .order('display_order', { ascending: true })
       .order('category_name', { ascending: true });
     
     if (error) throw error;

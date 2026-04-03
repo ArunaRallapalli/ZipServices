@@ -64,6 +64,8 @@ const PostServiceScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [inStock, setInStock] = useState('1');
+  const [deliveryOption, setDeliveryOption] = useState<'pickup' | 'delivery' | 'both' | ''>('');
+  const [deliveryFee, setDeliveryFee] = useState('');
 
   // Photo state — each entry is { asset, description }
   const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
@@ -440,6 +442,8 @@ const PostServiceScreen: React.FC = () => {
         service_category: serviceCategory,
         price: priceRange.trim() || null,
         delivery_timeline: deliveryTimeline.trim() || null,
+        delivery_option: serviceCategory === 'Catering' ? (deliveryOption || null) : null,
+        delivery_fee: serviceCategory === 'Catering' && deliveryOption !== 'pickup' ? (deliveryFee.trim() || null) : null,
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
@@ -500,6 +504,8 @@ const PostServiceScreen: React.FC = () => {
     setServiceCategory('');
     setPriceRange('');
     setDeliveryTimeline('5 to 7 business days');
+    setDeliveryOption('');
+    setDeliveryFee('');
     setSelectedPhotos([]);
   };
 
@@ -717,6 +723,41 @@ const PostServiceScreen: React.FC = () => {
                 maxLength={100}
               />
             </View>
+          )}
+
+          {/* Catering Delivery Option — only for Catering category */}
+          {serviceCategory === 'Catering' && (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Delivery Option</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={deliveryOption}
+                    onValueChange={(v) => setDeliveryOption(v as any)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Select..." value="" />
+                    <Picker.Item label="Pickup Only" value="pickup" />
+                    <Picker.Item label="Delivery Only" value="delivery" />
+                    <Picker.Item label="Pickup & Delivery" value="both" />
+                  </Picker>
+                </View>
+              </View>
+
+              {(deliveryOption === 'delivery' || deliveryOption === 'both') && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Delivery Fee (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={deliveryFee}
+                    onChangeText={setDeliveryFee}
+                    placeholder='e.g., 5.00 or "discuss in chat"'
+                    maxLength={50}
+                  />
+                  <Text style={styles.helperText}>Enter a flat fee or leave blank to discuss with customer</Text>
+                </View>
+              )}
+            </>
           )}
 
           <Text style={styles.sectionHeader}>Contact Information</Text>
