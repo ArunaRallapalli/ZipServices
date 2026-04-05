@@ -85,7 +85,7 @@ const OrderReportScreen: React.FC = () => {
               <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Amount</Text>
             </View>
             {items.map((item: any, idx: number) => {
-              const unitPrice = item.photo_price || item.price || 0;
+              const unitPrice = parseFloat(String(item.photo_price || item.price || 0)) || 0;
               const qty = item.quantity ?? 1;
               const amount = unitPrice * qty;
               return (

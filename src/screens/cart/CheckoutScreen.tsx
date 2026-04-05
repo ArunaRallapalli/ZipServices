@@ -55,7 +55,7 @@ const CheckoutScreen: React.FC = () => {
   }, []);
 
   const totalCents = activeItems.reduce((sum, item) => {
-    const unitPrice = item.photo_price || item.price || 0;
+    const unitPrice = parseFloat(String(item.photo_price || item.price || 0)) || 0;
     return sum + Math.round(unitPrice * 100) * (item.quantity ?? 1);
   }, 0);
 
@@ -91,7 +91,7 @@ const CheckoutScreen: React.FC = () => {
           {/* Item rows */}
           {activeItems.map(item => {
             const key = `${item.post_id}_${item.photo_index}`;
-            const u = item.photo_price || item.price || 0;
+            const u = parseFloat(String(item.photo_price || item.price || 0)) || 0;
             const qty = item.quantity ?? 1;
             return (
               <View key={key} style={styles.tableRow}>

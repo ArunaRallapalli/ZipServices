@@ -100,7 +100,7 @@ const PaymentScreen: React.FC = () => {
 
           {/* Item rows */}
           {(items || []).map((item: any) => {
-            const u = item.photo_price || item.price || 0;
+            const u = parseFloat(String(item.photo_price || item.price || 0)) || 0;
             const qty = item.quantity ?? 1;
             return (
               <View key={`${item.post_id}_${item.photo_index}`} style={styles.tableRow}>

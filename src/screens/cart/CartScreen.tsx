@@ -28,7 +28,7 @@ const CartScreen: React.FC = () => {
     const qty = item.quantity ?? 1;
     const stockLimit = item.in_stock != null && item.in_stock > 0 ? item.in_stock : 999;
     const atStockLimit = qty >= stockLimit;
-    const unitPrice = item.photo_price || item.price || 0;
+    const unitPrice = parseFloat(String(item.photo_price || item.price || 0)) || 0;
     const lineTotal = unitPrice * qty;
 
     return (
