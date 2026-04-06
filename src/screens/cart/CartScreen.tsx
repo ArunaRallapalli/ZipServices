@@ -4,7 +4,7 @@
  * Each item represents a single photo from a service post.
  * Authenticated users only — guests are redirected to BusinessOwnerHomeScreen.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, SafeAreaView, Image,
@@ -23,6 +23,7 @@ const CartScreen: React.FC = () => {
   const { items } = useSelector((state: RootState) => state.cart);
 
   const activeItems = items.filter(i => !i.saved_for_later);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'ship' | 'pickup'>('ship');
 
   const renderItem = ({ item }: { item: any }) => {
     const qty = item.quantity ?? 1;
@@ -160,12 +161,39 @@ const CartScreen: React.FC = () => {
                 </>
               )}
 
+              {/* Fulfillment selector */}
+              {activeItems.length > 0 && (
+                <View style={styles.fulfillmentContainer}>
+                  <Text style={styles.fulfillmentLabel}>Fulfillment</Text>
+                  <View style={styles.fulfillmentRow}>
+                    <TouchableOpacity
+                      style={[styles.fulfillmentBtn, fulfillmentMethod === 'ship' && styles.fulfillmentBtnActive]}
+                      onPress={() => setFulfillmentMethod('ship')}
+                    >
+                      <Ionicons name="car-outline" size={15} color={fulfillmentMethod === 'ship' ? '#fff' : '#4A90E2'} />
+                      <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'ship' && styles.fulfillmentBtnTextActive]}>
+                        Ship to Me (+$10.00)
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.fulfillmentBtn, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnActive]}
+                      onPress={() => setFulfillmentMethod('pickup')}
+                    >
+                      <Ionicons name="storefront-outline" size={15} color={fulfillmentMethod === 'pickup' ? '#fff' : '#4A90E2'} />
+                      <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnTextActive]}>
+                        Pickup from Boutique
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               {/* Proceed to Checkout */}
               {activeItems.length > 0 && (
                 <View style={styles.checkoutContainer}>
                   <TouchableOpacity
                     style={styles.checkoutBtn}
-                    onPress={() => navigation.navigate('CheckoutScreen')}
+                    onPress={() => navigation.navigate('CheckoutScreen', { fulfillmentMethod })}
                   >
                     <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
                     <Ionicons name="arrow-forward" size={20} color="#fff" />
@@ -222,6 +250,17 @@ const styles = StyleSheet.create({
   removeBtn: {},
   ownPostNote: { fontSize: 12, color: '#aaa', fontStyle: 'italic' },
   actionText: { fontSize: 12, color: '#4A90E2', fontWeight: '600' },
+  fulfillmentContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  fulfillmentLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 8 },
+  fulfillmentRow: { flexDirection: 'row', gap: 8 },
+  fulfillmentBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 9, borderRadius: 8,
+    borderWidth: 1.5, borderColor: '#4A90E2', backgroundColor: '#fff',
+  },
+  fulfillmentBtnActive: { backgroundColor: '#4A90E2' },
+  fulfillmentBtnText: { fontSize: 12, fontWeight: '600', color: '#4A90E2', textAlign: 'center' },
+  fulfillmentBtnTextActive: { color: '#fff' },
   checkoutContainer: { padding: 16 },
   checkoutBtn: {
     backgroundColor: '#4A90E2', borderRadius: 12, paddingVertical: 16,

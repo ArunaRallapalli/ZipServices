@@ -12,7 +12,7 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { setAgreedAmount } from '../../store/cartSlice';
@@ -21,6 +21,7 @@ import api from '../../api';
 
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const dispatch = useDispatch();
 
   const { items } = useSelector((state: RootState) => state.cart);
@@ -30,7 +31,7 @@ const CheckoutScreen: React.FC = () => {
   const [providerZelleId, setProviderZelleId] = useState<string | null>(null);
   const [providerPaymentMethod, setProviderPaymentMethod] = useState<string | null>(null);
   const [loadingZelle, setLoadingZelle] = useState(false);
-  const [fulfillmentMethod, setFulfillmentMethod] = useState<'ship' | 'pickup'>('ship');
+  const [fulfillmentMethod] = useState<'ship' | 'pickup'>(route.params?.fulfillmentMethod ?? 'ship');
   const SHIPPING_FEE_CENTS = 1000; // $10 flat fee
 
   // Auto-set agreed amounts from photo_price on mount
@@ -136,31 +137,13 @@ const CheckoutScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Fulfillment Method */}
+        {/* Fulfillment Method — read-only summary (selected in Cart) */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Ionicons name="cube-outline" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Fulfillment</Text>
-          </View>
-          <View style={styles.fulfillmentRow}>
-            <TouchableOpacity
-              style={[styles.fulfillmentBtn, fulfillmentMethod === 'ship' && styles.fulfillmentBtnActive]}
-              onPress={() => setFulfillmentMethod('ship')}
-            >
-              <Ionicons name="car-outline" size={18} color={fulfillmentMethod === 'ship' ? '#fff' : '#4A90E2'} />
-              <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'ship' && styles.fulfillmentBtnTextActive]}>
-                Ship to Me{'\n'}(+$10.00)
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.fulfillmentBtn, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnActive]}
-              onPress={() => setFulfillmentMethod('pickup')}
-            >
-              <Ionicons name="storefront-outline" size={18} color={fulfillmentMethod === 'pickup' ? '#fff' : '#4A90E2'} />
-              <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnTextActive]}>
-                Pickup from{'\n'}Boutique
-              </Text>
-            </TouchableOpacity>
+            <Ionicons name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'car-outline'} size={18} color="#4A90E2" />
+            <Text style={styles.sectionTitle}>
+              {fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Ship to Me (+$10.00)'}
+            </Text>
           </View>
         </View>
 
