@@ -28,7 +28,7 @@ const PaymentScreen: React.FC = () => {
   const dispatch = useDispatch();
 
   const { shippingAddress } = useSelector((state: RootState) => state.checkout);
-  const { totalCents, items, providerZelleId, providerPaymentMethod } = route.params || {};
+  const { totalCents, items, providerZelleId, providerPaymentMethod, fulfillmentMethod } = route.params || {};
 
   const paymentMethodName = ({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' } as Record<string, string>)[providerPaymentMethod || ''] || 'Zelle';
   const isOfflineMethod = providerPaymentMethod === 'cash' || providerPaymentMethod === 'check';
@@ -59,14 +59,15 @@ const PaymentScreen: React.FC = () => {
       dispatch(clearCart());
       dispatch(clearCheckout());
       navigation.navigate('OrderReportScreen', {
-        orderId:        result?.id || result?.order_id || null,
-        orderDate:      new Date().toISOString(),
-        businessName:   businessName,
-        items:          items,
-        totalCents:     totalCents || 0,
+        orderId:           result?.id || result?.order_id || null,
+        orderDate:         new Date().toISOString(),
+        businessName:      businessName,
+        items:             items,
+        totalCents:        totalCents || 0,
         providerZelleId,
         providerPaymentMethod,
         shippingAddress,
+        fulfillmentMethod: fulfillmentMethod || 'ship',
       });
     } catch (error: any) {
       Alert.alert('Error', 'Failed to confirm order. Please try again.');
@@ -167,22 +168,24 @@ const PaymentScreen: React.FC = () => {
 
         </View>
 
-        {/* Shipping Address */}
-        {shippingAddress && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Ionicons name="location-outline" size={18} color="#4A90E2" />
-              <Text style={styles.sectionTitle}>Deliver To</Text>
-            </View>
-            {shippingAddress.fullName ? (
-              <Text style={styles.addressText}>{shippingAddress.fullName}</Text>
-            ) : null}
-            <Text style={styles.addressText}>{shippingAddress.street}</Text>
-            <Text style={styles.addressText}>
-              {shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}
+        {/* Fulfillment */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'car-outline'} size={18} color="#4A90E2" />
+            <Text style={styles.sectionTitle}>
+              {fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Ship to Me'}
             </Text>
           </View>
-        )}
+          {fulfillmentMethod === 'pickup' ? (
+            <Text style={styles.addressText}>You will coordinate pickup directly with the provider.</Text>
+          ) : shippingAddress ? (
+            <>
+              {shippingAddress.fullName ? <Text style={styles.addressText}>{shippingAddress.fullName}</Text> : null}
+              <Text style={styles.addressText}>{shippingAddress.street}</Text>
+              <Text style={styles.addressText}>{shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}</Text>
+            </>
+          ) : null}
+        </View>
 
         {/* Confirm Button */}
         <TouchableOpacity

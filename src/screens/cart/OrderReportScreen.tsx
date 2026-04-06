@@ -30,6 +30,7 @@ const OrderReportScreen: React.FC = () => {
     providerZelleId,
     providerPaymentMethod,
     shippingAddress,
+    fulfillmentMethod,
   } = route.params || {};
 
   const paymentMethodName = ({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' } as Record<string, string>)[providerPaymentMethod || ''] || 'Zelle';
@@ -114,25 +115,23 @@ const OrderReportScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Deliver To */}
-        {shippingAddress && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Ionicons name="location-outline" size={18} color="#4A90E2" />
-              <Text style={styles.sectionTitle}>Deliver To</Text>
-            </View>
-            {shippingAddress.fullName ? (
-              <Text style={styles.addressText}>{shippingAddress.fullName}</Text>
-            ) : null}
-            <Text style={styles.addressText}>{shippingAddress.street}</Text>
-            <Text style={styles.addressText}>
-              {shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}
-            </Text>
-            {shippingAddress.notes ? (
-              <Text style={styles.addressNotes}>Note: {shippingAddress.notes}</Text>
-            ) : null}
+        {/* Fulfillment */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'location-outline'} size={18} color="#4A90E2" />
+            <Text style={styles.sectionTitle}>{fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Deliver To'}</Text>
           </View>
-        )}
+          {fulfillmentMethod === 'pickup' ? (
+            <Text style={styles.addressText}>You will coordinate pickup directly with the provider.</Text>
+          ) : shippingAddress ? (
+            <>
+              {shippingAddress.fullName ? <Text style={styles.addressText}>{shippingAddress.fullName}</Text> : null}
+              <Text style={styles.addressText}>{shippingAddress.street}</Text>
+              <Text style={styles.addressText}>{shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}</Text>
+              {shippingAddress.notes ? <Text style={styles.addressNotes}>Note: {shippingAddress.notes}</Text> : null}
+            </>
+          ) : null}
+        </View>
 
         {/* Payment Reminder */}
         {(providerZelleId || isOfflineMethod) && (

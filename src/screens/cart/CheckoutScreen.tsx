@@ -30,6 +30,8 @@ const CheckoutScreen: React.FC = () => {
   const [providerZelleId, setProviderZelleId] = useState<string | null>(null);
   const [providerPaymentMethod, setProviderPaymentMethod] = useState<string | null>(null);
   const [loadingZelle, setLoadingZelle] = useState(false);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'ship' | 'pickup'>('ship');
+  const SHIPPING_FEE_CENTS = 1000; // $10 flat fee
 
   // Auto-set agreed amounts from photo_price on mount
   useEffect(() => {
@@ -58,12 +60,13 @@ const CheckoutScreen: React.FC = () => {
       .finally(() => setLoadingZelle(false));
   }, []);
 
-  const totalCents = activeItems.reduce((sum, item) => {
+  const subtotalCents = activeItems.reduce((sum, item) => {
     const unitPrice = parseFloat(String(item.photo_price || item.price || 0)) || 0;
     return sum + Math.round(unitPrice * 100) * (item.quantity ?? 1);
   }, 0);
+  const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? SHIPPING_FEE_CENTS : 0);
 
-  const canPlaceOrder = !!shippingAddress;
+  const canPlaceOrder = fulfillmentMethod === 'pickup' || !!shippingAddress;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,11 +116,51 @@ const CheckoutScreen: React.FC = () => {
             );
           })}
 
-          {/* Divider + Total */}
+          {/* Divider + Subtotal + Shipping + Total */}
           <View style={styles.tableDivider} />
-          <View style={styles.totalRow}>
-            <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalValue}>${(totalCents / 100).toFixed(2)}</Text>
+          {fulfillmentMethod === 'ship' && (
+            <View style={styles.totalRow}>
+              <Text style={styles.grandTotalLabel}>Subtotal</Text>
+              <Text style={styles.grandTotalValue}>${(subtotalCents / 100).toFixed(2)}</Text>
+            </View>
+          )}
+          {fulfillmentMethod === 'ship' && (
+            <View style={[styles.totalRow, { marginTop: 4 }]}>
+              <Text style={styles.grandTotalLabel}>Shipping</Text>
+              <Text style={styles.grandTotalValue}>$10.00</Text>
+            </View>
+          )}
+          <View style={[styles.totalRow, { marginTop: 6 }]}>
+            <Text style={[styles.grandTotalLabel, { fontSize: 17 }]}>Total</Text>
+            <Text style={[styles.grandTotalValue, { fontSize: 20 }]}>${(totalCents / 100).toFixed(2)}</Text>
+          </View>
+        </View>
+
+        {/* Fulfillment Method */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="cube-outline" size={18} color="#4A90E2" />
+            <Text style={styles.sectionTitle}>Fulfillment</Text>
+          </View>
+          <View style={styles.fulfillmentRow}>
+            <TouchableOpacity
+              style={[styles.fulfillmentBtn, fulfillmentMethod === 'ship' && styles.fulfillmentBtnActive]}
+              onPress={() => setFulfillmentMethod('ship')}
+            >
+              <Ionicons name="car-outline" size={18} color={fulfillmentMethod === 'ship' ? '#fff' : '#4A90E2'} />
+              <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'ship' && styles.fulfillmentBtnTextActive]}>
+                Ship to Me{'\n'}(+$10.00)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.fulfillmentBtn, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnActive]}
+              onPress={() => setFulfillmentMethod('pickup')}
+            >
+              <Ionicons name="storefront-outline" size={18} color={fulfillmentMethod === 'pickup' ? '#fff' : '#4A90E2'} />
+              <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnTextActive]}>
+                Pickup from{'\n'}Boutique
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -150,8 +193,8 @@ const CheckoutScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Shipping Address */}
-        <View style={styles.section}>
+        {/* Shipping Address — only shown for Ship to Me */}
+        {fulfillmentMethod === 'ship' && <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="location" size={18} color="#4A90E2" />
             <Text style={styles.sectionTitle}>
@@ -186,7 +229,7 @@ const CheckoutScreen: React.FC = () => {
               <Text style={styles.addAddressText}>Add Shipping Address</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </View>}
 
         {/* Place Order + Cancel */}
         <View style={styles.placeOrderRow}>
@@ -198,6 +241,7 @@ const CheckoutScreen: React.FC = () => {
               items: activeItems,
               providerZelleId,
               providerPaymentMethod,
+              fulfillmentMethod,
             })}
           >
             <Text style={styles.placeOrderBtnText}>Place Order</Text>
@@ -288,6 +332,15 @@ const styles = StyleSheet.create({
   colBodyText: { fontSize: 13, color: '#333' },
   amountValue: { color: '#2E7D32', fontWeight: '600' },
   tableDivider: { borderTopWidth: 1.5, borderTopColor: '#e0e0e0', marginVertical: 10 },
+  fulfillmentRow: { flexDirection: 'row', gap: 12 },
+  fulfillmentBtn: {
+    flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 14, borderRadius: 10,
+    borderWidth: 2, borderColor: '#4A90E2', backgroundColor: '#fff',
+  },
+  fulfillmentBtnActive: { backgroundColor: '#4A90E2' },
+  fulfillmentBtnText: { fontSize: 13, fontWeight: '700', color: '#4A90E2', textAlign: 'center' },
+  fulfillmentBtnTextActive: { color: '#fff' },
 });
 
 export default CheckoutScreen;

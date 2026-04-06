@@ -166,6 +166,7 @@ function buildOrderReportHtml(order: {
     </html>`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function sendOrderEmails(
   orderId: string | number,
   buyerUserId: number,
@@ -336,14 +337,10 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
       }
     })();
 
-    // Send order report emails (non-blocking — don't await)
-    sendOrderEmails(data.id, buyerUserId, provider_user_id, {
-      items:           items,
-      totalCents:      total_cents,
-      providerZelleId: service_provider_zelle_id || null,
-      shippingAddress: shipping_address || null,
-    }).then(() => console.log(`📧 Order emails sent for #${data.id}`))
-      .catch(err  => console.error(`❌ Order email error for #${data.id}:`, err));
+    // NOTE: Order confirmation emails are intentionally NOT sent here.
+    // Emails (buyer + provider + admin) are sent only when the provider
+    // marks the order as completed via PATCH /api/orders/:id/status.
+    console.log(`📧 No email on placement — emails will fire on order completion for #${data.id}`);
 
   } catch (err: any) {
     console.error('❌ Error in POST /api/orders:', err);

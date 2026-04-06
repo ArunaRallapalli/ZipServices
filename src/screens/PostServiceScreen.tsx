@@ -693,28 +693,25 @@ const PostServiceScreen: React.FC = () => {
                 ? 'Price per Item ($) *'
                 : 'Price/Rate (Optional)'}
             </Text>
-            {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
-              <View style={styles.priceInputRow}>
-                <Text style={styles.currencyPrefix}>$</Text>
-                <TextInput
-                  style={[styles.input, styles.priceInputFlex]}
-                  value={priceRange}
-                  onChangeText={setPriceRange}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  maxLength={10}
-                />
-              </View>
-            ) : (
+            <View style={styles.priceInputRow}>
+              <Text style={styles.currencyPrefix}>$</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.priceInputFlex]}
                 value={priceRange}
                 onChangeText={setPriceRange}
-                placeholder="e.g., $50/hour, $200-300, Starting at $100"
-                keyboardType="default"
+                placeholder={
+                  serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
+                    ? '0.00'
+                    : '50/hour, 200-300, Starting at 100'
+                }
+                keyboardType={
+                  serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
+                    ? 'decimal-pad'
+                    : 'default'
+                }
                 maxLength={100}
               />
-            )}
+            </View>
           </View>
 
           {/* Delivery Time — only for payment-enabled categories */}
