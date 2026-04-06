@@ -148,8 +148,8 @@ const DetailModal: React.FC<{
       setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
       return;
     }
-    const firstPhotoUrl = photos[0] ?? '';
-    onAddToCart?.(item, 0, firstPhotoUrl, item.photo_prices?.[0] || undefined);
+    const firstPhotoUrl = photos[selectedPhotoIndex] ?? photos[0] ?? '';
+    onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex] || undefined);
     setAddedToCart(true);
     Alert.alert(
       'Added to Cart',
@@ -919,6 +919,13 @@ const modalStyles = StyleSheet.create({
     width: 130,
     marginRight: 10,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  photoCardSelected: {
+    borderColor: '#4A90E2',
   },
   photoPrice: {
     fontSize: 13,

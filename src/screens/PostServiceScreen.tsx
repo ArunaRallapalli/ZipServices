@@ -152,7 +152,7 @@ const PostServiceScreen: React.FC = () => {
   // UPLOAD PHOTOS — sends description alongside each photo
   // --------------------------------------------------------------------------
 
-  const uploadPhotos = async (postId: string) => {
+  const uploadPhotos = async (postId: string, postPrice?: string) => {
     if (selectedPhotos.length === 0) return;
 
     setUploadingPhotos(true);
@@ -221,7 +221,7 @@ const PostServiceScreen: React.FC = () => {
                 filename: `photo_${Date.now()}.${fileExtension}`,
                 mimetype: mimeType,
                 description: photo.description.trim(),
-                price: photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0,
+                price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
               }),
             },
           );
@@ -247,7 +247,7 @@ const PostServiceScreen: React.FC = () => {
             name: `photo.${fileExtension}`,
           } as any);
           formData.append('description', photo.description.trim());
-          formData.append('price', String(photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0));
+          formData.append('price', String(parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0));
 
           uploadSuccess = await new Promise<boolean>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -456,7 +456,7 @@ const PostServiceScreen: React.FC = () => {
 
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
-        await uploadPhotos(data.post.id);
+        await uploadPhotos(data.post.id, priceRange);
       }
 
       console.log('════════════════════════════════════════');
@@ -693,22 +693,28 @@ const PostServiceScreen: React.FC = () => {
                 ? 'Price per Item ($) *'
                 : 'Price/Rate (Optional)'}
             </Text>
-            <TextInput
-              style={styles.input}
-              value={priceRange}
-              onChangeText={setPriceRange}
-              placeholder={
-                serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
-                  ? 'e.g., 9.00'
-                  : 'e.g., $50/hour, $200-300, Starting at $100'
-              }
-              keyboardType={
-                serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
-                  ? 'decimal-pad'
-                  : 'default'
-              }
-              maxLength={100}
-            />
+            {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currencyPrefix}>$</Text>
+                <TextInput
+                  style={[styles.input, styles.priceInputFlex]}
+                  value={priceRange}
+                  onChangeText={setPriceRange}
+                  placeholder="0.00"
+                  keyboardType="decimal-pad"
+                  maxLength={10}
+                />
+              </View>
+            ) : (
+              <TextInput
+                style={styles.input}
+                value={priceRange}
+                onChangeText={setPriceRange}
+                placeholder="e.g., $50/hour, $200-300, Starting at $100"
+                keyboardType="default"
+                maxLength={100}
+              />
+            )}
           </View>
 
           {/* Delivery Time — only for payment-enabled categories */}
@@ -946,6 +952,9 @@ const styles = createResponsiveStyles({
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 16, fontWeight: '600', color: '#4A90E2', marginBottom: 8 },
   helperText: { fontSize: 12, color: '#888', marginTop: 4 },
+  priceInputRow: { flexDirection: 'row', alignItems: 'center' },
+  currencyPrefix: { fontSize: 16, fontWeight: '700', color: '#333', paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRightWidth: 0, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  priceInputFlex: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,

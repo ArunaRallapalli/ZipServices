@@ -160,6 +160,7 @@ const MiniServiceCard: React.FC<{
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -174,8 +175,8 @@ const MiniServiceCard: React.FC<{
       Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
       return;
     }
-    const firstPhotoUrl = item.photos?.[0] ?? '';
-    onAddToCart?.(item, 0, firstPhotoUrl, item.photo_prices?.[0]);
+    const firstPhotoUrl = item.photos?.[selectedPhotoIndex] ?? item.photos?.[0] ?? '';
+    onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex]);
     setAddedToCart(true);
     Alert.alert(
       'Added to Cart',
@@ -268,15 +269,28 @@ const MiniServiceCard: React.FC<{
           </View>
           <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
 
-            {/* 1. Photos */}
+            {/* 1. Photos — tappable to select variant */}
             {(item.photos ?? []).length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
-                {(item.photos ?? []).map((uri, index) => (
-                  <View key={index} style={modalStyles.photoCard}>
-                    <Image source={{ uri }} style={modalStyles.photoCardImg} resizeMode="cover" />
-                  </View>
-                ))}
-              </ScrollView>
+              <>
+                <Image
+                  source={{ uri: item.photos![selectedPhotoIndex] }}
+                  style={modalStyles.mainPhoto}
+                  resizeMode="cover"
+                />
+                {item.photos!.length > 1 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
+                    {item.photos!.map((uri, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
+                        style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
+                      >
+                        <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </>
             )}
 
             {/* 2. Title */}
@@ -444,7 +458,11 @@ const modalStyles = StyleSheet.create({
   },
   closeBtn: { padding: 4 },
   body: { paddingBottom: 40 },
-  photoScroll: { marginBottom: 4 },
+  mainPhoto: { width: '100%', height: 240, marginBottom: 8 },
+  photoScroll: { paddingHorizontal: 12, marginBottom: 8 },
+  thumbCard: { marginRight: 8, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  thumbSelected: { borderColor: '#4A90E2' },
+  thumbImg: { width: 64, height: 64 },
   photoCard: { width: 130, marginRight: 10, alignItems: 'center' },
   photoCardImg: { width: 120, height: 120, borderRadius: 8 },
   postTitle: {
