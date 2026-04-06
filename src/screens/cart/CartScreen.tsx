@@ -167,21 +167,21 @@ const CartScreen: React.FC = () => {
                   <Text style={styles.fulfillmentLabel}>Fulfillment</Text>
                   <View style={styles.fulfillmentRow}>
                     <TouchableOpacity
-                      style={[styles.fulfillmentBtn, fulfillmentMethod === 'ship' && styles.fulfillmentBtnActive]}
-                      onPress={() => setFulfillmentMethod('ship')}
-                    >
-                      <Ionicons name="car-outline" size={15} color={fulfillmentMethod === 'ship' ? '#fff' : '#4A90E2'} />
-                      <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'ship' && styles.fulfillmentBtnTextActive]}>
-                        Ship to Me (+$10.00)
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
                       style={[styles.fulfillmentBtn, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnActive]}
                       onPress={() => setFulfillmentMethod('pickup')}
                     >
                       <Ionicons name="storefront-outline" size={15} color={fulfillmentMethod === 'pickup' ? '#fff' : '#4A90E2'} />
                       <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'pickup' && styles.fulfillmentBtnTextActive]}>
                         Pickup from Boutique
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.fulfillmentBtn, fulfillmentMethod === 'ship' && styles.fulfillmentBtnActive]}
+                      onPress={() => setFulfillmentMethod('ship')}
+                    >
+                      <Ionicons name="car-outline" size={15} color={fulfillmentMethod === 'ship' ? '#fff' : '#4A90E2'} />
+                      <Text style={[styles.fulfillmentBtnText, fulfillmentMethod === 'ship' && styles.fulfillmentBtnTextActive]}>
+                        Ship to Me{'\n'}$10 for each order
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
   fulfillmentLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 8 },
   fulfillmentRow: { flexDirection: 'row', gap: 8 },
   fulfillmentBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, paddingVertical: 9, borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
     borderWidth: 1.5, borderColor: '#4A90E2', backgroundColor: '#fff',
   },
   fulfillmentBtnActive: { backgroundColor: '#4A90E2' },

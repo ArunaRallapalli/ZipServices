@@ -142,7 +142,7 @@ const CheckoutScreen: React.FC = () => {
           <View style={styles.sectionHeaderRow}>
             <Ionicons name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'car-outline'} size={18} color="#4A90E2" />
             <Text style={styles.sectionTitle}>
-              {fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Ship to Me (+$10.00)'}
+              {fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Ship to Me — $10 for each order'}
             </Text>
           </View>
         </View>
