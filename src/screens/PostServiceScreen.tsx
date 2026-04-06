@@ -150,7 +150,7 @@ const PostServiceScreen: React.FC = () => {
   // UPLOAD PHOTOS — sends description alongside each photo
   // --------------------------------------------------------------------------
 
-  const uploadPhotos = async (postId: string) => {
+  const uploadPhotos = async (postId: string, postPrice?: string) => {
     if (selectedPhotos.length === 0) return;
 
     setUploadingPhotos(true);
@@ -219,7 +219,7 @@ const PostServiceScreen: React.FC = () => {
                 filename: `photo_${Date.now()}.${fileExtension}`,
                 mimetype: mimeType,
                 description: photo.description.trim(),
-                price: photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0,
+                price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
               }),
             },
           );
@@ -245,7 +245,7 @@ const PostServiceScreen: React.FC = () => {
             name: `photo.${fileExtension}`,
           } as any);
           formData.append('description', photo.description.trim());
-          formData.append('price', String(photo.price.trim() ? parseFloat(photo.price.trim()) || 0 : 0));
+          formData.append('price', String(parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0));
 
           uploadSuccess = await new Promise<boolean>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -452,7 +452,7 @@ const PostServiceScreen: React.FC = () => {
 
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
-        await uploadPhotos(data.post.id);
+        await uploadPhotos(data.post.id, priceRange);
       }
 
       console.log('════════════════════════════════════════');
