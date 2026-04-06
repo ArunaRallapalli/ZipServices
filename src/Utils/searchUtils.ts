@@ -437,7 +437,7 @@ export const fetchPaymentCategories = async (): Promise<Set<string>> => {
   }
 };
 
-export const fetchRecentPosts = async (limit: number = 5): Promise<ServicePost[]> => {
+export const fetchRecentPosts = async (limit: number = 100): Promise<ServicePost[]> => {
   console.log(`🆕 [searchUtils] Fetching ${limit} most recent posts...`);
   try {
     const data = await api.get(`/api/service-posts/all?limit=${limit}&offset=0`);
