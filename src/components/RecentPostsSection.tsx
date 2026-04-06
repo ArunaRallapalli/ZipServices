@@ -179,31 +179,20 @@ const DetailModal: React.FC<{
 
         <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
 
-          {/* 1. Photos — main photo + thumbnail selector */}
+          {/* 1. Photos — thumbnail selector only */}
           {photos.length > 0 && (
-            <>
-              <TouchableOpacity onPress={() => setZoomVisible(true)} activeOpacity={0.9}>
-                <Image
-                  source={{ uri: photos[selectedPhotoIndex] }}
-                  style={modalStyles.mainPhoto}
-                  resizeMode="cover"
-                />
-              </TouchableOpacity>
-              {photos.length > 1 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.thumbScroll}>
-                  {photos.map((uri, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
-                      style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
-                      activeOpacity={0.8}
-                    >
-                      <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )}
-            </>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.thumbScroll}>
+              {photos.map((uri, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
+                  style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
+                  activeOpacity={0.8}
+                >
+                  <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
 
           {/* 2. Title */}
@@ -782,7 +771,7 @@ const modalStyles = StyleSheet.create({
   thumbScroll: { paddingHorizontal: 12, marginBottom: 10 },
   thumbCard: { marginRight: 8, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
   thumbSelected: { borderColor: '#4A90E2' },
-  thumbImg: { width: 64, height: 64 },
+  thumbImg: { width: 110, height: 110 },
   photosContainer: { paddingHorizontal: 16, marginBottom: 12, marginTop: 8 },
   photoScroll: { marginBottom: 4 },
   photoWrapper: {
