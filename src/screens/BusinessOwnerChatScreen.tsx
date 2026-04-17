@@ -1,74 +1,85 @@
 /**
- * BusinessOwnerChatScreen - Displays list of message conversations
- * 
- * Last Updated: January 5, 2026
- * Changes: Migrated from fetch to api client for automatic token handling
- * 
+ * BusinessOwnerChatScreen - Displays list of message threads grouped by (customer, post)
+ *
+ * Last Updated: April 2026
+ * Changes: Each unique (customer, post) pair is shown as a separate thread row.
+ *          Tapping a row opens ChatScreen filtered to that post's messages.
+ *
  * Backend API: GET /messages/business-owner/:userId
- * Shows all contacts with message previews and unread indicators
  */
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { BackButton } from '../components/BackButton';
-import React, { useEffect, useState } from "react"; 
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
-  Platform,
+  Image,
 } from "react-native";
 import { useRoute, useNavigation, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { useAuth } from "../contexts/AuthContext";
-import api from '../api'; // ADDED: January 5, 2026
+import api from '../api';
 
-type NavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "BusinessOwnerChatScreen"
->;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "BusinessOwnerChatScreen">;
 type RouteProps = RouteProp<RootStackParamList, "BusinessOwnerChatScreen">;
 
-// Contact interface for conversation list items
-interface Contact {
-  user_id: number;
-  full_name: string;
-  email: string;
-  phone_number?: string;
-  last_message?: string;
-  last_message_time?: string;
-  has_unread?: boolean;
+function getRelativeDay(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  // Compare calendar days, not raw ms, so "Today" works regardless of time
+  const nowDay  = new Date(now.getFullYear(),  now.getMonth(),  now.getDate());
+  const msgDay  = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((nowDay.getTime() - msgDay.getTime()) / 86_400_000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays <  7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+interface Thread {
+  key: string;              // unique: "${otherUserId}_${postId ?? 'null'}"
+  other_user_id: number;
+  other_user_name: string;
+  other_user_email: string;
+  post_id: number | null;
+  post_title: string | null;
+  last_message: string;
+  last_message_time: string;
+  has_unread: boolean;
 }
 
 export default function BusinessOwnerChatScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation<NavigationProp>();
   const { userInfo, userType } = useAuth();
-  
-  // Extract business owner user ID from route params or auth context
+
   const businessOwnerUserId = (() => {
     const id = route.params?.businessOwnerUserId || userInfo?.user_id;
     return typeof id === 'string' ? parseInt(id, 10) : id;
   })();
 
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [postPhotos, setPostPhotos] = useState<Record<number, string>>({});
 
-  // Debug logging on mount
   useEffect(() => {
     console.log('BusinessOwnerChatScreen mounted with:', {
       routeParams: route.params,
       userInfo,
       userType,
       extractedBusinessOwnerUserId: businessOwnerUserId,
-      hasBusinessOwnerUserId: !!businessOwnerUserId
     });
   }, [userInfo, route.params, businessOwnerUserId]);
 
-  // Wait for auth context to be ready
   useEffect(() => {
     const checkAuthReady = () => {
       if (userInfo?.user_id || route.params?.businessOwnerUserId) {
@@ -78,205 +89,184 @@ export default function BusinessOwnerChatScreen() {
           console.warn('[BusinessOwnerChat] Auth context not loaded after timeout');
           setAuthLoading(false);
         }, 2000);
-        
         return () => clearTimeout(timer);
       }
     };
-
     checkAuthReady();
   }, [userInfo, route.params]);
 
-  /**
-   * Fetch all messages and build contact list
-   * UPDATED: January 5, 2026 - Using api.get() instead of fetch
-   */
-  const loadContacts = async (): Promise<void> => {
-    if (authLoading) {
-      console.log('[BusinessOwnerChat] Waiting for auth context...');
-      return;
-    }
-
+  const loadThreads = async (): Promise<void> => {
+    if (authLoading) return;
     if (!businessOwnerUserId) {
-      console.warn('[BusinessOwnerChat] No businessOwnerUserId available');
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      console.log(`[BusinessOwnerChat] Loading contacts for business owner: ${businessOwnerUserId}`);
-      
-      // UPDATED: Using api client instead of fetch
       const data: any[] = await api.get(`/messages/business-owner/${businessOwnerUserId}`);
-      
-      console.log(`[BusinessOwnerChat] Raw data received:`, data);
 
-      // Create a map to track unique contacts and their most recent messages
-      const contactMap = new Map<number, Contact>();
+      const extractUsername = (email: string | null | undefined): string => {
+        if (!email) return "Unknown User";
+        return email.split('@')[0] || "Unknown User";
+      };
 
-      // Process each message to extract contact information
+      // Group by (other_user_id, post_id) — keep only the most recent message per thread
+      const threadMap = new Map<string, Thread>();
+
+      // Data arrives oldest-first (ascending), so iterate and overwrite to keep latest
       data.forEach((item: any) => {
         let otherUserId: number | null = null;
-        let otherUserName: string = "Unknown User";
-        let otherUserEmail: string = "";
-        
-        // Helper function to extract username from email
-        const extractUsername = (email: string | null | undefined): string => {
-          if (!email) return "Unknown User";
-          const username = email.split('@')[0];
-          return username || "Unknown User";
-        };
-        
-        // Determine the OTHER user in this conversation
+        let otherUserName = "Unknown User";
+        let otherUserEmail = "";
+
         if (item.sender_id === businessOwnerUserId) {
-          // Current user sent this message, so receiver is the contact
-          otherUserId = typeof item.receiver_id === "string" 
-            ? parseInt(item.receiver_id, 10) 
-            : item.receiver_id;
+          otherUserId = typeof item.receiver_id === "string" ? parseInt(item.receiver_id, 10) : item.receiver_id;
           otherUserName = item.receiver_name || extractUsername(item.receiver_email);
           otherUserEmail = item.receiver_email || "";
         } else if (item.receiver_id === businessOwnerUserId) {
-          // Current user received this message, so sender is the contact
-          otherUserId = typeof item.sender_id === "string" 
-            ? parseInt(item.sender_id, 10) 
-            : item.sender_id;
+          otherUserId = typeof item.sender_id === "string" ? parseInt(item.sender_id, 10) : item.sender_id;
           otherUserName = item.sender_name || extractUsername(item.sender_email);
           otherUserEmail = item.sender_email || "";
         }
-        
-        if (!otherUserId) {
-          console.warn('[BusinessOwnerChat] Could not identify other user from item:', item);
-          return;
-        }
-        
-        const existingContact = contactMap.get(otherUserId);
-        const messageTime = item.created_at;
-        
-        // Check if current user is the receiver and message is unread
+
+        if (!otherUserId) return;
+
+        const postId: number | null = item.post_id ? parseInt(item.post_id, 10) : null;
+        const key = `${otherUserId}_${postId ?? 'null'}`;
         const isUnread = item.receiver_id === businessOwnerUserId && item.is_read === false;
-        
-        // Only update if this is a newer message or contact doesn't exist yet
-        if (!existingContact || 
-            (messageTime && existingContact.last_message_time && 
-             new Date(messageTime) > new Date(existingContact.last_message_time))) {
-          contactMap.set(otherUserId, {
-            user_id: otherUserId,
-            full_name: otherUserName,
-            email: otherUserEmail,
+
+        const existing = threadMap.get(key);
+        if (
+          !existing ||
+          (item.created_at && existing.last_message_time &&
+            new Date(item.created_at) > new Date(existing.last_message_time))
+        ) {
+          threadMap.set(key, {
+            key,
+            other_user_id: otherUserId,
+            other_user_name: otherUserName,
+            other_user_email: otherUserEmail,
+            post_id: postId,
+            post_title: item.post_title || null,
             last_message: item.message_text || "",
-            last_message_time: messageTime,
+            last_message_time: item.created_at || "",
             has_unread: isUnread,
           });
-        } else if (existingContact && isUnread) {
-          // If contact exists but we found an unread message, mark it
-          existingContact.has_unread = true;
+        } else if (existing && isUnread) {
+          existing.has_unread = true;
         }
       });
 
-      // Convert map to array and sort by most recent message
-      const uniqueContacts = Array.from(contactMap.values()).sort((a, b) => {
-        if (!a.last_message_time || !b.last_message_time) return 0;
+      const sorted = Array.from(threadMap.values()).sort((a, b) => {
+        if (!a.last_message_time) return 1;
+        if (!b.last_message_time) return -1;
         return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
       });
 
-      console.log(`[BusinessOwnerChat] Processed ${uniqueContacts.length} unique contacts`);
-      setContacts(uniqueContacts);
+      setThreads(sorted);
+
+      // Fetch first photo for each unique post_id
+      const uniquePostIds = [...new Set(
+        sorted.map(t => t.post_id).filter((id): id is number => id !== null)
+      )];
+      const photoMap: Record<number, string> = {};
+      await Promise.all(
+        uniquePostIds.map(async (postId) => {
+          try {
+            const post = await api.get(`/api/service-posts/${postId}`);
+            if (post?.photos?.[0]) photoMap[postId] = post.photos[0];
+          } catch { /* no photo — card just won't show image */ }
+        })
+      );
+      setPostPhotos(photoMap);
     } catch (error) {
-      console.error("[BusinessOwnerChat] Error loading contacts:", error);
-      setContacts([]);
+      console.error("[BusinessOwnerChat] Error loading threads:", error);
+      setThreads([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial load
   useEffect(() => {
-    loadContacts();
+    loadThreads();
   }, [businessOwnerUserId, authLoading]);
 
-  // Reload when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       if (!authLoading && businessOwnerUserId) {
-        loadContacts();
+        loadThreads();
       }
     }, [businessOwnerUserId, authLoading])
   );
 
-  // Navigate to individual chat screen
-  const navigateToChat = (otherUserId: number, otherUserName: string) => {
-    if (!businessOwnerUserId) {
-      console.error('[BusinessOwnerChat] Cannot navigate to chat: no businessOwnerUserId');
-      return;
-    }
-    
-    console.log(`[BusinessOwnerChat] Navigating to chat with user:`, {
-      businessOwnerUserId,
-      otherUserId,
-      otherUserName
-    });
-    
+  const navigateToChat = (thread: Thread) => {
+    if (!businessOwnerUserId) return;
     navigation.navigate("ChatScreen", {
       currentUserId: businessOwnerUserId,
-      otherUserId: otherUserId,
-      otherUserName: otherUserName || "User",
+      otherUserId: thread.other_user_id,
+      otherUserName: thread.other_user_name || "User",
+      postId: thread.post_id ?? undefined,
+      postTitle: thread.post_title ?? undefined,
     });
   };
 
-  // Render each contact item in the list
-  const renderContactItem = ({ item }: { item: Contact }) => (
+  const renderThread = ({ item }: { item: Thread }) => (
     <TouchableOpacity
-      style={[
-        styles.contactCard,
-        item.has_unread && styles.contactCardUnread
-      ]}
-      onPress={() => navigateToChat(item.user_id, item.full_name)}
+      style={[styles.contactCard, item.has_unread && styles.contactCardUnread]}
+      onPress={() => navigateToChat(item)}
     >
       <View style={styles.contactHeader}>
         <View style={styles.nameContainer}>
-          <Text style={styles.contactName}>{item.full_name}</Text>
+          <Text style={styles.contactName}>{item.other_user_name}</Text>
           {item.has_unread && (
             <View style={styles.unreadBadge}>
               <Text style={styles.unreadBadgeText}>New</Text>
             </View>
           )}
         </View>
-        <Text style={styles.contactId}>ID: {item.user_id}</Text>
+        <Text style={styles.contactId}>{getRelativeDay(item.last_message_time)}</Text>
       </View>
-                
-      {item.last_message && (
+
+      {item.post_title && (
+        <Text style={styles.postTitle} numberOfLines={1}>
+          {item.post_title}
+        </Text>
+      )}
+
+      {item.last_message ? (
         <View style={styles.lastMessageContainer}>
           <Text style={styles.lastMessageLabel}>Last message:</Text>
-          <Text 
-            style={[
-              styles.lastMessage,
-              item.has_unread && styles.lastMessageUnread
-            ]} 
+          <Text
+            style={[styles.lastMessage, item.has_unread && styles.lastMessageUnread]}
             numberOfLines={2}
           >
             {item.last_message}
           </Text>
         </View>
-      )}
-      
-      {item.last_message_time && (
+      ) : null}
+
+      {item.post_id && postPhotos[item.post_id] ? (
+        <Image
+          source={{ uri: postPhotos[item.post_id] }}
+          style={styles.postThumb}
+          resizeMode="cover"
+        />
+      ) : null}
+
+      {item.last_message_time ? (
         <Text style={styles.timestamp}>
           {new Date(item.last_message_time).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
           })}
         </Text>
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 
-  const keyExtractor = (item: Contact, index: number): string =>
-    item && item.user_id ? item.user_id.toString() : `fallback-${index}-${Date.now()}`;
+  const keyExtractor = (item: Thread) => item.key;
 
-  // Loading state: waiting for auth
   if (authLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -286,7 +276,6 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
-  // Error state: no user ID found
   if (!businessOwnerUserId) {
     return (
       <>
@@ -302,7 +291,6 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
-  // Loading state: fetching messages
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -312,68 +300,61 @@ export default function BusinessOwnerChatScreen() {
     );
   }
 
-  // Empty state: no conversations yet
-  if (contacts.length === 0) {
+  if (threads.length === 0) {
     return (
       <>
-        <BackButton /> 
+        <BackButton />
         <View style={styles.centerContainer}>
           <Text style={styles.emptyStateIcon}>📪</Text>
           <Text style={styles.emptyStateTitle}>No Messages Yet</Text>
           <Text style={styles.emptyStateSubtext}>
-            You haven't had any conversations yet. When you message other users or they message you, the conversations will appear here.
+            When customers message you about your listings, conversations will appear here.
           </Text>
         </View>
       </>
     );
   }
 
-  // Main view: display list of conversations
   return (
-    <>  
+    <>
       <BackButton />
       <View style={styles.container}>
-        <Text style={styles.title}>Messages ({contacts.length})</Text>
-        
+        <Text style={styles.title}>Messages ({threads.length})</Text>
         <FlatList
-          data={contacts}
+          data={threads}
           keyExtractor={keyExtractor}
-          renderItem={renderContactItem}
+          renderItem={renderThread}
           style={styles.contactsList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
         />
       </View>
-    </> 
+    </>
   );
 }
 
 const styles = createResponsiveStyles({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: "#f8fafc",
     padding: 20,
   },
-  centerContainer: { 
-    flex: 1, 
-    justifyContent: "center", 
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f8fafc",
     padding: 20,
   },
-  title: { 
-    fontSize: 28, 
-    fontWeight: "bold", 
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
     color: "#1f2937",
     textAlign: "center",
     marginBottom: 20,
   },
-  contactsList: {
-    flex: 1,
-  },
-  listContainer: {
-    paddingBottom: 10,
-  },
+  contactsList: { flex: 1 },
+  listContainer: { paddingBottom: 10 },
   contactCard: {
     backgroundColor: "#ffffff",
     padding: 16,
@@ -382,10 +363,7 @@ const styles = createResponsiveStyles({
     borderLeftWidth: 4,
     borderLeftColor: "#059669",
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 3,
@@ -399,7 +377,7 @@ const styles = createResponsiveStyles({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   nameContainer: {
     flexDirection: "row",
@@ -426,11 +404,15 @@ const styles = createResponsiveStyles({
   contactId: {
     fontSize: 12,
     color: "#9ca3af",
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: "500",
   },
-  lastMessageContainer: {
-    marginBottom: 8,
+  postTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4f46e5",
+    marginBottom: 6,
   },
+  lastMessageContainer: { marginBottom: 8 },
   lastMessageLabel: {
     fontSize: 12,
     color: "#9ca3af",
@@ -448,6 +430,14 @@ const styles = createResponsiveStyles({
     fontWeight: "bold",
     fontStyle: "normal",
   },
+  postThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 6,
+    alignSelf: "flex-start",
+  },
   timestamp: {
     fontSize: 12,
     color: "#9ca3af",
@@ -458,10 +448,7 @@ const styles = createResponsiveStyles({
     fontSize: 16,
     color: "#6b7280",
   },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
+  emptyStateIcon: { fontSize: 48, marginBottom: 16 },
   emptyStateTitle: {
     fontSize: 24,
     fontWeight: "bold",
@@ -477,80 +464,7 @@ const styles = createResponsiveStyles({
     lineHeight: 22,
     paddingHorizontal: 20,
   },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    width: "100%",
-    maxWidth: 350,
-  },
-  primaryButton: {
-    backgroundColor: "#059669",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
-    flex: 1,
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  secondaryButton: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
-    flex: 1,
-  },
-  secondaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  navigationContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 20,
-    gap: 12,
-  },
-  resetNavigationButton: {
-    backgroundColor: "#6366f1",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-    minWidth: 80,
-  },
-  resetNavigationButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
+  errorIcon: { fontSize: 48, marginBottom: 16 },
   errorTitle: {
     fontSize: 24,
     fontWeight: "bold",
@@ -564,50 +478,5 @@ const styles = createResponsiveStyles({
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
-  },
-  errorButton: {
-    backgroundColor: "#ef4444",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 8,
-    flex: 1,
-  },
-  errorButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  resetButton: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 8,
-    flex: 1,
-  },
-  resetButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  debugContainer: {
-    backgroundColor: "#f3f4f6",
-    padding: 16,
-    borderRadius: 8,
-    marginVertical: 20,
-    width: "100%",
-  },
-  debugTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#374151",
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

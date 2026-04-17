@@ -50,6 +50,9 @@ export interface CartItem {
   quantity: number;              // how many the buyer wants (min 1)
   in_stock?: number;             // copied from post to enforce quantity cap
   price?: number;                // flat price per item in dollars (fallback when photo_price unset)
+  shipping_charge_cents?: number; // per-post shipping charge set by provider
+  post_payment_method?: string;   // payment method set on this post
+  post_payment_info?: string;     // payment handle set on this post
 }
 
 interface CartState {
@@ -106,8 +109,12 @@ const cartSlice = createSlice({
     clearCart: (state) => {
       state.items = [];
     },
+    removeItems: (state, action: PayloadAction<Array<{ post_id: number; photo_index: number }>>) => {
+      const keys = new Set(action.payload.map(k => `${k.post_id}_${k.photo_index}`));
+      state.items = state.items.filter(i => !keys.has(`${i.post_id}_${i.photo_index}`));
+    },
   },
 });
 
-export const { addToCart, removeFromCart, toggleSaveForLater, setAgreedAmount, setQuantity, clearCart } = cartSlice.actions;
+export const { addToCart, removeFromCart, toggleSaveForLater, setAgreedAmount, setQuantity, clearCart, removeItems } = cartSlice.actions;
 export default cartSlice.reducer;

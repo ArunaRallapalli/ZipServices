@@ -69,7 +69,7 @@ interface BusinessOwnerProfile {
   street: string;
   city: string;
   state: string;
-  zelle_id?: string;
+  payment_info?: string;
   payment_method?: string;
   is_admin?: boolean;
 }
@@ -158,7 +158,7 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         state: profile.state,
         email: profile.email,
         password: profile.password,
-        zelle_id: profile.zelle_id || null,
+        payment_info: profile.payment_info || null,
         payment_method: profile.payment_method || null,
       };
 
@@ -287,12 +287,12 @@ const BusinessOwnerProfileScreen: React.FC = () => {
               </Text>
               <TextInput
                 style={styles.input}
-                value={profile.zelle_id || ''}
+                value={profile.payment_info || ''}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="default"
                 placeholder={PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.handleLabel || ''}
-                onChangeText={(text) => setProfile({ ...profile, zelle_id: text })}
+                onChangeText={(text) => setProfile({ ...profile, payment_info: text })}
               />
             </>
           )}

@@ -21,6 +21,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from "../Utils/Alert";
 import { useFocusEffect } from '@react-navigation/native';
+import { store } from '../store/store';
+import { clearCart } from '../store/cartSlice';
+import { clearCheckout } from '../store/checkoutSlice';
 /* ------------------------------------------------------------------
  * USER INFO TYPE
  * ------------------------------------------------------------------
@@ -248,6 +251,10 @@ const signIn = useCallback(async (
 
     authData.push(['userInfo', JSON.stringify(finalUserInfo)]);
 
+    // Clear cart from any previous user session
+    store.dispatch(clearCart());
+    store.dispatch(clearCheckout());
+
     // Persist to storage
     await AsyncStorage.multiSet(authData);
 
@@ -294,9 +301,12 @@ const signIn = useCallback(async (
 
   const signOut = useCallback(async () => {
   try {
-    // ✅ FIX: Clear 'access_token' instead of 'userToken'
+    // Clear cart on logout so it doesn't persist to the next user
+    store.dispatch(clearCart());
+    store.dispatch(clearCheckout());
+
     await AsyncStorage.multiRemove([
-      'access_token',  // ← CHANGED
+      'access_token',
       'userType',
       'userId',
       'userEmail',
@@ -433,46 +443,8 @@ const signIn = useCallback(async (
  * --------------------------------------------------------------
  * Checks if token was cleared (expired) and redirects to login
  */
-useEffect(() => {
-  // Check every 30 seconds if token exists but auth state says we're logged in
-  const intervalId = setInterval(async () => {
-    if (authState.isAuthenticated) {
-      const token = await AsyncStorage.getItem('access_token');
-      
-      if (!token) {
-        // Token was cleared (401 error from api.ts) but state still thinks we're logged in
-        console.log('⚠️ Token cleared - session expired, redirecting to login');
-        
-        // Update state to logged out
-        setAuthState({
-          isAuthenticated: false,
-          userToken: null,
-          userType: null,
-          userId: null,
-          userInfo: null,
-          loading: false,
-          initialized: true
-        });
-        
-        // Clear any remaining data
-        await AsyncStorage.multiRemove([
-          'userType',
-          'userId',
-          'userEmail',
-          'userInfo'
-        ]);
-        
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please sign in again.',
-          [{ text: 'OK' }]
-        );
-      }
-    }
-  }, 30000); // Check every 30 seconds
-
-  return () => clearInterval(intervalId);
-}, [authState.isAuthenticated]);
+// Auto-logout poll removed — tokens are 7 days with silent refresh.
+// Logout only happens explicitly via the Settings screen.
   /* --------------------------------------------------------------
    * MEMOIZED CONTEXT VALUE
    * --------------------------------------------------------------

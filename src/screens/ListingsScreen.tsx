@@ -31,6 +31,7 @@ import {
   SafeAreaView,
   RefreshControl,
   TextInput,
+  Image,
 } from "react-native";
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Alert } from "../Utils/Alert";
@@ -68,6 +69,7 @@ interface ServicePost {
   created_at?: string;
   is_active?: boolean;                  // Whether listing is active/visible
   request_status?: 'pending' | 'approved' | 'rejected';
+  photos?: string[];
 }
 
 // CustomerInfo interface: represents the current user's information
@@ -106,6 +108,9 @@ const ListingsScreen: React.FC = () => {
 
   // State: Number of pending orders — shown as badge on the My Orders button
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
+
+  // State: Number of pending thrift requests — shown as badge on the Thrift Requests button
+  const [pendingThriftCount, setPendingThriftCount] = useState(0);
 
   /**
    * Effect: Load user information from AsyncStorage when component mounts
@@ -168,6 +173,12 @@ const ListingsScreen: React.FC = () => {
           .then((res: any) => {
             const pending = (res.orders || []).filter((o: any) => o.status === 'pending').length;
             setPendingOrderCount(pending);
+          })
+          .catch(() => {});
+        api.get('/api/thrift-requests/provider')
+          .then((res: any) => {
+            const pending = (res.requests || []).filter((r: any) => r.status === 'requested').length;
+            setPendingThriftCount(pending);
           })
           .catch(() => {});
       }
@@ -352,8 +363,11 @@ const ListingsScreen: React.FC = () => {
    */
   const renderServiceCard = ({ item }: { item: ServicePost }) => (
     <View style={[styles.card, item.is_active === false && styles.inactiveCard]}>
-      {/* Header with title and badge (OFFERING or REQUESTING) */}
+      {/* Header with thumbnail, title, and badge */}
       <View style={styles.cardHeader}>
+        {item.photos?.[0] ? (
+          <Image source={{ uri: item.photos[0] }} style={styles.cardThumb} resizeMode="cover" />
+        ) : null}
         <Text style={styles.serviceTitle} numberOfLines={2}>
           {item.title}
         </Text>
@@ -552,6 +566,18 @@ const ListingsScreen: React.FC = () => {
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <TouchableOpacity
             style={styles.ordersButton}
+            onPress={() => navigation.navigate('ThriftingRequestsScreen')}
+          >
+            <Ionicons name="shirt-outline" size={16} color="#fff" />
+            <Text style={styles.ordersButtonText}>Thrift Requests</Text>
+            {pendingThriftCount > 0 && (
+              <View style={styles.ordersBadge}>
+                <Text style={styles.ordersBadgeText}>{pendingThriftCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ordersButton}
             onPress={() => navigation.navigate('OrdersScreen')}
           >
             <Ionicons name="receipt-outline" size={16} color="#fff" />
@@ -652,7 +678,8 @@ const styles = createResponsiveStyles({
   listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
   card: { backgroundColor: "#fff", borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: "#e0e0e0", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 3 },
   inactiveCard: { opacity: 0.6, borderColor: "#ccc" },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 10 },
+  cardThumb: { width: 56, height: 56, borderRadius: 8, flexShrink: 0 },
   serviceTitle: { flex: 1, fontSize: 18, fontWeight: "bold", color: "#333", marginRight: 10 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   offerBadge: { backgroundColor: "#4CAF50" },

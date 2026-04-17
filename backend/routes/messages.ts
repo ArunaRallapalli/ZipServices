@@ -29,6 +29,7 @@ import { Resend } from 'resend';
 import { supabase } from "../config/Supabase";
 // ADDED: January 5, 2026 - Import authentication middleware
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
+import logger from '../utils/logger';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -182,19 +183,21 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
 
   try {
     const { data, error } = await supabase
-  .from('messages')
-  .select(`
-    id,
-    sender_id,
-    receiver_id,
-    message_text,
-    is_read,
-    created_at,
-    metadata,
-    sender:users!messages_sender_id_fkey(
-      email,
-      business_owners(business_name)
-    ),
+      .from('messages')
+      .select(`
+        id,
+        sender_id,
+        receiver_id,
+        message_text,
+        is_read,
+        created_at,
+        metadata,
+        post_id,
+        post_title,
+        sender:users!messages_sender_id_fkey(
+          email,
+          business_owners(business_name)
+        ),
         receiver:users!messages_receiver_id_fkey(
           email,
           business_owners(business_name)
@@ -202,12 +205,13 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
       `)
       .or(`receiver_id.eq.${id},sender_id.eq.${id}`)
       .order('created_at', { ascending: true });
-      // ✅ ADD THIS DEBUG LOG
-  console.log(`[business-owner messages] Query for user ${id}:`, {
-    dataLength: data?.length || 0,
-    firstMessage: data?.[0] || 'none',
-    error: error
-  });
+
+    console.log(`[business-owner messages] Query for user ${id}:`, {
+      dataLength: data?.length || 0,
+      firstMessage: data?.[0] || 'none',
+      error: error
+    });
+
     const messages = (data || []).map((row: any) => ({
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
@@ -215,7 +219,9 @@ router.get("/business-owner/:userId", authenticateToken, authorizeUser, async (r
       message_text: row.message_text,
       is_read: row.is_read,
       created_at: row.created_at,
-      metadata: row.metadata,  //
+      metadata: row.metadata,
+      post_id: row.post_id ? parseInt(row.post_id, 10) : null,
+      post_title: row.post_title || null,
       sender_name: row.sender?.business_owners?.[0]?.business_name,
       sender_email: row.sender?.email,
       receiver_name: row.receiver?.business_owners?.[0]?.business_name,
@@ -257,13 +263,13 @@ router.get("/conversations/:userId", authenticateToken, authorizeUser, async (re
 
   try {
     console.log(`[API] Fetching conversations for user ${id}`);
-    
+
     const { data: allMessages, error: messagesError } = await supabase
       .from('messages')
-      .select('sender_id, receiver_id, message_text, created_at')
+      .select('sender_id, receiver_id, message_text, created_at, post_id, post_title')
       .or(`sender_id.eq.${id},receiver_id.eq.${id}`)
       .order('created_at', { ascending: false });
-    
+
     if (messagesError) throw messagesError;
 
     const conversationUserIds = new Set<number>();
@@ -286,52 +292,64 @@ router.get("/conversations/:userId", authenticateToken, authorizeUser, async (re
         business_owners!business_owners_user_id_fkey(business_id, business_name)
       `)
       .in('user_id', Array.from(conversationUserIds));
-    
+
     if (usersError) throw usersError;
 
     const { data: unreadMessages, error: unreadError } = await supabase
       .from('messages')
-      .select('sender_id')
+      .select('sender_id, post_id')
       .eq('receiver_id', id)
       .eq('is_read', false);
-    
+
     if (unreadError) throw unreadError;
 
-    const unreadCounts: Record<number, number> = {};
+    // Unread counts keyed by "senderId_postId" (null post_id → "senderId_null")
+    const unreadCounts: Record<string, number> = {};
     (unreadMessages || []).forEach((msg: any) => {
-      unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
+      const key = `${msg.sender_id}_${msg.post_id ?? 'null'}`;
+      unreadCounts[key] = (unreadCounts[key] || 0) + 1;
     });
 
-    const conversations = (users || []).map((user: any) => {
-      const userMessages = (allMessages || []).filter((msg: any) => 
-        (msg.sender_id === id && msg.receiver_id === user.user_id) ||
-        (msg.receiver_id === id && msg.sender_id === user.user_id)
-      );
-      
-      const lastMessage = userMessages[0];
+    const userMap: Record<number, any> = {};
+    (users || []).map((u: any) => { userMap[parseInt(u.user_id, 10)] = u; });
 
-      return {
-        other_user_id: parseInt(user.user_id, 10),
-        contact_name: user.business_owners?.[0]?.business_name || 'Unknown',
-        business_id: user.business_owners?.[0]?.business_id ? parseInt(user.business_owners[0].business_id, 10) : null,
-        user_type: user.user_type,
-        email: user.email,
-        last_message: lastMessage?.message_text || null,
-        last_message_time: lastMessage?.created_at || null,
-        unread_count: unreadCounts[user.user_id] || 0
-      };
-    }).sort((a, b) => {
+    // Group messages by (other_user_id, post_id) — one thread per unique combo
+    const threadMap = new Map<string, any>();
+    (allMessages || []).forEach((msg: any) => {
+      const otherId: number = msg.sender_id === id ? msg.receiver_id : msg.sender_id;
+      const postId = msg.post_id ? parseInt(msg.post_id, 10) : null;
+      const key = `${otherId}_${postId ?? 'null'}`;
+
+      if (!threadMap.has(key)) {
+        const user = userMap[otherId];
+        const unreadKey = `${otherId}_${postId ?? 'null'}`;
+        threadMap.set(key, {
+          other_user_id: otherId,
+          contact_name: user?.business_owners?.[0]?.business_name || 'Unknown',
+          business_id: user?.business_owners?.[0]?.business_id ? parseInt(user.business_owners[0].business_id, 10) : null,
+          user_type: user?.user_type,
+          email: user?.email,
+          post_id: postId,
+          post_title: msg.post_title || null,
+          last_message: msg.message_text || null,
+          last_message_time: msg.created_at || null,
+          unread_count: unreadCounts[unreadKey] || 0,
+        });
+      }
+    });
+
+    const conversations = Array.from(threadMap.values()).sort((a, b) => {
       if (!a.last_message_time) return 1;
       if (!b.last_message_time) return -1;
       return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
     });
 
-    console.log(`[API] Found ${conversations.length} conversations for user ${id}`);
-    
+    console.log(`[API] Found ${conversations.length} conversation threads for user ${id}`);
+
     if (conversations.length > 0) {
       console.log(`[API] Sample conversation:`, conversations[0]);
     }
-    
+
     res.json(conversations);
   } catch (err: any) {
     console.error("[API] Error fetching conversations:", err);
@@ -366,6 +384,7 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
   const { currentUserId, otherUserId } = req.params;
   const currentId = parseInt(currentUserId, 10);
   const otherId = parseInt(otherUserId, 10);
+  const postIdParam = req.query.post_id ? parseInt(req.query.post_id as string, 10) : null;
 
   if (isNaN(currentId) || isNaN(otherId)) {
     res.status(400).json({ error: "Invalid user IDs" });
@@ -377,7 +396,7 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
   console.log('  currentUserId (from URL):', currentUserId, `(type: ${typeof currentUserId})`);
   console.log('  req.user.user_id (from token):', req.user?.user_id, `(type: ${typeof req.user?.user_id})`);
   console.log('  Match?', String(currentUserId) === String(req.user?.user_id));
-  
+
   if (String(currentUserId) !== String(req.user?.user_id)) {
     console.log('❌ Authorization failed - user IDs do not match');
     res.status(403).json({
@@ -386,14 +405,14 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
     });
     return;
   }
-  
+
   console.log('✅ Chat authorization passed');
 
-  console.log(`Fetching messages between currentUser: ${currentId} and otherUser: ${otherId}`);
+  console.log(`Fetching messages between currentUser: ${currentId} and otherUser: ${otherId}${postIdParam ? ` for post ${postIdParam}` : ''}`);
 
   try {
     // ✅ FIXED: February 7, 2026 - Explicitly include metadata column
-    const { data, error } = await supabase
+    let query = supabase
       .from('messages')
       .select(`
         id,
@@ -403,12 +422,19 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
         created_at,
         is_read,
         metadata,
+        post_id,
+        post_title,
         sender:users!messages_sender_id_fkey(
           business_owners(business_name)
         )
       `)
-      .or(`and(sender_id.eq.${currentId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${currentId})`)
-      .order('created_at', { ascending: true });
+      .or(`and(sender_id.eq.${currentId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${currentId})`);
+
+    if (postIdParam) {
+      query = query.eq('post_id', postIdParam);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: true });
 
     if (error) throw error;
 
@@ -434,6 +460,8 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
       id: parseInt(row.id, 10),
       sender_id: parseInt(row.sender_id, 10),
       receiver_id: parseInt(row.receiver_id, 10),
+      post_id: row.post_id ? parseInt(row.post_id, 10) : null,
+      post_title: row.post_title || null,
       sender_name: row.sender_id !== currentId ? (row.sender?.business_owners?.[0]?.business_name || 'Unknown') : null
     }));
 
@@ -462,8 +490,8 @@ router.get("/:currentUserId/:otherUserId", authenticateToken, async (req: AuthRe
  * Reason: Prevent users from impersonating others when sending messages
  */
 router.post("/", authenticateToken, async (req: AuthRequest, res: Response) => {
-  const { sender_id, receiver_id, message_text } = req.body;
-  
+  const { sender_id, receiver_id, message_text, post_id, post_title } = req.body;
+
   if (!sender_id || !receiver_id || !message_text) {
     res.status(400).json({ error: "Missing required fields" });
     return;
@@ -486,7 +514,9 @@ if (String(sender_id) !== String(req.user?.user_id)) {
     receiver_id,
     message_text,
     is_read: false,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    post_id: post_id || null,
+    post_title: post_title || null,
   }])
   .select()
   .single();
@@ -547,39 +577,48 @@ async function updateLastSeen(userId: number): Promise<void> {
 //   • Reset         — last_seen_at is set to NOW() whenever user opens chat
 //                     or marks messages as read (see updateLastSeen calls above)
 // ---------------------------------------------------------------------------
-async function sendSmartNotification(
+export async function sendSmartNotification(
   senderId: number,
   receiverId: number,
 ): Promise<void> {
+  logger.info(`sendSmartNotification called: sender=${senderId}, receiver=${receiverId}`);
   // 1. Fetch sender + receiver details
   const { data: users, error: usersError } = await supabase
     .from('users')
     .select(`
       user_id,
       email,
-      full_name,
       last_seen_at,
-      last_email_sent_at,
-      business_owners!business_owners_user_id_fkey(business_name)
+      last_email_sent_at
     `)
     .in('user_id', [senderId, receiverId]);
 
+  const { data: bizOwners } = await supabase
+    .from('business_owners')
+    .select('user_id, business_name')
+    .in('user_id', [senderId, receiverId]);
+
   if (usersError || !users) {
-    console.error('❌ Failed to fetch user details for notification:', usersError);
+    logger.error('chat-email: Failed to fetch user details', { error: usersError });
     return;
   }
+
+  logger.info(`chat-email: users fetched: ${users.length}, ids=${users.map((u: any) => u.user_id).join(',')}`);
 
   const senderRow   = users.find((u: any) => parseInt(u.user_id, 10) === senderId);
   const receiverRow = users.find((u: any) => parseInt(u.user_id, 10) === receiverId);
 
-  if (!senderRow || !receiverRow || !receiverRow.email) return;
+  if (!senderRow || !receiverRow || !receiverRow.email) {
+    logger.error('chat-email: Missing user rows', { senderFound: !!senderRow, receiverFound: !!receiverRow, receiverEmail: receiverRow?.email });
+    return;
+  }
 
   // 2. Skip if receiver is currently active (last_seen_at within 10 minutes)
   const TEN_MINUTES_MS = 10 * 60 * 1000;
   if (receiverRow.last_seen_at) {
     const msSinceSeen = Date.now() - new Date(receiverRow.last_seen_at).getTime();
-    if (msSinceSeen < TEN_MINUTES_MS) {
-      console.log(`⏭️ Skipping email — user ${receiverId} is active (last seen ${Math.round(msSinceSeen / 1000)}s ago)`);
+    if (msSinceSeen >= 0 && msSinceSeen < TEN_MINUTES_MS) {
+      logger.info(`chat-email: skipped — receiver ${receiverId} active ${Math.round(msSinceSeen / 1000)}s ago`);
       return;
     }
   }
@@ -592,7 +631,7 @@ async function sendSmartNotification(
     .eq('is_read', false);
 
   if (countError) {
-    console.error('❌ Failed to count unread messages:', countError);
+    logger.error('chat-email: Failed to count unread messages', { error: countError });
     return;
   }
 
@@ -603,18 +642,17 @@ async function sendSmartNotification(
   if (unreadCount > 1 && receiverRow.last_email_sent_at) {
     const msSinceEmail = Date.now() - new Date(receiverRow.last_email_sent_at).getTime();
     if (msSinceEmail < ONE_HOUR_MS) {
-      console.log(`⏭️ Skipping email — within 1-hour cooldown (${unreadCount} unread, last email ${Math.round(msSinceEmail / 60000)}m ago)`);
+      logger.info(`chat-email: skipped — cooldown active (${unreadCount} unread, ${Math.round(msSinceEmail / 60000)}m since last email)`);
       return;
     }
   }
 
   // 5. Compose email content
-  const senderName   = senderRow.business_owners?.[0]?.business_name
-                     || senderRow.full_name
-                     || 'GoZipMarket User';
-  const receiverName = receiverRow.business_owners?.[0]?.business_name
-                     || receiverRow.full_name
-                     || 'there';
+  const senderBiz   = (bizOwners || []).find((b: any) => parseInt(b.user_id, 10) === senderId);
+  const receiverBiz = (bizOwners || []).find((b: any) => parseInt(b.user_id, 10) === receiverId);
+
+  const senderName   = senderBiz?.business_name   || 'GoZipMarket User';
+  const receiverName = receiverBiz?.business_name || 'there';
 
   const isFirst = unreadCount <= 1;
   const subject = isFirst
@@ -666,7 +704,7 @@ async function sendSmartNotification(
     .update({ last_email_sent_at: new Date().toISOString() })
     .eq('user_id', receiverId);
 
-  console.log(`📧 ${isFirst ? 'Instant' : `Batched (${unreadCount})`} notification sent to ${receiverRow.email}`);
+  logger.info(`chat-email: sent to ${receiverRow.email} (${isFirst ? 'instant' : `batched, ${unreadCount} unread`})`);
 }
 
 /**

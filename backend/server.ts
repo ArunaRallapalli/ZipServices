@@ -29,6 +29,8 @@ import servicePostsRouter from './routes/ServicePosts';
 import passwordResetRoutes from './routes/Passwordreset';
 import emailVerificationRoutes from './routes/EmailVerification';
 import ordersRouter from './routes/orders';
+import thriftRequestsRouter from './routes/thriftRequests';
+import { sendSmartNotification } from './routes/messages';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -104,6 +106,7 @@ app.use("/api/service-categories", serviceCategoriesRouter);
 app.use("/api/users", usersRouter);
 app.use('/', servicePostsRouter);
 app.use('/', ordersRouter);
+app.use('/', thriftRequestsRouter);
 
 // ✅ EXISTING ROUTES (keep these for backward compatibility)
 app.use("/users", usersRouter);
@@ -221,6 +224,215 @@ const server = app.listen(5000, "0.0.0.0", () => {
     availability: 'GET /api/availability/:userId'
   });
 });
+
+// ── Hourly unread message sweep ─────────────────────────────────────────────
+// Finds all users who have unread messages, are not currently active,
+// and have not been emailed in the last hour — then fires a notification.
+async function sweepUnreadMessages(): Promise<void> {
+  try {
+    console.log('🔔 Hourly sweep: checking for unread messages...');
+
+    const ONE_HOUR_AGO    = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const TEN_MINS_AGO    = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+
+    // Find all unread messages (we filter per-user below)
+    const { data: unread, error } = await supabase
+      .from('messages')
+      .select('receiver_id, sender_id, created_at')
+      .eq('is_read', false);
+
+    if (error || !unread || unread.length === 0) return;
+
+    // Unique receiver IDs
+    const receiverIds = [...new Set(unread.map((m: any) => Number(m.receiver_id)))];
+
+    // Fetch their activity/email timestamps
+    const { data: users } = await supabase
+      .from('users')
+      .select('user_id, last_seen_at, last_email_sent_at')
+      .in('user_id', receiverIds);
+
+    if (!users) return;
+
+    for (const user of users) {
+      const userId = Number(user.user_id);
+
+      // Skip if active within last 10 minutes
+      if (user.last_seen_at && user.last_seen_at > TEN_MINS_AGO) continue;
+
+      // Skip if already emailed within last hour
+      if (user.last_email_sent_at && user.last_email_sent_at > ONE_HOUR_AGO) continue;
+
+      // Get this user's unread messages sorted oldest first
+      const userUnread = unread
+        .filter((m: any) => Number(m.receiver_id) === userId)
+        .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      if (userUnread.length === 0) continue;
+
+      // Per-user 3-hour cutoff: if their oldest unread message is > 3 hours old, stop notifying
+      const oldestUnread = userUnread[0];
+      const msOld = Date.now() - new Date(oldestUnread.created_at).getTime();
+      if (msOld > THREE_HOURS_MS) {
+        console.log(`⏭️ Skipping user ${userId} — oldest unread message is ${Math.round(msOld / 3600000)}h old`);
+        continue;
+      }
+
+      // Use the most recent sender for the notification
+      const latestMsg = userUnread[userUnread.length - 1];
+      if (!latestMsg) continue;
+
+      await sendSmartNotification(Number(latestMsg.sender_id), userId);
+    }
+
+    console.log('✅ Hourly sweep complete');
+  } catch (err) {
+    console.error('❌ Hourly message sweep error:', err);
+  }
+}
+
+// Run sweep every hour
+setInterval(sweepUnreadMessages, 60 * 60 * 1000);
+
+// ── 24h pending order expiry sweep ──────────────────────────────────────────
+// Finds pending orders whose expires_at has passed, marks them as 'expired',
+// and reverts in_stock for each item so the product becomes available again.
+async function sweepExpiredOrders(): Promise<void> {
+  try {
+    console.log('⏰ Order expiry sweep: checking for expired pending orders...');
+
+    const now = new Date().toISOString();
+    const fallbackCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Query 1: orders with expires_at explicitly in the past
+    const { data: expiredByDate, error: err1 } = await supabase
+      .from('payments')
+      .select('id, items')
+      .eq('status', 'pending')
+      .lt('expires_at', now);
+
+    // Query 2: orders where expires_at is NULL (placed before column existed) and older than 12h
+    const { data: expiredByAge, error: err2 } = await supabase
+      .from('payments')
+      .select('id, items')
+      .eq('status', 'pending')
+      .is('expires_at', null)
+      .lt('created_at', fallbackCutoff);
+
+    if (err1) console.error('⚠️ Sweep query 1 error:', err1.message);
+    if (err2) console.error('⚠️ Sweep query 2 error:', err2.message);
+
+    const expiredOrders = [
+      ...(expiredByDate || []),
+      ...(expiredByAge  || []),
+    ];
+
+    if (expiredOrders.length === 0) {
+      console.log('⏰ Sweep complete — no expired orders found');
+      return;
+    }
+
+    console.log(`⏰ Found ${expiredOrders.length} expired order(s) — reverting stock and marking expired`);
+
+    for (const order of expiredOrders) {
+      // Mark as expired
+      await supabase.from('payments').update({ status: 'expired' }).eq('id', order.id);
+      console.log(`✅ Order #${order.id} marked expired`);
+
+      // Revert in_stock for each item
+      if (!order.items) continue;
+      const stockIncrements = new Map<number, number>();
+      for (const item of order.items) {
+        const postId = Number(item.post_id);
+        const qty    = Number(item.quantity ?? 1);
+        if (postId) stockIncrements.set(postId, (stockIncrements.get(postId) ?? 0) + qty);
+      }
+      await Promise.all(
+        Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
+          const { data: post } = await supabase
+            .from('service_posts').select('in_stock').eq('id', postId).single();
+          const newStock = Number(post?.in_stock ?? 0) + qty;
+          await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
+          console.log(`✅ in_stock reverted for post #${postId} +${qty} → ${newStock} (order expired)`);
+        }),
+      );
+    }
+
+    console.log('✅ Order expiry sweep complete');
+  } catch (err) {
+    console.error('❌ Order expiry sweep error:', err);
+  }
+}
+
+// Run expiry sweep immediately on startup, then every 30 minutes
+sweepExpiredOrders();
+setInterval(sweepExpiredOrders, 30 * 60 * 1000);
+
+// ── 24h thrift request expiry sweep ─────────────────────────────────────────
+// Finds 'requested' thrift rows whose 24h window has passed, marks them
+// 'expired', and restores in_stock so the units become available again.
+async function sweepExpiredThriftRequests(): Promise<void> {
+  try {
+    console.log('⏰ Thrift expiry sweep: checking for expired requests...');
+
+    const now = new Date().toISOString();
+
+    const { data: expiredRows, error } = await supabase
+      .from('thrift_requests')
+      .select('id, post_id, photo_index')
+      .eq('status', 'requested')
+      .not('expires_at', 'is', null)
+      .lt('expires_at', now);
+
+    if (error) { console.error('❌ Thrift expiry sweep query error:', error); return; }
+
+    if (!expiredRows || expiredRows.length === 0) {
+      console.log('✅ Thrift expiry sweep complete — nothing to expire');
+      return;
+    }
+
+    const ids = expiredRows.map((r: any) => r.id);
+    await supabase.from('thrift_requests').update({ status: 'expired' }).in('id', ids);
+
+    // Group by post_id — separate photo-based from no-photo
+    const byPost = new Map<number, { photoIndexes: number[]; noPhotoCount: number }>();
+    for (const r of expiredRows) {
+      if (!byPost.has(r.post_id)) byPost.set(r.post_id, { photoIndexes: [], noPhotoCount: 0 });
+      const entry = byPost.get(r.post_id)!;
+      if (r.photo_index !== null && r.photo_index !== undefined) {
+        entry.photoIndexes.push(r.photo_index);
+      } else {
+        entry.noPhotoCount++;
+      }
+    }
+
+    for (const [postId, { photoIndexes, noPhotoCount }] of byPost) {
+      const { data: post } = await supabase.from('service_posts').select('in_stock, thrift_reserved_indexes').eq('id', postId).single();
+      const updates: any = {};
+      if (photoIndexes.length > 0) {
+        const current = post?.thrift_reserved_indexes ?? [];
+        updates.thrift_reserved_indexes = current.filter((i: number) => !photoIndexes.includes(i));
+        console.log(`♻️  Post #${postId}: photo(s) [${photoIndexes}] released from reserved`);
+      }
+      if (noPhotoCount > 0) {
+        updates.in_stock = Number(post?.in_stock ?? 0) + noPhotoCount;
+        console.log(`♻️  Post #${postId}: in_stock restored to ${updates.in_stock}`);
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('service_posts').update(updates).eq('id', postId);
+      }
+    }
+
+    console.log(`✅ Thrift expiry sweep complete — expired ${ids.length} request(s)`);
+  } catch (err) {
+    console.error('❌ Thrift expiry sweep error:', err);
+  }
+}
+
+// Run immediately on startup, then every 30 minutes
+sweepExpiredThriftRequests();
+setInterval(sweepExpiredThriftRequests, 30 * 60 * 1000);
 
 server.on('error', (error: any) => {
   logger.error('Server failed to start', {

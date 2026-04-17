@@ -67,7 +67,7 @@ export default function ChatScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
 
-  const { currentUserId, otherUserId, otherUserName } = route.params || {};
+  const { currentUserId, otherUserId, otherUserName, postId, postTitle, serviceCategory } = route.params || {};
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -116,9 +116,10 @@ export default function ChatScreen() {
 
   const fetchMessages = async () => {
     try {
-      const data: Message[] = await api.get(
-        `/messages/${currentUserId}/${otherUserId}`
-      );
+      const url = postId
+        ? `/messages/${currentUserId}/${otherUserId}?post_id=${postId}`
+        : `/messages/${currentUserId}/${otherUserId}`;
+      const data: Message[] = await api.get(url);
 
       const validMessages = Array.isArray(data) ? data : [];
 
@@ -152,6 +153,8 @@ export default function ChatScreen() {
         sender_id: currentUserId,
         receiver_id: otherUserId,
         message_text: inputText.trim(),
+        post_id: postId || null,
+        post_title: postTitle || null,
       });
 
       setMessages((prev) => [...prev, newMessage]);
@@ -180,7 +183,7 @@ export default function ChatScreen() {
 
     const interval = setInterval(fetchMessages, 5000);
     return () => clearInterval(interval);
-  }, [currentUserId, otherUserId]);
+  }, [currentUserId, otherUserId, postId]);
 
   /* ───────────────── NEW: Review Handler ───────────────── */
   
@@ -225,6 +228,9 @@ export default function ChatScreen() {
       >
         <Text style={styles.messageText}>{item.message_text}</Text>
         <Text style={styles.timestamp}>
+          {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </Text>
+        <Text style={styles.timestamp}>
           {new Date(item.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -252,14 +258,21 @@ export default function ChatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text
-          style={[
-            styles.headerTitle,
-            hasUnreadMessages && styles.headerTitleBold,
-          ]}
-        >
-          {otherUserName}
-        </Text>
+        <View style={styles.headerCenter}>
+          <Text
+            style={[
+              styles.headerTitle,
+              hasUnreadMessages && styles.headerTitleBold,
+            ]}
+          >
+            {otherUserName}
+          </Text>
+          {(postTitle || serviceCategory) && (
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {postTitle || serviceCategory}
+            </Text>
+          )}
+        </View>
 
         {/* Calendar button - Shows small widget overlay on right side */}
         <TouchableOpacity
@@ -354,11 +367,21 @@ const styles = createResponsiveStyles({
     borderColor: "#e5e7eb",
   },
 
-  headerTitle: {
+  headerCenter: {
     flex: 1,
+    alignItems: "center",
+  },
+  headerTitle: {
     textAlign: "center",
     fontSize: 18,
     fontWeight: "600",
+  },
+  headerSubtitle: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#555",
+    marginTop: 2,
   },
 
   headerTitleBold: {

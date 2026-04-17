@@ -17,7 +17,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl,
+  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +28,7 @@ const STATUS_COLOR: Record<string, string> = {
   pending:   '#F59E0B',
   completed: '#2E7D32',
   cancelled: '#E53935',
+  expired:   '#9E9E9E',
 };
 
 const OrdersScreen: React.FC = () => {
@@ -51,7 +52,7 @@ const OrdersScreen: React.FC = () => {
 
   useFocusEffect(useCallback(() => { fetchOrders(); }, [fetchOrders]));
 
-  const markCompleted = async (orderId: string) => {
+  const markCompleted = (orderId: string) => {
     Alert.alert(
       'Mark as Completed',
       'Confirm you have received payment via Zelle?',
@@ -80,16 +81,24 @@ const OrdersScreen: React.FC = () => {
   const renderOrder = ({ item }: { item: any }) => {
     const itemList: any[] = item.items || [];
     const amount = ((item.amount || 0) / 100).toFixed(2);
-    const date = item.created_at
-      ? new Date(item.created_at).toLocaleDateString()
+    const dateObj = item.created_at ? new Date(item.created_at) : null;
+    const date = dateObj
+      ? dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
       : '—';
+    const time = dateObj
+      ? dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const orderId = item.id ? `#${String(item.id).slice(0, 8).toUpperCase()}` : '—';
     const statusColor = STATUS_COLOR[item.status] || '#888';
 
     return (
       <View style={styles.card}>
         {/* Header row */}
         <View style={styles.cardHeader}>
-          <Text style={styles.date}>{date}</Text>
+          <View>
+            <Text style={styles.orderId}><Text style={styles.metaLabel}>Order ID: </Text>{orderId}</Text>
+            <Text style={styles.date}><Text style={styles.metaLabel}>Date: </Text>{date}{time ? `  ${time}` : ''}</Text>
+          </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
             <Text style={[styles.statusText, { color: statusColor }]}>
               {item.status?.toUpperCase()}
@@ -97,11 +106,24 @@ const OrdersScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Customer name */}
+        <View style={styles.row}>
+          <Ionicons name="person-outline" size={14} color="#666" />
+          <Text style={styles.customerLabel}>Customer: </Text>
+          <Text style={styles.customerValue}>{item.buyer_name || 'Customer'}</Text>
+        </View>
+
         {/* Items */}
         {itemList.map((i: any, idx: number) => (
-          <Text key={idx} style={styles.itemName} numberOfLines={1}>
-            • {i.title}
-          </Text>
+          <View key={idx} style={styles.itemRow}>
+            {i.photo_url ? (
+              <Image source={{ uri: i.photo_url }} style={styles.itemThumb} resizeMode="cover" />
+            ) : null}
+            <View style={styles.itemInfo}>
+              <Text style={styles.itemName} numberOfLines={1}>• {i.title}</Text>
+              <Text style={styles.itemProductId}>#P{i.post_id}-{(i.photo_index ?? 0) + 1}</Text>
+            </View>
+          </View>
         ))}
 
         {/* Amount */}
@@ -150,11 +172,11 @@ const OrdersScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#4A90E2" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order History</Text>
         <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Order History</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+          <Ionicons name="close" size={26} color="#666" />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -187,10 +209,15 @@ const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#f5f5f5' },
   header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
   backBtn:     { padding: 4 },
+  closeBtn:    { padding: 4, width: 40, alignItems: 'flex-end' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#333' },
   card:        { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#e0e0e0', elevation: 1 },
   cardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  metaLabel:   { fontSize: 12, fontWeight: '600', color: '#888' },
+  orderId:     { fontSize: 13, fontWeight: '700', color: '#333' },
   date:        { fontSize: 12, color: '#888' },
+  customerLabel: { fontSize: 12, color: '#666' },
+  customerValue: { fontSize: 12, color: '#333', fontWeight: '600' },
   statusBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   statusText:  { fontSize: 11, fontWeight: '700' },
   itemName:    { fontSize: 13, color: '#444', marginBottom: 2 },
@@ -203,6 +230,10 @@ const styles = StyleSheet.create({
   completeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 16, color: '#aaa', marginTop: 12 },
+  itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  itemThumb:    { width: 36, height: 36, borderRadius: 6 },
+  itemInfo:     { flex: 1 },
+  itemProductId: { fontSize: 11, color: '#888', fontWeight: '600' },
 });
 
 export default OrdersScreen;

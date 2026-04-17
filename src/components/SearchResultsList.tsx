@@ -51,6 +51,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import ReviewsModal from "./Reviewsmodal";
 import { createResponsiveStyles } from "../Utils/globalStyles";
+import api from '../api';
 
 interface ServicePost {
   post_id: number;
@@ -85,7 +86,7 @@ type AddToCartFn = (
   photoIndex: number,
   photoUrl: string,
   photoPrice?: number,
-) => void;
+) => boolean | void;
 
 interface SearchResults {
   exactZipMatches: ServicePost[];
@@ -128,6 +129,8 @@ const CATEGORY_META: Record<string, { icon: IoniconsName; color: string }> = {
   "Tutoring":        { icon: "school",          color: "#1E88E5" },
   "Photography":     { icon: "camera",          color: "#8E24AA" },
   "Tailoring":       { icon: "color-palette",   color: "#00897B" },
+  "Painting":        { icon: "brush",           color: "#FF7043" },
+  "Preloved & Thrifting": { icon: "shirt",  color: "#8D6E63" },
 };
 
 const DEFAULT_META = { icon: "briefcase" as IoniconsName, color: "#607D8B" };
@@ -161,11 +164,118 @@ const MiniServiceCard: React.FC<{
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [requestStatus, setRequestStatus] = useState<'idle' | 'loading' | 'requested' | 'completed' | 'unavailable'>(
+    item.service_category?.toLowerCase().trim() === 'preloved & thrifting' && item.in_stock != null && item.in_stock <= 0 ? 'unavailable' : 'idle'
+  );
+  const [liveInStock, setLiveInStock] = useState<number | null | undefined>(item.in_stock);
+  const [soldPhotoIndexes, setSoldPhotoIndexes] = useState<number[]>([]);
+  const [thriftPendingIndexes, setThriftPendingIndexes] = useState<number[]>([]);
+  const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
+  const [stockChecking, setStockChecking] = useState(false);
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
 
-  const handleAddListingToCart = () => {
+  const isThriftingFree =
+    item.service_category?.toLowerCase().trim() === 'preloved & thrifting';
+
+  // Fetch live in_stock + sold_photo_indexes when modal opens
+  React.useEffect(() => {
+    if (modalVisible && item.post_id) {
+      setStockChecking(true);
+      api.get(`/api/service-posts/${item.post_id}`)
+        .then((res: any) => {
+          const post = res.post ?? res;
+          if (post?.in_stock != null) setLiveInStock(post.in_stock);
+          if (Array.isArray(post?.sold_photo_indexes)) setSoldPhotoIndexes(post.sold_photo_indexes);
+          if (Array.isArray(post?.thrift_pending_indexes)) setThriftPendingIndexes(post.thrift_pending_indexes);
+          if (isThriftingFree) {
+            if (post?.in_stock != null && post.in_stock <= 0) setRequestStatus('unavailable');
+            else setRequestStatus(prev => prev === 'unavailable' ? 'idle' : prev);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setStockChecking(false));
+    }
+    // Reset selection and request state each time modal opens so stale state from
+    // a previous user session (logout/login) doesn't disable the button.
+    if (modalVisible) {
+      setSelectedPhotoIndex(0);
+      setRequestedPhotoIndexes(new Set());
+      if (isThriftingFree && (item.photos ?? []).length > 0) {
+        setRequestStatus('idle');
+      }
+    }
+  }, [modalVisible]);
+
+  // After soldPhotoIndexes loads, if the current selection is sold, auto-advance
+  // to the first available photo so the modal never opens on a "Sorry, not available" state
+  React.useEffect(() => {
+    if (soldPhotoIndexes.length === 0) return;
+    if (soldPhotoIndexes.includes(selectedPhotoIndex)) {
+      const firstAvailable = (item.photos ?? []).findIndex((_, idx) => !soldPhotoIndexes.includes(idx));
+      if (firstAvailable !== -1) setSelectedPhotoIndex(firstAvailable);
+    }
+  }, [soldPhotoIndexes]);
+
+  // When the user taps a different photo thumbnail, reset item-level state so each
+  // photo is evaluated independently.
+  React.useEffect(() => {
+    if (!isThriftingFree || !(item.photos ?? []).length) return;
+    if (!soldPhotoIndexes.includes(selectedPhotoIndex)) {
+      setRequestStatus(prev => prev === 'unavailable' ? 'idle' : prev);
+    }
+  }, [selectedPhotoIndex]);
+
+  const handleRequestItem = async () => {
+    if (!isAuthenticated) {
+      setModalVisible(false);
+      setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
+      return;
+    }
+    if (isOwnPost) {
+      Alert.alert('Cannot Request', 'You cannot request your own item.');
+      return;
+    }
+    setRequestStatus('loading');
+    try {
+      const hasPhotos = (item.photos ?? []).length > 0;
+      await api.post('/api/thrift-requests', {
+        post_id:          item.post_id,
+        provider_user_id: item.user_id,
+        post_title:       item.title,
+        post_photo_url:   item.photos?.[selectedPhotoIndex] ?? item.photos?.[0] ?? null,
+        ...(hasPhotos ? { photo_index: selectedPhotoIndex } : {}),
+      });
+      setRequestedPhotoIndexes(prev => new Set([...prev, selectedPhotoIndex]));
+      setRequestStatus('idle');
+      Alert.alert(
+        'Request Sent!',
+        `Your request for "${item.title}" has been sent to the seller. Select another photo to request more, or tap Done when finished.`,
+        [{ text: 'OK' }],
+      );
+    } catch (e: any) {
+      // e.status = HTTP status code; e.response = parsed JSON body
+      const httpStatus = e?.status;
+      if (httpStatus === 409) {
+        const serverStatus = e?.response?.status || 'requested';
+        if (serverStatus === 'unavailable') {
+          setRequestStatus('unavailable');
+          Alert.alert('Not Available', e?.message || 'No more units available for this item.');
+        } else {
+          // buyer already has active request for this photo
+          setRequestedPhotoIndexes(prev => new Set([...prev, selectedPhotoIndex]));
+          setRequestStatus('idle');
+          Alert.alert('Already Requested', e?.message || 'You already have an active request for this item.');
+        }
+      } else {
+        setRequestStatus('idle');
+        Alert.alert('Request Failed', e?.message || 'Something went wrong. Please try again.');
+      }
+    }
+  };
+
+  const handleAddListingToCart = async () => {
     if (!isAuthenticated) {
       setModalVisible(false);
       setTimeout(() => navigation.navigate('BusinessOwnerHomeScreen'), 300);
@@ -175,8 +285,22 @@ const MiniServiceCard: React.FC<{
       Alert.alert('Cannot Add', 'You cannot add your own service to cart.');
       return;
     }
+    // Live stock guard — re-check DB right before adding to prevent race conditions
+    if (item.post_id) {
+      try {
+        const res: any = await api.get(`/api/service-posts/${item.post_id}`);
+        const post = res.post ?? res;
+        if (post?.in_stock != null) setLiveInStock(post.in_stock);
+        if (Array.isArray(post?.sold_photo_indexes)) {
+          setSoldPhotoIndexes(post.sold_photo_indexes);
+          if (post.sold_photo_indexes.includes(selectedPhotoIndex)) return; // this photo is sold
+        }
+        if (post?.in_stock != null && post.in_stock <= 0) return;
+      } catch { /* proceed if check fails */ }
+    }
     const firstPhotoUrl = item.photos?.[selectedPhotoIndex] ?? item.photos?.[0] ?? '';
-    onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex]);
+    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex]);
+    if (added === false) return;
     setAddedToCart(true);
     Alert.alert(
       'Added to Cart',
@@ -269,28 +393,34 @@ const MiniServiceCard: React.FC<{
           </View>
           <ScrollView contentContainerStyle={modalStyles.body} showsVerticalScrollIndicator={false}>
 
-            {/* 1. Photos — tappable to select variant */}
+            {/* 1. Photos — thumbnails with product ID and sold overlay */}
             {(item.photos ?? []).length > 0 && (
-              <>
-                <Image
-                  source={{ uri: item.photos![selectedPhotoIndex] }}
-                  style={modalStyles.mainPhoto}
-                  resizeMode="cover"
-                />
-                {item.photos!.length > 1 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
-                    {item.photos!.map((uri, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
-                        style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
-                      >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.photoScroll}>
+                {item.photos!.map((uri, index) => {
+                  const isSold    = soldPhotoIndexes.includes(index);
+                  const isPending = !isSold && isThriftingFree && thriftPendingIndexes.includes(index);
+                  const badgeLabel = isSold ? 'Unavailable' : isPending ? 'Active Requests' : 'Available';
+                  const badgeColor = isSold ? '#9E9E9E' : isPending ? '#F59E0B' : '#2E7D32';
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
+                      style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
+                      activeOpacity={0.7}
+                    >
+                      <View style={modalStyles.thumbImgWrapper}>
                         <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-              </>
+                      </View>
+                      <Text style={modalStyles.thumbLabel}>#{item.post_id}-{index + 1}</Text>
+                      {isThriftingFree && (
+                        <View style={[modalStyles.photoBadge, { backgroundColor: badgeColor }]}>
+                          <Text style={modalStyles.photoBadgeText}>{badgeLabel}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             )}
 
             {/* 2. Title */}
@@ -326,54 +456,151 @@ const MiniServiceCard: React.FC<{
             )}
 
             {/* 5. Price */}
-            {item.price && (
+            {(item.price || item.service_category?.toLowerCase().trim() === 'preloved & thrifting') && (
               <View style={modalStyles.priceRow}>
                 <Ionicons name="cash-outline" size={14} color="#2E7D32" />
-                <Text style={modalStyles.priceText}> {item.price}</Text>
+                <Text style={modalStyles.priceText}>
+                  {item.service_category?.toLowerCase().trim() === 'preloved & thrifting' && (!item.price || parseFloat(item.price) === 0)
+                    ? ' Free'
+                    : ` $${item.price}`}
+                </Text>
               </View>
             )}
 
-            {/* 6. In Stock — only for payment-enabled categories */}
-            {paymentCategories?.has(item.service_category) && item.in_stock != null && item.in_stock > 0 && (
+            {/* In stock qty — shown right after Free for thrifting */}
+            {isThriftingFree && (liveInStock ?? item.in_stock) != null && (liveInStock ?? item.in_stock)! > 0 && (
               <View style={modalStyles.deliveryRow}>
                 <Ionicons name="cube-outline" size={14} color="#555" />
-                <Text style={modalStyles.deliveryText}> In stock: {item.in_stock}</Text>
+                <Text style={modalStyles.deliveryText}> In stock qty: {liveInStock ?? item.in_stock}</Text>
               </View>
             )}
 
-            {/* 7. Delivery Timeline — only for payment-enabled categories */}
-            {paymentCategories?.has(item.service_category) && item.delivery_timeline && (
+            {/* 6. Available count — total photos minus sold photos */}
+            {paymentCategories?.has(item.service_category) && !isThriftingFree && (item.photos ?? []).length > 0 && (
+              (() => {
+                const available = (item.photos?.length ?? 0) - soldPhotoIndexes.length;
+                return available > 0 ? (
+                  <View style={modalStyles.deliveryRow}>
+                    <Ionicons name="cube-outline" size={14} color="#555" />
+                    <Text style={modalStyles.deliveryText}> Available: {available} of {item.photos!.length}</Text>
+                  </View>
+                ) : null;
+              })()
+            )}
+
+            {/* 7. Delivery Timeline — only for payment-enabled non-thrifting categories */}
+            {paymentCategories?.has(item.service_category) && !isThriftingFree && item.delivery_timeline && (
               <View style={modalStyles.deliveryRow}>
                 <Ionicons name="time-outline" size={14} color="#555" />
                 <Text style={modalStyles.deliveryText}> Delivery: {item.delivery_timeline}</Text>
               </View>
             )}
 
-            {/* 7+8. Add to Cart + Contact Provider stacked */}
+            {/* 7+8. Action buttons + Contact Provider stacked */}
             {isOwnPost ? (
               <View style={modalStyles.ownPostNote}>
                 <Text style={modalStyles.ownPostNoteText}>This is your post. You cannot contact yourself.</Text>
               </View>
             ) : (
               <View style={modalStyles.actionCol}>
-                {paymentCategories?.has(item.service_category) && (
-                  item.in_stock === 0 ? (
-                    <View style={modalStyles.unavailableBox}>
-                      <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
-                      <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.keepBrowsingBtn}>
-                        <Text style={modalStyles.keepBrowsingText}>Keep Browsing</Text>
-                      </TouchableOpacity>
+                {isThriftingFree ? (
+                  /* ── FREE Thrifting: Pickup/Delivery info + Request Item ── */
+                  <>
+                    <View style={modalStyles.pickupInfoBox}>
+                      <View style={modalStyles.pickupInfoHeader}>
+                        <Ionicons name="information-circle-outline" size={15} color="#4A90E2" />
+                        <Text style={modalStyles.pickupInfoTitle}> Pickup / Delivery</Text>
+                      </View>
+                      <Text style={modalStyles.pickupInfoText}>
+                        Please coordinate pickup and delivery using the seller chat below.
+                      </Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[modalStyles.cartButton, addedToCart && modalStyles.cartButtonAdded]}
-                      onPress={addedToCart
-                        ? () => { setModalVisible(false); setTimeout(() => navigation.navigate('CartScreen'), 300); }
-                        : handleAddListingToCart}
-                    >
-                      <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
-                      <Text style={modalStyles.buttonText}>{addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
-                    </TouchableOpacity>
+                    <View style={modalStyles.expiryNoteBox}>
+                      <Text style={modalStyles.expiryNoteLine}><Text style={{ fontWeight: '700' }}>Requesters:</Text> Please message the seller to arrange pickup or delivery.</Text>
+                      <Text style={[modalStyles.expiryNoteLine, { marginTop: 6 }]}><Text style={{ fontWeight: '700' }}>Seller:</Text> Requests are held for <Text style={{ fontWeight: '700' }}>48 hours</Text>. If no action is taken within this time, they will automatically expire and the item will become available again.</Text>
+                    </View>
+                    {(() => {
+                      const hasPhotos = (item.photos ?? []).length > 0;
+                      const selectedSold = hasPhotos && soldPhotoIndexes.includes(selectedPhotoIndex);
+                      const allUnavailable = hasPhotos
+                        ? (item.photos ?? []).every((_: any, idx: number) => soldPhotoIndexes.includes(idx))
+                        : false;
+
+                      // All items given away or no stock left
+                      if (allUnavailable || requestStatus === 'unavailable' || (liveInStock != null && liveInStock <= 0)) {
+                        return (
+                          <View style={modalStyles.unavailableBox}>
+                            <Text style={modalStyles.unavailableText}>Sorry, this item is not available.</Text>
+                            <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.keepBrowsingBtn}>
+                              <Text style={modalStyles.keepBrowsingText}>Keep Browsing</Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+
+                      // Selected photo already given away — pick a different one
+                      if (selectedSold) {
+                        return (
+                          <View style={modalStyles.unavailableBox}>
+                            <Text style={modalStyles.unavailableText}>This photo has been picked up.</Text>
+                            <Text style={[modalStyles.unavailableText, { fontSize: 11, color: '#bbb', marginBottom: 0 }]}>Select another photo to request.</Text>
+                          </View>
+                        );
+                      }
+
+                      const alreadyRequested = requestedPhotoIndexes.has(selectedPhotoIndex);
+                      return (
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <TouchableOpacity
+                            style={[
+                              modalStyles.cartButton,
+                              alreadyRequested && modalStyles.cartButtonAdded,
+                              requestStatus === 'loading' && { opacity: 0.6 },
+                            ]}
+                            onPress={alreadyRequested ? undefined : handleRequestItem}
+                            disabled={requestStatus === 'loading' || alreadyRequested}
+                          >
+                            <Ionicons
+                              name={alreadyRequested ? 'checkmark-circle' : 'hand-right-outline'}
+                              size={18}
+                              color="#fff"
+                            />
+                            <Text style={modalStyles.buttonText}>
+                              {requestStatus === 'loading' ? ' Sending...' : alreadyRequested ? ' Sent' : ' Request'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={modalStyles.doneBtn}
+                            onPress={() => setModalVisible(false)}
+                          >
+                            <Text style={modalStyles.doneBtnText}>Done</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  /* ── Paid categories: Add to Cart ── */
+                  paymentCategories?.has(item.service_category) && (
+                    soldPhotoIndexes.includes(selectedPhotoIndex) || ((item.photos ?? []).length > 0 && soldPhotoIndexes.length >= (item.photos ?? []).length) ? (
+                      <View style={modalStyles.unavailableBox}>
+                        <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
+                        <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.keepBrowsingBtn}>
+                          <Text style={modalStyles.keepBrowsingText}>Keep Browsing</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[modalStyles.cartButton, (addedToCart || stockChecking) && modalStyles.cartButtonAdded, stockChecking && { opacity: 0.6 }]}
+                        onPress={addedToCart
+                          ? () => { setModalVisible(false); setTimeout(() => navigation.navigate('CartScreen'), 300); }
+                          : handleAddListingToCart}
+                        disabled={stockChecking}
+                      >
+                        <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
+                        <Text style={modalStyles.buttonText}>{stockChecking ? ' Checking...' : addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
+                      </TouchableOpacity>
+                    )
                   )
                 )}
                 <TouchableOpacity
@@ -381,7 +608,9 @@ const MiniServiceCard: React.FC<{
                   onPress={() => { setModalVisible(false); setTimeout(() => onChatPress(item), 300); }}
                 >
                   <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
-                  <Text style={modalStyles.buttonText}> Contact Provider</Text>
+                  <Text style={modalStyles.buttonText}>
+                    {isThriftingFree || paymentCategories?.has(item.service_category) ? ' Message Seller' : ' Contact Provider'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -458,45 +687,49 @@ const modalStyles = StyleSheet.create({
   },
   closeBtn: { padding: 4 },
   body: { paddingBottom: 40 },
-  mainPhoto: { width: '100%', height: 240, marginBottom: 8 },
-  photoScroll: { paddingHorizontal: 12, marginBottom: 8 },
-  thumbCard: { marginRight: 8, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  photoScroll: { paddingHorizontal: 12, marginBottom: 8, marginTop: 8 },
+  thumbCard: { marginRight: 8, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', alignItems: 'center' },
   thumbSelected: { borderColor: '#4A90E2' },
-  thumbImg: { width: 64, height: 64 },
+  thumbSold: { borderColor: '#ccc' },
+  thumbImgWrapper: { width: 100, height: 100, borderRadius: 6, overflow: 'hidden' },
+  thumbImg: { width: 100, height: 100 },
+  thumbLabel: { fontSize: 10, fontWeight: '700', color: '#4A90E2', marginTop: 3, textAlign: 'center' },
+  photoBadge: { marginTop: 3, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' as const },
+  photoBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
   photoCard: { width: 130, marginRight: 10, alignItems: 'center' },
   photoCardImg: { width: 120, height: 120, borderRadius: 8 },
   postTitle: {
     fontSize: 14, fontWeight: '700', color: '#1a1a1a',
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
   },
   descriptionText: {
     fontSize: 14, color: '#444', lineHeight: 21,
-    paddingHorizontal: 16, marginBottom: 10,
+    paddingHorizontal: 16, marginBottom: 6,
   },
-  noDescText: { fontSize: 13, color: '#bbb', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 8 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 },
+  noDescText: { fontSize: 13, color: '#bbb', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 4 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 },
   ratingText: { fontSize: 13, color: '#888', marginLeft: 4 },
-  businessName: { fontSize: 13, color: '#666', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 4 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 },
+  businessName: { fontSize: 13, color: '#666', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 2 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 2 },
   locationText: { fontSize: 13, color: '#888' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 },
   priceText: { fontSize: 14, color: '#2E7D32', fontWeight: '600' },
-  deliveryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+  deliveryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 },
   deliveryText: { fontSize: 13, color: '#555', fontWeight: '600' },
   actionCol: {
-    flexDirection: 'column', alignItems: 'flex-start',
-    marginHorizontal: 16, marginTop: 16, gap: 10,
+    flexDirection: 'column', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 8, gap: 8,
   },
   cartButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#2E7D32', paddingVertical: 10, paddingHorizontal: 20,
-    borderRadius: 10, gap: 6, width: 180,
+    backgroundColor: '#2E7D32', paddingVertical: 10, paddingHorizontal: 24,
+    borderRadius: 10, gap: 6, minWidth: 140,
   },
   cartButtonAdded: { backgroundColor: '#388E3C' },
   contactButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#4A90E2', paddingVertical: 10, paddingHorizontal: 20,
-    borderRadius: 10, gap: 6, width: 180,
+    backgroundColor: '#4A90E2', paddingVertical: 10, paddingHorizontal: 24,
+    borderRadius: 10, gap: 6, minWidth: 160,
   },
   buttonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   ownPostNote: {
@@ -504,7 +737,16 @@ const modalStyles = StyleSheet.create({
     padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8,
   },
   ownPostNoteText: { color: '#999', fontSize: 13, fontStyle: 'italic' },
-unavailableBox: { width: 180, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, alignItems: 'center' as const, borderWidth: 1, borderColor: '#ddd' },
+  pickupInfoBox: { backgroundColor: '#F0F4FF', borderRadius: 8, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#C5CAE9' },
+  expiryNoteBox: { flexDirection: 'column' as const, backgroundColor: '#FBE9E7', borderRadius: 8, padding: 8, marginBottom: 8, borderWidth: 1, borderColor: '#FFCCBC' },
+  expiryNoteText: { fontSize: 11, color: '#6D4C41', lineHeight: 16, flex: 1 },
+  expiryNoteLine: { fontSize: 11, color: '#6D4C41', lineHeight: 16 },
+  pickupInfoHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, marginBottom: 4 },
+  pickupInfoTitle: { fontSize: 13, fontWeight: '700' as const, color: '#4A90E2' },
+  pickupInfoText: { fontSize: 12, color: '#555', lineHeight: 18 },
+  doneBtn: { alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1.5, borderColor: '#4A90E2' },
+  doneBtnText: { color: '#4A90E2', fontSize: 13, fontWeight: '700' as const },
+  unavailableBox: { width: 180, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, alignItems: 'center' as const, borderWidth: 1, borderColor: '#ddd' },
   unavailableText: { color: '#999', fontSize: 12, fontWeight: '600' as const, marginBottom: 8 },
   keepBrowsingBtn: { backgroundColor: '#4A90E2', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
   keepBrowsingText: { color: '#fff', fontSize: 12, fontWeight: '700' as const },

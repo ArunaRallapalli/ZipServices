@@ -13,14 +13,19 @@
 import React from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView,
+  StyleSheet, SafeAreaView, Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
+import type { RootState } from '../../store/store';
 
 const OrderReportScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const remainingCartItems = useSelector((state: RootState) =>
+    state.cart.items.filter(i => !i.saved_for_later)
+  );
   const {
     orderId,
     orderDate,
@@ -93,11 +98,14 @@ const OrderReportScreen: React.FC = () => {
               const unitPrice = parseFloat(String(item.photo_price || item.price || 0)) || 0;
               const qty = item.quantity ?? 1;
               const amount = unitPrice * qty;
+              const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
               return (
                 <View key={`${item.post_id}_${item.photo_index ?? idx}`} style={styles.tableRow}>
-                  <Text style={[styles.tableCell, { flex: 3 }]} numberOfLines={2}>
-                    {item.title}
-                  </Text>
+                  <View style={{ flex: 3, paddingRight: 4, gap: 4 }}>
+                    {item.photo_url ? <Image source={{ uri: item.photo_url }} style={styles.itemThumb} /> : null}
+                    <Text style={[styles.tableCell, { fontWeight: '700' }]} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.itemId}>{itemId}</Text>
+                  </View>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{qty}</Text>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>
                     {unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'}
@@ -119,10 +127,10 @@ const OrderReportScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'location-outline'} size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>{fulfillmentMethod === 'pickup' ? 'Pickup from Boutique' : 'Deliver To'}</Text>
+            <Text style={styles.sectionTitle}>{fulfillmentMethod === 'pickup' ? 'Fulfillment' : 'Deliver To'}</Text>
           </View>
           {fulfillmentMethod === 'pickup' ? (
-            <Text style={styles.addressText}>You will coordinate pickup directly with the provider.</Text>
+            <Text style={styles.addressText}>Please coordinate pickup directly with the provider.</Text>
           ) : shippingAddress ? (
             <>
               {shippingAddress.fullName ? <Text style={styles.addressText}>{shippingAddress.fullName}</Text> : null}
@@ -134,7 +142,7 @@ const OrderReportScreen: React.FC = () => {
         </View>
 
         {/* Payment Reminder */}
-        {(providerZelleId || isOfflineMethod) && (
+        {(totalCents || 0) > 0 && (providerZelleId || isOfflineMethod) && (
           <View style={styles.zelleReminder}>
             <Ionicons name="phone-portrait-outline" size={20} color="#1565C0" />
             <View style={{ flex: 1 }}>
@@ -174,13 +182,22 @@ const OrderReportScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Done Button */}
-        <TouchableOpacity
-          style={styles.doneBtn}
-          onPress={() => navigation.navigate('TabWrapperScreen')}
-        >
-          <Text style={styles.doneBtnText}>Done</Text>
-        </TouchableOpacity>
+        {/* Done / Continue Shopping Button */}
+        {remainingCartItems.length > 0 ? (
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => navigation.navigate('CartScreen')}
+          >
+            <Text style={styles.doneBtnText}>Continue — {remainingCartItems.length} item{remainingCartItems.length !== 1 ? 's' : ''} left in cart</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: 'TabWrapperScreen' }] })}
+          >
+            <Text style={styles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -216,6 +233,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
   },
   tableCell: { fontSize: 13, color: '#444' },
+  itemThumb: { width: 48, height: 48, borderRadius: 6, marginBottom: 4, backgroundColor: '#f0f0f0' },
+  itemId: { fontSize: 12, fontWeight: '700', color: '#555', marginTop: 2 },
   totalRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#e0e0e0',
@@ -234,11 +253,11 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   disclaimer: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
-    backgroundColor: '#FAFAFA', borderRadius: 10, padding: 14,
-    marginBottom: 16, borderWidth: 1, borderColor: '#e0e0e0',
+    backgroundColor: '#FFF8E1', borderRadius: 10, padding: 14,
+    marginBottom: 16, borderLeftWidth: 4, borderLeftColor: '#F57F17', borderWidth: 1, borderColor: '#FFE082',
   },
-  disclaimerText: { fontSize: 12, color: '#888', lineHeight: 18, flex: 1 },
-  disclaimerBold: { fontWeight: '700', color: '#666' },
+  disclaimerText: { fontSize: 12, color: '#5D4037', lineHeight: 18, flex: 1 },
+  disclaimerBold: { fontWeight: '700', color: '#E65100' },
   doneBtn: {
     backgroundColor: '#4A90E2', borderRadius: 12,
     paddingVertical: 14, alignItems: 'center', justifyContent: 'center',

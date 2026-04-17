@@ -42,17 +42,61 @@ export type ApiResponse<T = any> = {
  * @param options - Standard fetch options (method, headers, body, etc.)
  * @returns Parsed JSON response
  */
+/** Decode JWT payload without verifying signature (client-side only) */
+function decodeJwtExpiry(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.exp ?? null; // seconds since epoch
+  } catch {
+    return null;
+  }
+}
+
+/** Silently refresh the token if it expires within 24 hours */
+async function maybeRefreshToken(token: string): Promise<string> {
+  const exp = decodeJwtExpiry(token);
+  if (!exp) return token;
+  const secondsLeft = exp - Math.floor(Date.now() / 1000);
+  if (secondsLeft > 24 * 60 * 60) return token; // more than 1 day left — no refresh needed
+
+  try {
+    console.log('🔄 Token expiring soon, refreshing silently...');
+    const response = await fetch(`${API_URL}/business_owners/refresh-token`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) return token; // refresh failed — use existing token, let it expire naturally
+    const data = await response.json();
+    const newToken: string = data.token;
+    if (!newToken) return token;
+
+    // Persist the new token
+    await AsyncStorage.setItem('access_token', newToken);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('access_token', newToken);
+    }
+    console.log('✅ Token refreshed silently');
+    return newToken;
+  } catch {
+    return token; // network error — use existing token
+  }
+}
+
 async function request<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   try {
-   const asyncToken = await AsyncStorage.getItem('access_token');
-const webToken = typeof window !== 'undefined' 
-  ? (localStorage.getItem('access_token') ?? localStorage.getItem('token')) 
-  : null;
-const token = asyncToken ?? webToken;
-console.log('🔐 Token from storage:', token ? 'exists' : 'missing');
+    const asyncToken = await AsyncStorage.getItem('access_token');
+    const webToken = typeof window !== 'undefined'
+      ? (localStorage.getItem('access_token') ?? localStorage.getItem('token'))
+      : null;
+    const rawToken = asyncToken ?? webToken;
+
+    // Silently refresh if expiring within 24 hours
+    const token = rawToken ? await maybeRefreshToken(rawToken) : rawToken;
+    console.log('🔐 Token from storage:', token ? 'exists' : 'missing');
     
     // Build headers with Content-Type
     const headers: Record<string, string> = {
@@ -107,9 +151,9 @@ console.log('🔐 Token from storage:', token ? 'exists' : 'missing');
         hasToken: !!token
       });
 
-      // ✅ PERMANENT FIX: Better auth error handling
+      // 401 = token expired/invalid — clear it and treat as session expiry
     if (response.status === 401) {
-  console.warn('🔐 Unauthorized - Token expired or invalid');
+  console.warn(`🔐 Auth error [401] - Token expired or invalid`);
   try {
     await AsyncStorage.removeItem('access_token');
     if (typeof window !== 'undefined') {
@@ -120,14 +164,17 @@ console.log('🔐 Token from storage:', token ? 'exists' : 'missing');
   } catch (clearError) {
     console.error('❌ Failed to clear token:', clearError);
   }
-  // Redirect to login instead of showing generic error
-  if (typeof window !== 'undefined') {
-    window.location.href = '/login';
-  }
-  const error: any = new Error('Session expired. Please log in again.');
+  const error: any = new Error('Your session has expired. Please sign in again.');
   error.status = 401;
   throw error;
 }
+      // 403 = forbidden (valid token, but no permission) — do NOT clear token
+      if (response.status === 403) {
+        console.warn(`🔐 Auth error [403] - Forbidden (insufficient permissions)`);
+        const error: any = new Error(errorMessage || 'You do not have permission to perform this action.');
+        error.status = 403;
+        throw error;
+      }
       
       // For other errors, throw with details
       const error = new Error(errorMessage);

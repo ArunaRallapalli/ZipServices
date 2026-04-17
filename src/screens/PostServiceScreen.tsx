@@ -64,8 +64,9 @@ const PostServiceScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [inStock, setInStock] = useState('1');
-  const [deliveryOption, setDeliveryOption] = useState<'pickup' | 'delivery' | 'both' | ''>('');
-  const [deliveryFee, setDeliveryFee] = useState('');
+  const [shippingCharge, setShippingCharge] = useState('10.00');
+  const [postPaymentMethod, setPostPaymentMethod] = useState<string>('');
+  const [postPaymentInfo, setPostPaymentInfo] = useState<string>('');
 
   // Photo state — each entry is { asset, description }
   const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
@@ -305,24 +306,10 @@ const PostServiceScreen: React.FC = () => {
   const checkAuthAndRedirect = async () => {
     console.log('🔐 Auth check - isAuthenticated:', isAuthenticated, 'userId:', userId);
     setLoadingUser(true);
-
     if (!isAuthenticated || !userId) {
-      console.log('❌ Not authenticated - redirecting to login');
       setLoadingUser(false);
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to post a service.',
-        [
-          {
-            text: 'Sign In',
-            onPress: () => navigation.navigate('BusinessOwnerHomeScreen' as never),
-          },
-        ],
-        { cancelable: false },
-      );
-      return;
+      return; // UI block at bottom handles the sign-in prompt
     }
-
     console.log('✅ Authenticated - loading profile');
     await loadUserProfile();
     setLoadingUser(false);
@@ -385,6 +372,13 @@ const PostServiceScreen: React.FC = () => {
         }
         if (profile.user?.email) setContactEmail(profile.user.email);
       }
+
+      // Pre-fill payment method from business owner profile
+      if (userId) {
+        const boData = await api.get(`/business-owners/by-user/${userId}`);
+        if (boData?.payment_method) setPostPaymentMethod(boData.payment_method);
+        if (boData?.payment_info) setPostPaymentInfo(boData.payment_info);
+      }
     } catch (error) {
       console.error('❌ Error loading user profile:', error);
     }
@@ -400,8 +394,28 @@ const PostServiceScreen: React.FC = () => {
     if (!serviceCategory) { Alert.alert('Validation Error', 'Please select a service category'); return false; }
     if (!zipCode.trim()) { Alert.alert('Validation Error', 'Please enter a zip code'); return false; }
     if (!contactEmail.trim()) { Alert.alert('Validation Error', 'Please enter a contact email'); return false; }
+    const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
+    const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    if (acceptsPayment && !isThrifting && priceRange.trim() === '') {
+      Alert.alert('Validation Error', 'Please enter a price.');
+      return false;
+    }
     return true;
   };
+
+  const BOUTIQUE_CATEGORY = 'boutique';
+  const isBoutique = serviceCategory?.toLowerCase().trim() === BOUTIQUE_CATEGORY;
+
+  const PAYMENT_OPTIONS = [
+    { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
+    { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
+    { value: 'paypal',  label: 'PayPal',   handleLabel: 'PayPal email or phone' },
+    { value: 'cashapp', label: 'Cash App', handleLabel: 'Cash App $cashtag' },
+    { value: 'cash',    label: 'Cash',     handleLabel: null },
+    { value: 'check',   label: 'Check',    handleLabel: null },
+  ];
+  const selectedPaymentOption = PAYMENT_OPTIONS.find(o => o.value === postPaymentMethod);
+  const handleLabel = selectedPaymentOption?.handleLabel || null;
 
   // --------------------------------------------------------------------------
   // SUBMIT
@@ -442,17 +456,26 @@ const PostServiceScreen: React.FC = () => {
         service_category: serviceCategory,
         price: priceRange.trim() || null,
         delivery_timeline: deliveryTimeline.trim() || null,
-        delivery_option: serviceCategory === 'Catering' ? (deliveryOption || null) : null,
-        delivery_fee: serviceCategory === 'Catering' && deliveryOption !== 'pickup' ? (deliveryFee.trim() || null) : null,
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
         in_stock: parseInt(inStock) || 1,
+        shipping_charge_cents: isBoutique ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
+        post_payment_method: isBoutique ? (postPaymentMethod || null) : null,
+        post_payment_info: isBoutique ? (postPaymentInfo.trim() || null) : null,
       };
 
       console.log('📤 Submitting service offer...');
       const data = await api.post('/api/service-posts', servicePostData);
       console.log('✅ Post created successfully:', data.post.id);
+
+      // Save payment method + shipping as profile defaults for future posts
+      if (isBoutique && (postPaymentMethod || postPaymentInfo)) {
+        api.put(`/business-owners/by-user/${userId}`, {
+          payment_method: postPaymentMethod || null,
+          payment_info: postPaymentInfo.trim() || null,
+        }).catch(err => console.warn('⚠️ Could not save payment defaults to profile:', err));
+      }
 
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
@@ -504,8 +527,6 @@ const PostServiceScreen: React.FC = () => {
     setServiceCategory('');
     setPriceRange('');
     setDeliveryTimeline('5 to 7 business days');
-    setDeliveryOption('');
-    setDeliveryFee('');
     setSelectedPhotos([]);
   };
 
@@ -614,7 +635,12 @@ const PostServiceScreen: React.FC = () => {
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={serviceCategory}
-                onValueChange={setServiceCategory}
+                onValueChange={(val) => {
+                  setServiceCategory(val);
+                  const cat = serviceCategories.find(c => c.category_name === val);
+                  if (cat?.accepts_payment) setPriceRange('0.00');
+                  else setPriceRange('');
+                }}
                 style={styles.picker}
               >
                 <Picker.Item label="Select a category..." value="" />
@@ -688,30 +714,77 @@ const PostServiceScreen: React.FC = () => {
 
           {/* Price */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
-                ? 'Price per Item ($) *'
-                : 'Price/Rate (Optional)'}
-            </Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.currencyPrefix}>$</Text>
-              <TextInput
-                style={[styles.input, styles.priceInputFlex]}
-                value={priceRange}
-                onChangeText={setPriceRange}
-                placeholder={
-                  serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
-                    ? '0.00'
-                    : '50/hour, 200-300, Starting at 100'
-                }
-                keyboardType={
-                  serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment
-                    ? 'decimal-pad'
-                    : 'default'
-                }
-                maxLength={100}
-              />
-            </View>
+            {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
+              serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' ? (
+                /* Preloved & Thrifting — seller sets their own price (can be $0.00 for free) */
+                <>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.label}>Price per Item ($)</Text>
+                    <Text style={styles.labelHint}>Enter 0.00 if free</Text>
+                  </View>
+                  <View style={styles.priceInputRow}>
+                    <Text style={styles.currencyPrefix}>$</Text>
+                    <TextInput
+                      style={[styles.input, styles.priceInputFlex]}
+                      value={priceRange}
+                      onChangeText={(t) => {
+                        const clean = t.replace(/[^0-9.]/g, '');
+                        const parts = clean.split('.');
+                        const sanitized = parts.length > 2
+                          ? parts[0] + '.' + parts.slice(1).join('')
+                          : clean;
+                        setPriceRange(sanitized);
+                      }}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      blurOnSubmit={false}
+                      {...(Platform.OS === 'web' ? ({ inputMode: 'decimal' } as any) : {})}
+                      maxLength={10}
+                    />
+                  </View>
+                </>
+              ) : (
+              <>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Price per Item ($) *</Text>
+                </View>
+                <View style={styles.priceInputRow}>
+                  <Text style={styles.currencyPrefix}>$</Text>
+                  <TextInput
+                    style={[styles.input, styles.priceInputFlex]}
+                    value={priceRange}
+                    onChangeText={(t) => {
+                      const clean = t.replace(/[^0-9.]/g, '');
+                      const parts = clean.split('.');
+                      const sanitized = parts.length > 2
+                        ? parts[0] + '.' + parts.slice(1).join('')
+                        : clean;
+                      setPriceRange(sanitized);
+                    }}
+                    placeholder="0.00"
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                    {...(Platform.OS === 'web' ? ({ inputMode: 'decimal' } as any) : {})}
+                    maxLength={10}
+                  />
+                </View>
+              </>
+              )
+            ) : (
+              <>
+                <Text style={styles.label}>Price/Rate (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={priceRange}
+                  onChangeText={setPriceRange}
+                  placeholder="e.g., $50-$100 per hour"
+                  keyboardType="default"
+                  maxLength={100}
+                />
+              </>
+            )}
           </View>
 
           {/* Delivery Time — only for payment-enabled categories */}
@@ -728,40 +801,6 @@ const PostServiceScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Catering Delivery Option — only for Catering category */}
-          {serviceCategory === 'Catering' && (
-            <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Delivery Option</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={deliveryOption}
-                    onValueChange={(v) => setDeliveryOption(v as any)}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Select..." value="" />
-                    <Picker.Item label="Pickup Only" value="pickup" />
-                    <Picker.Item label="Delivery Only" value="delivery" />
-                    <Picker.Item label="Pickup & Delivery" value="both" />
-                  </Picker>
-                </View>
-              </View>
-
-              {(deliveryOption === 'delivery' || deliveryOption === 'both') && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Delivery Fee (Optional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={deliveryFee}
-                    onChangeText={setDeliveryFee}
-                    placeholder='e.g., 5.00 or "discuss in chat"'
-                    maxLength={50}
-                  />
-                  <Text style={styles.helperText}>Enter a flat fee or leave blank to discuss with customer</Text>
-                </View>
-              )}
-            </>
-          )}
 
           <Text style={styles.sectionHeader}>Contact Information</Text>
 
@@ -804,8 +843,9 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* In Stock — only for payment-enabled categories */}
-          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+          {/* In Stock — payment-enabled categories + Thrifting */}
+          {(serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ||
+            serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Quantity Available</Text>
               <TextInput
@@ -817,6 +857,63 @@ const PostServiceScreen: React.FC = () => {
                 maxLength={4}
               />
               <Text style={styles.helperText}>Set to 0 to mark as "Not Available"</Text>
+            </View>
+          )}
+
+          {/* Boutique-only: Shipping Charge */}
+          {isBoutique && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Shipping Charge ($)</Text>
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currencyPrefix}>$</Text>
+                <TextInput
+                  style={[styles.input, styles.priceInputFlex]}
+                  value={shippingCharge}
+                  onChangeText={(t) => {
+                    const clean = t.replace(/[^0-9.]/g, '');
+                    const parts = clean.split('.');
+                    setShippingCharge(parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : clean);
+                  }}
+                  placeholder="10.00"
+                  keyboardType="decimal-pad"
+                  blurOnSubmit={false}
+                  maxLength={8}
+                />
+              </View>
+              <Text style={styles.helperText}>Amount charged to buyer for shipping</Text>
+            </View>
+          )}
+
+          {/* Boutique-only: Payment Method */}
+          {isBoutique && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Payment Method</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={postPaymentMethod}
+                  onValueChange={(val) => { setPostPaymentMethod(val); setPostPaymentInfo(''); }}
+                  style={styles.picker}
+                >
+                  <Picker.Item label="Select payment method..." value="" />
+                  {PAYMENT_OPTIONS.map(o => (
+                    <Picker.Item key={o.value} label={o.label} value={o.value} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          )}
+
+          {/* Boutique-only: Payment Handle (Zelle/Venmo/PayPal/CashApp) */}
+          {isBoutique && handleLabel && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{handleLabel}</Text>
+              <TextInput
+                style={styles.input}
+                value={postPaymentInfo}
+                onChangeText={setPostPaymentInfo}
+                placeholder={handleLabel}
+                autoCapitalize="none"
+              />
             </View>
           )}
 
@@ -952,6 +1049,9 @@ const styles = createResponsiveStyles({
   priceInputRow: { flexDirection: 'row', alignItems: 'center' },
   currencyPrefix: { fontSize: 16, fontWeight: '700', color: '#333', paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRightWidth: 0, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
   priceInputFlex: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  labelRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 6 },
+  labelHint: { fontSize: 12, color: '#888', fontStyle: 'italic', marginLeft: 8 },
+  labelHintRed: { fontSize: 11, color: '#E53935', fontStyle: 'italic', fontWeight: '700' },
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,

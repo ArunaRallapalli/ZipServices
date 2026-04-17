@@ -66,11 +66,12 @@ import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 import CartScreen from '../screens/cart/CartScreen';
-import CheckoutScreen from '../screens/cart/CheckoutScreen';
+import BoutiqueCheckoutScreen from '../screens/cart/BoutiqueCheckoutScreen';
 import ServiceAddressScreen from '../screens/cart/ServiceAddressScreen';
-import PaymentScreen from '../screens/cart/PaymentScreen';
+import BoutiquePaymentScreen from '../screens/cart/BoutiquePaymentScreen';
 import OrdersScreen from '../screens/cart/OrdersScreen';
 import OrderReportScreen from '../screens/cart/OrderReportScreen';
+import ThriftingRequestsScreen from '../screens/ThriftingRequestsScreen';
 
 
 /**
@@ -156,9 +157,9 @@ export type RootStackParamList = {
     params?: TabParamList[keyof TabParamList];
   };
   CartScreen: undefined;
-  CheckoutScreen: { serviceAddress?: any };
+  BoutiqueCheckoutScreen: { fulfillmentMethod?: 'ship' | 'pickup' };
   ServiceAddressScreen: undefined;
-  PaymentScreen: { totalCents: number; items: any[]; providerZelleId?: string | null; providerPaymentMethod?: string | null };
+  BoutiquePaymentScreen: { totalCents: number; items: any[]; providerZelleId?: string | null; providerPaymentMethod?: string | null; fulfillmentMethod?: string };
   OrderReportScreen: {
     orderId?: string | number | null;
     orderDate?: string;
@@ -173,6 +174,7 @@ export type RootStackParamList = {
   // Listings & Posts - Service management
   ListingsScreen: undefined;  // View all user's posted services
   OrdersScreen: undefined;
+  ThriftingRequestsScreen: undefined;
    CalendarScreen: undefined;                      
   EditListing: { postId: number };                  // Edit existing service post
   PostServiceScreen: undefined;                     // Create new service post
@@ -198,6 +200,9 @@ export type RootStackParamList = {
     otherUserId: number;                            // ID of user you're chatting with
     otherUserName: string;                          // Display name for header
     currentUserId: number;                          // Current user's ID
+    postId?: number;                                // Post/listing this thread is about
+    postTitle?: string;                             // Service/post title for context
+    serviceCategory?: string;                       // Service category for context
   };
   BusinessOwnerChatScreen: { 
     businessOwnerUserId: number;                    // Business owner's user ID
@@ -383,6 +388,10 @@ const NavigationStack: React.FC = () => {
             component={OrdersScreen}
           />
           <RootStack.Screen
+            name="ThriftingRequestsScreen"
+            component={ThriftingRequestsScreen}
+          />
+          <RootStack.Screen
             name="ListingsScreen"
             component={ListingsScreen}
             options={{ headerTitle: 'My Listings' }}
@@ -426,8 +435,8 @@ const NavigationStack: React.FC = () => {
             options={{ headerTitle: 'My Cart' }}
           />
           <RootStack.Screen
-            name="CheckoutScreen"
-            component={CheckoutScreen}
+            name="BoutiqueCheckoutScreen"
+            component={BoutiqueCheckoutScreen}
             options={{ headerTitle: 'Checkout' }}
           />
           <RootStack.Screen
@@ -436,8 +445,8 @@ const NavigationStack: React.FC = () => {
             options={{ headerTitle: 'Service Address' }}
           />
           <RootStack.Screen
-            name="PaymentScreen"
-            component={PaymentScreen}
+            name="BoutiquePaymentScreen"
+            component={BoutiquePaymentScreen}
             options={{ headerTitle: 'Payment' }}
           />
           <RootStack.Screen

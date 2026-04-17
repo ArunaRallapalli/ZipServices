@@ -30,7 +30,7 @@ const generateToken = (user_id: string, business_id: number): string => {
   return jwt.sign(
     { user_id, business_id },
     process.env.JWT_SECRET || "secret",
-    { expiresIn: "1h" }
+    { expiresIn: "7d" }
   );
 };
 

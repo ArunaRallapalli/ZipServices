@@ -53,7 +53,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
         bo.street,
         bo.city,
         bo.state,
-        bo.zelle_id,
+        bo.payment_info,
         bo.payment_method,
         u.email,
         u.user_type,
@@ -89,7 +89,7 @@ router.get("/by-user/:user_id", authenticateToken, async (req: AuthRequest, res:
       user_type: data.user_type,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      zelle_id: data.zelle_id || null,
+      payment_info: data.payment_info || null,
       payment_method: data.payment_method || null,
     };
 
@@ -119,7 +119,7 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
     state,
     email,
     password,
-    zelle_id,
+    payment_info,
     payment_method,
   } = req.body;
 
@@ -147,12 +147,12 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
         street,
         city,
         state,
-        zelle_id: zelle_id || null,
+        payment_info: payment_info || null,
         payment_method: payment_method || null,
         accepts_zelle_payment:
           payment_method === 'cash' || payment_method === 'check'
             ? true
-            : !!(zelle_id?.trim()),
+            : !!(payment_info?.trim()),
       })
       .eq('user_id', userId)
       .select()

@@ -524,12 +524,20 @@ function buildOrderStatusHtml(params: {
     const unitPrice = item.photo_price || item.price || 0;
     const qty = item.quantity ?? 1;
     const amount = unitPrice * qty;
+    const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
+    const thumbHtml = item.photo_url
+      ? `<img src="${item.photo_url}" width="40" height="40" style="border-radius:5px;display:block;margin-bottom:3px;object-fit:cover;" alt="${item.title || 'item'}" />`
+      : '';
     return `
       <tr>
-        <td style="padding:8px;border-bottom:1px solid #f0f0f0">${item.title || '—'}</td>
-        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center">${qty}</td>
-        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">${unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'}</td>
-        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">${amount > 0 ? `$${amount.toFixed(2)}` : '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;vertical-align:top">
+          ${thumbHtml}
+          <span style="display:block;font-size:13px;font-weight:700">${item.title || '—'}</span>
+          <span style="display:block;font-size:11px;color:#888;font-weight:600;margin-top:2px">${itemId}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center;vertical-align:top">${qty}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${amount > 0 ? `$${amount.toFixed(2)}` : '—'}</td>
       </tr>`;
   }).join('');
 
@@ -596,6 +604,12 @@ function buildOrderStatusHtml(params: {
               </tbody>
             </table>
           </div>
+          <div style="font-size:11px;color:#999;margin-top:16px;padding:10px;background:#fafafa;border-radius:4px;line-height:16px">
+            <strong style="color:#666">Disclaimer:</strong> This transaction is directly between the service provider and the customer.
+            GoZipMarket is a platform that connects buyers and service providers and is not a party to any transaction.
+            GoZipMarket is not liable for any disputes, non-delivery, payment issues, or damages arising from transactions
+            conducted through this platform. Please exercise due diligence before making any payment.
+          </div>
           <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
         </div>
       </body>
@@ -654,6 +668,366 @@ export async function sendOrderStatusEmails({
     .then(() => console.log(`✅ Order ${status} email sent to ${email}`))
     .catch(err  => console.error(`❌ Failed to send order ${status} email to ${email}:`, err)),
   ));
+}
+
+// ============================================================================
+// ORDER PLACEMENT EMAILS (to Customer, Provider, and Admin)
+// ============================================================================
+
+interface OrderPlacementEmailParams {
+  orderId: string | number;
+  customerEmail: string;
+  customerName: string;
+  providerEmail: string;
+  providerName: string;
+  adminEmails: string[];
+  items: any[];
+  totalCents: number;
+  orderDate: string;
+}
+
+function buildProviderPlacementHtml(params: {
+  providerName: string;
+  customerName: string;
+  orderId: string | number;
+  items: any[];
+  totalCents: number;
+  orderDate: string;
+}): string {
+  const { providerName, customerName, orderId, items, totalCents, orderDate } = params;
+  const displayId = String(orderId).slice(0, 8).toUpperCase();
+  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  const itemsSubtotal = (items || []).reduce((sum: number, item: any) => {
+    const u = item.photo_price != null ? Number(item.photo_price) : Number(item.price || 0);
+    return sum + u * (item.quantity ?? 1);
+  }, 0);
+  const totalDollars = totalCents / 100;
+  const shippingFee = Math.round((totalDollars - itemsSubtotal) * 100) / 100;
+
+  const itemRows = (items || []).map((item: any) => {
+    const unitPrice = item.photo_price != null ? item.photo_price : (item.price || 0);
+    const qty = item.quantity ?? 1;
+    const amount = unitPrice * qty;
+    const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
+    const thumbHtml = item.photo_url
+      ? `<img src="${item.photo_url}" width="40" height="40" style="border-radius:5px;display:block;margin-bottom:3px;object-fit:cover;" alt="${item.title || 'item'}" />`
+      : '';
+    return `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;vertical-align:top">
+          ${thumbHtml}
+          <span style="display:block;font-size:13px;font-weight:700">${item.title || '—'}</span>
+          <span style="display:block;font-size:11px;color:#888;font-weight:600;margin-top:2px">${itemId}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center;vertical-align:top">${qty}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${unitPrice > 0 ? `$${Number(unitPrice).toFixed(2)}` : 'Free'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${amount > 0 ? `$${amount.toFixed(2)}` : 'Free'}</td>
+      </tr>`;
+  }).join('');
+
+  const shippingRow = shippingFee > 0
+    ? `<tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0" colspan="3">Shipping &amp; Handling</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">$${shippingFee.toFixed(2)}</td>
+       </tr>`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+          .wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #4A90E2; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+          .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; color: #777; }
+          th:last-child, th:nth-child(3) { text-align: right; }
+          th:nth-child(2) { text-align: center; }
+          .warning-box { background: #FFF8E1; border-left: 4px solid #FFA000; border-radius: 4px; padding: 14px 16px; margin: 20px 0; }
+          .total-row td { font-weight: 700; font-size: 15px; padding-top: 12px; }
+          .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 24px; }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="header">
+            <h2 style="margin:0">🛒 New Order Request — GoZipMarket</h2>
+          </div>
+          <div class="body">
+            <p>Hi ${providerName},</p>
+            <p>You've received a new order request from <strong>${customerName}</strong>.</p>
+
+            <table>
+              <tr><th>Order ID</th><td>#${displayId}</td></tr>
+              <tr><th>Date / Time</th><td>${formattedDate}</td></tr>
+            </table>
+
+            <h3 style="margin-top:20px">🧾 Order Details</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th><th style="text-align:center">Qty</th>
+                  <th style="text-align:right">Price</th><th style="text-align:right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemRows}
+                ${shippingRow}
+                <tr class="total-row">
+                  <td colspan="3" style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0">Total:</td>
+                  <td style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0;color:#4A90E2">
+                    ${totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : 'Free'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            ${totalCents > 0 ? `
+            <div class="warning-box">
+              <strong>⚠️ Status: Awaiting Payment</strong><br/>
+              The customer has not completed payment yet.<br/><br/>
+              Please do not start the service until the payment is confirmed. You will receive another notification once the payment is completed.
+            </div>
+            ` : ''}
+
+            <p>In the meantime, you can connect with the customer to coordinate details if needed.</p>
+
+            <p>Thanks,<br/><strong>Team GoZipMarket</strong></p>
+
+            <div style="font-size:11px;color:#999;margin-top:16px;padding:10px;background:#fafafa;border-radius:4px;line-height:16px">
+              <strong style="color:#666">Disclaimer:</strong> This transaction is directly between the service provider and the customer.
+              GoZipMarket is a platform that connects buyers and service providers and is not a party to any transaction.
+              GoZipMarket is not liable for any disputes, non-delivery, payment issues, or damages arising from transactions
+              conducted through this platform. Please exercise due diligence before making any payment.
+            </div>
+          </div>
+          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
+        </div>
+      </body>
+    </html>`;
+}
+
+function buildCustomerPlacementHtml(params: {
+  customerName: string;
+  providerName: string;
+  orderId: string | number;
+  items: any[];
+  totalCents: number;
+  orderDate: string;
+}): string {
+  const { customerName, providerName, orderId, items, totalCents, orderDate } = params;
+  const displayId = String(orderId).slice(0, 8).toUpperCase();
+  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  const itemsSubtotal2 = (items || []).reduce((sum: number, item: any) => {
+    const u = item.photo_price != null ? Number(item.photo_price) : Number(item.price || 0);
+    return sum + u * (item.quantity ?? 1);
+  }, 0);
+  const totalDollars2 = totalCents / 100;
+  const shippingFee2 = Math.round((totalDollars2 - itemsSubtotal2) * 100) / 100;
+
+  const itemRows = (items || []).map((item: any) => {
+    const unitPrice = item.photo_price != null ? item.photo_price : (item.price || 0);
+    const qty = item.quantity ?? 1;
+    const amount = unitPrice * qty;
+    const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
+    const thumbHtml = item.photo_url
+      ? `<img src="${item.photo_url}" width="40" height="40" style="border-radius:5px;display:block;margin-bottom:3px;object-fit:cover;" alt="${item.title || 'item'}" />`
+      : '';
+    return `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;vertical-align:top">
+          ${thumbHtml}
+          <span style="display:block;font-size:13px;font-weight:700">${item.title || '—'}</span>
+          <span style="display:block;font-size:11px;color:#888;font-weight:600;margin-top:2px">${itemId}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center;vertical-align:top">${qty}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${unitPrice > 0 ? `$${Number(unitPrice).toFixed(2)}` : 'Free'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${amount > 0 ? `$${amount.toFixed(2)}` : 'Free'}</td>
+      </tr>`;
+  }).join('');
+
+  const shippingRow2 = shippingFee2 > 0
+    ? `<tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0" colspan="3">Shipping &amp; Handling</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">$${shippingFee2.toFixed(2)}</td>
+       </tr>`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+          .wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #4A90E2; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+          .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; color: #777; }
+          th:last-child, th:nth-child(3) { text-align: right; }
+          th:nth-child(2) { text-align: center; }
+          .next-step-box { background: #E8F5E9; border-left: 4px solid #4CAF50; border-radius: 4px; padding: 14px 16px; margin: 20px 0; }
+          .total-row td { font-weight: 700; font-size: 15px; padding-top: 12px; }
+          .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 24px; }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="header">
+            <h2 style="margin:0">✅ Order Placed — GoZipMarket</h2>
+          </div>
+          <div class="body">
+            <p>Hi ${customerName},</p>
+            <p>Your order with <strong>${providerName}</strong> has been successfully placed and is currently awaiting payment.</p>
+
+            <table>
+              <tr><th>Order ID</th><td>#${displayId}</td></tr>
+              <tr><th>Date / Time</th><td>${formattedDate}</td></tr>
+            </table>
+
+            <h3 style="margin-top:20px">🧾 Order Summary</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th><th style="text-align:center">Qty</th>
+                  <th style="text-align:right">Price</th><th style="text-align:right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemRows}
+                ${shippingRow2}
+                <tr class="total-row">
+                  <td colspan="3" style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0">Total:</td>
+                  <td style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0;color:#4A90E2">
+                    ${totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : 'Free'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            ${totalCents > 0 ? `
+            <div class="next-step-box">
+              <strong>⏳ Next Step — Action Required Within 24 Hours</strong><br/>
+              Please complete your Zelle payment to confirm this order. The service provider will begin processing only after payment is received.<br/><br/>
+              <span style="color:#E65100;font-weight:700;">⚠️ Important:</span> If payment is not completed within <strong>24 hours</strong> of placing this order, it will be <strong>automatically cancelled</strong> and the items will be released back for others to purchase.
+            </div>
+            ` : ''}
+
+            <p>If you have any questions, feel free to message the provider directly through the app.</p>
+
+            <p>Thanks,<br/><strong>Team GoZipMarket</strong></p>
+
+            <div style="font-size:11px;color:#999;margin-top:16px;padding:10px;background:#fafafa;border-radius:4px;line-height:16px">
+              <strong style="color:#666">Disclaimer:</strong> This transaction is directly between the service provider and the customer.
+              GoZipMarket is a platform that connects buyers and service providers and is not a party to any transaction.
+              GoZipMarket is not liable for any disputes, non-delivery, payment issues, or damages arising from transactions
+              conducted through this platform. Please exercise due diligence before making any payment.
+            </div>
+          </div>
+          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
+        </div>
+      </body>
+    </html>`;
+}
+
+function buildAdminPlacementHtml(params: {
+  customerName: string;
+  providerName: string;
+  orderId: string | number;
+  items: any[];
+  totalCents: number;
+  orderDate: string;
+}): string {
+  const { customerName, providerName, orderId, totalCents, orderDate } = params;
+  const displayId = String(orderId).slice(0, 8).toUpperCase();
+  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head><meta charset="utf-8"/></head>
+      <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+        <div style="background:#4A90E2;color:#fff;padding:16px;border-radius:8px 8px 0 0;text-align:center">
+          <h2 style="margin:0">🛒 New Order Placed — Admin Notification</h2>
+        </div>
+        <div style="background:#fff;border:1px solid #e0e0e0;border-top:none;padding:24px;border-radius:0 0 8px 8px">
+          <p>Hi Admin,</p>
+          <p>A new order has been placed on GoZipMarket.</p>
+          <table style="width:100%;border-collapse:collapse;margin-top:12px">
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Order ID</th><td style="padding:8px">#${displayId}</td></tr>
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Date / Time</th><td style="padding:8px">${formattedDate}</td></tr>
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Customer</th><td style="padding:8px">${customerName}</td></tr>
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Provider</th><td style="padding:8px">${providerName}</td></tr>
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Total</th><td style="padding:8px;color:#4A90E2;font-weight:bold">${totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : 'Free'}</td></tr>
+            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Status</th><td style="padding:8px;color:#FFA000;font-weight:bold">Awaiting Payment</td></tr>
+          </table>
+        </div>
+        <div style="text-align:center;font-size:11px;color:#aaa;margin-top:24px">© 2025 GoZipMarket — Zip Market LLC</div>
+      </body>
+    </html>`;
+}
+
+/**
+ * Send order placement emails to provider, customer, and admins
+ * Called immediately when the customer clicks "Confirm Order"
+ */
+export async function sendOrderPlacementEmails({
+  orderId,
+  customerEmail,
+  customerName,
+  providerEmail,
+  providerName,
+  adminEmails,
+  items,
+  totalCents,
+  orderDate,
+}: OrderPlacementEmailParams): Promise<void> {
+  const displayId = String(orderId).slice(0, 8).toUpperCase();
+  const date = orderDate || new Date().toISOString();
+
+  const jobs: Promise<void>[] = [
+    resend.emails.send({
+      from:    'GoZipMarket <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to:      providerEmail,
+      subject: `New Order Request #${displayId} — GoZipMarket`,
+      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date }),
+    }).then(() => console.log(`✅ Order placement email sent to provider ${providerEmail}`))
+      .catch(err => console.error(`❌ Failed to send placement email to provider ${providerEmail}:`, err)),
+
+    resend.emails.send({
+      from:    'GoZipMarket <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to:      customerEmail,
+      subject: `Order Placed #${displayId} — GoZipMarket`,
+      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date }),
+    }).then(() => console.log(`✅ Order placement email sent to customer ${customerEmail}`))
+      .catch(err => console.error(`❌ Failed to send placement email to customer ${customerEmail}:`, err)),
+
+    ...adminEmails.map(email =>
+      resend.emails.send({
+        from:    'GoZipMarket <noreply@gozipmarket.com>',
+        replyTo: 'support@gozipmarket.com',
+        to:      email,
+        subject: `New Order #${displayId} — Admin Notification`,
+        html:    buildAdminPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date }),
+      }).then(() => console.log(`✅ Order placement email sent to admin ${email}`))
+        .catch(err => console.error(`❌ Failed to send placement email to admin ${email}:`, err))
+    ),
+  ];
+
+  await Promise.all(jobs);
 }
 
 // ============================================================================
@@ -780,5 +1154,96 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     };
+  }
+}
+
+// ============================================================================
+// NEW SERVICE POST NOTIFICATION
+// ============================================================================
+
+interface NewPostNotificationParams {
+  adminEmail: string;
+  posterName: string;
+  posterEmail: string;
+  postTitle: string;
+  postCategory: string;
+  postType: string;
+  price?: string;
+  zipCode?: string;
+  city?: string;
+  state?: string;
+  postId: number;
+}
+
+export async function sendNewPostNotification({
+  adminEmail,
+  posterName,
+  posterEmail,
+  postTitle,
+  postCategory,
+  postType,
+  price,
+  zipCode,
+  city,
+  state,
+  postId,
+}: NewPostNotificationParams) {
+  try {
+    const location = [city, state, zipCode].filter(Boolean).join(', ') || 'N/A';
+    const typeLabel = postType === 'offer' ? 'Service Offer' : 'Service Request';
+
+    await resend.emails.send({
+      from: 'GoZipMarket <noreply@gozipmarket.com>',
+      replyTo: 'support@gozipmarket.com',
+      to: adminEmail,
+      subject: `New Post: ${postTitle} — ${postCategory}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background-color: #4A90E2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+              .content { background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+              .details { background-color: #EEF4FF; border-left: 4px solid #4A90E2; padding: 15px; margin: 20px 0; border-radius: 0 6px 6px 0; }
+              .row { display: flex; margin: 8px 0; }
+              .label { font-weight: bold; color: #555; min-width: 130px; }
+              .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>📢 New Service Post</h1>
+              </div>
+              <div class="content">
+                <p>Hi Admin,</p>
+                <p>A new service post has just been published on GoZipMarket.</p>
+                <div class="details">
+                  <div class="row"><span class="label">Post ID:</span> #${postId}</div>
+                  <div class="row"><span class="label">Title:</span> ${postTitle}</div>
+                  <div class="row"><span class="label">Category:</span> ${postCategory}</div>
+                  <div class="row"><span class="label">Type:</span> ${typeLabel}</div>
+                  <div class="row"><span class="label">Price:</span> ${price || 'Not specified'}</div>
+                  <div class="row"><span class="label">Location:</span> ${location}</div>
+                  <div class="row"><span class="label">Posted by:</span> ${posterName}</div>
+                  <div class="row"><span class="label">Email:</span> ${posterEmail}</div>
+                </div>
+                <p>Best regards,<br><strong>The GoZipMarket Team</strong></p>
+              </div>
+              <div class="footer">
+                <p>© 2025 GoZipMarket - Zip Market LLC</p>
+                <p>This is an automated notification, please do not reply to this email.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `
+    });
+
+    console.log(`✅ New post notification sent to admin for post #${postId}`);
+  } catch (error) {
+    console.error('❌ Failed to send new post notification to admin:', error);
   }
 }

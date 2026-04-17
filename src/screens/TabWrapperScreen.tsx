@@ -110,7 +110,7 @@ const PostStackNavigator: React.FC = () => {
 
 const BottomTabs: React.FC = () => {
   // Get user information from auth context
- const { userType, userInfo, loading } = useAuth();
+ const { userType, userInfo, loading, isAuthenticated: authIsAuthenticated } = useAuth();
   
   // Local state for unread message count (displayed as badge)
   const [unreadCount, setUnreadCount] = useState(0);
@@ -236,7 +236,7 @@ const BottomTabs: React.FC = () => {
    * Screen Component Selection
    * Conditionally select which components to use based on auth status
    * ================================================================ */
- const isAuthenticated = !loading && userType === "business_owner" && !!userInfo?.user_id;
+ const isAuthenticated = !loading && authIsAuthenticated;
 
 const MessageScreenComponent = isAuthenticated
   ? BusinessOwnerChatScreen

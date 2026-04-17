@@ -115,6 +115,11 @@ const EditListing: React.FC = () => {
   const [contactEmail, setContactEmail] = useState("");
   const [zipCode, setZipCode] = useState("");
 
+  // Boutique-specific fields
+  const [shippingCharge, setShippingCharge] = useState('10.00');
+  const [postPaymentMethod, setPostPaymentMethod] = useState('');
+  const [postPaymentInfo, setPostPaymentInfo] = useState('');
+
   // ADDED: February 19, 2026 - Photo states
   // existingPhotos: URLs already saved on the post (loaded from backend)
   // selectedPhotos: new photos the user picks before saving
@@ -423,6 +428,11 @@ const EditListing: React.FC = () => {
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
         setInStock(String(post.in_stock ?? 1));
+        if ((post as any).shipping_charge_cents != null) {
+          setShippingCharge(((post as any).shipping_charge_cents / 100).toFixed(2));
+        }
+        if ((post as any).post_payment_method) setPostPaymentMethod((post as any).post_payment_method);
+        if ((post as any).post_payment_info) setPostPaymentInfo((post as any).post_payment_info);
 
         // ADDED: February 19, 2026 - Load existing photos from the post data
         if (Array.isArray(post.photos) && post.photos.length > 0) {
@@ -507,6 +517,7 @@ const EditListing: React.FC = () => {
       console.log("Saving post with ID:", postId);
 
       const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
+      const isBoutique = serviceCategory.toLowerCase().trim() === 'boutique';
 
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
@@ -520,6 +531,11 @@ const EditListing: React.FC = () => {
         zip_code: zipCode.trim() || null,
         post_type: postType,
         ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
+        ...(isBoutique ? {
+          shipping_charge_cents: Math.round(parseFloat(shippingCharge || '0') * 100) || 1000,
+          post_payment_method: postPaymentMethod || null,
+          post_payment_info: postPaymentInfo.trim() || null,
+        } : {}),
       };
 
       console.log("Update data:", updateData);
@@ -531,6 +547,14 @@ const EditListing: React.FC = () => {
 
       // Show success message and navigate back if update successful
       if (data.success) {
+        // Save payment method + shipping as profile defaults for future posts
+        if (isBoutique && (postPaymentMethod || postPaymentInfo)) {
+          api.put(`/business-owners/by-user/${userInfo?.user_id}`, {
+            payment_method: postPaymentMethod || null,
+            payment_info: postPaymentInfo.trim() || null,
+          }).catch((err: any) => console.warn('⚠️ Could not save payment defaults to profile:', err));
+        }
+
         // ADDED: February 19, 2026 - Upload any new photos before navigating back
         if (selectedPhotos.length > 0) {
           console.log(`📸 Uploading ${selectedPhotos.length} new photos...`);
@@ -756,21 +780,27 @@ const EditListing: React.FC = () => {
               <Text style={styles.label}>
                 Price per Item ($) <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., 9.00"
-                value={priceRange}
-                onChangeText={setPriceRange}
-                keyboardType="decimal-pad"
-                maxLength={20}
-                editable={!saving}
-              />
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currencyPrefix}>$</Text>
+                <TextInput
+                  style={[styles.input, styles.priceInputFlex]}
+                  placeholder="0.00"
+                  value={priceRange}
+                  onChangeText={(t) => {
+                    const clean = t.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1');
+                    setPriceRange(clean);
+                  }}
+                  keyboardType="decimal-pad"
+                  blurOnSubmit={false}
+                  {...(Platform.OS === 'web' ? ({ inputMode: 'decimal' } as any) : {})}
+                  maxLength={20}
+                  editable={!saving}
+                />
+              </View>
             </View>
           ) : (
             <View style={styles.section}>
-              <Text style={styles.label}>
-                {postType === "offer" ? "Price Range" : "Budget"}
-              </Text>
+              <Text style={styles.label}>Price/Rate (Optional)</Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g., $50-$100 per hour"
@@ -870,6 +900,82 @@ const EditListing: React.FC = () => {
               </Text>
             </View>
           )}
+
+          {/* Boutique-only: Shipping Charge */}
+          {serviceCategory.toLowerCase().trim() === 'boutique' && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Shipping Charge ($)</Text>
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currencyPrefix}>$</Text>
+                <TextInput
+                  style={[styles.input, styles.priceInputFlex]}
+                  placeholder="10.00"
+                  value={shippingCharge}
+                  onChangeText={(t) => {
+                    const clean = t.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1');
+                    setShippingCharge(clean);
+                  }}
+                  keyboardType="decimal-pad"
+                  blurOnSubmit={false}
+                  {...(Platform.OS === 'web' ? ({ inputMode: 'decimal' } as any) : {})}
+                  maxLength={8}
+                  editable={!saving}
+                />
+              </View>
+              <Text style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Amount charged to buyer for shipping</Text>
+            </View>
+          )}
+
+          {/* Boutique-only: Payment Method */}
+          {serviceCategory.toLowerCase().trim() === 'boutique' && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Payment Method</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={postPaymentMethod}
+                  onValueChange={(val) => { setPostPaymentMethod(val); setPostPaymentInfo(''); }}
+                  style={styles.picker}
+                  enabled={!saving}
+                >
+                  <Picker.Item label="Select payment method..." value="" />
+                  {[
+                    { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
+                    { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
+                    { value: 'paypal',  label: 'PayPal',   handleLabel: 'PayPal email or phone' },
+                    { value: 'cashapp', label: 'Cash App', handleLabel: 'Cash App $cashtag' },
+                    { value: 'cash',    label: 'Cash',     handleLabel: null },
+                    { value: 'check',   label: 'Check',    handleLabel: null },
+                  ].map(o => (
+                    <Picker.Item key={o.value} label={o.label} value={o.value} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          )}
+
+          {/* Boutique-only: Payment Handle */}
+          {(() => {
+            const PAYMENT_OPTIONS = [
+              { value: 'zelle',   handleLabel: 'Zelle email or phone' },
+              { value: 'venmo',   handleLabel: 'Venmo username' },
+              { value: 'paypal',  handleLabel: 'PayPal email or phone' },
+              { value: 'cashapp', handleLabel: 'Cash App $cashtag' },
+            ];
+            const handleLabel = PAYMENT_OPTIONS.find(o => o.value === postPaymentMethod)?.handleLabel;
+            return serviceCategory.toLowerCase().trim() === 'boutique' && handleLabel ? (
+              <View style={styles.section}>
+                <Text style={styles.label}>{handleLabel}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={postPaymentInfo}
+                  onChangeText={setPostPaymentInfo}
+                  placeholder={handleLabel}
+                  autoCapitalize="none"
+                  editable={!saving}
+                />
+              </View>
+            ) : null;
+          })()}
 
           {/* ====================================================================
             ADDED: February 19, 2026 - Photos section
@@ -1092,6 +1198,20 @@ const styles = createResponsiveStyles({
     fontSize: 16,
     color: "#333",
   },
+  priceInputRow: { flexDirection: "row", alignItems: "center" },
+  currencyPrefix: {
+    fontSize: 16,
+    color: "#333",
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRightWidth: 0,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  priceInputFlex: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   inputError: {
     borderColor: "#FF6B6B", // Red border for fields with validation errors
   },

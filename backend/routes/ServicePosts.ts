@@ -42,7 +42,7 @@ import {
 import { SUPABASE_ERROR } from '../Constants/supabase';
 import { getZipCoordinates, getZipLocation } from '../services/zipCodeService';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
-import { sendCategoryRequestNotification } from '../services/emailServices';
+import { sendCategoryRequestNotification, sendNewPostNotification } from '../services/emailServices';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import heicConvert from 'heic-convert';
@@ -149,7 +149,7 @@ router.get('/api/service-posts/search', async (req: Request, res: Response): Pro
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
       `)
       .eq('service_category', service_category as string)
@@ -282,7 +282,7 @@ router.get('/api/service-posts', async (req: Request, res: Response): Promise<vo
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
       `)
       .order('created_at', { ascending: false });
@@ -347,7 +347,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
       `, { count: 'exact' })
       .eq('status', POST_STATUS.ACTIVE);
@@ -424,7 +424,7 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
       `)
       .eq('user_id', userId)
@@ -464,6 +464,7 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
       updated_at: post.updated_at,
       is_active: post.status === POST_STATUS.ACTIVE,
       in_stock: post.in_stock,
+      photos: Array.isArray(post.photos) ? post.photos : [],
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
       poster_name: post.users?.business_owners?.business_name || post.users?.email,
       business_name: post.users?.business_owners?.business_name,
@@ -504,12 +505,13 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
       service_category,
       price,
       delivery_timeline,
-      delivery_option,
-      delivery_fee,
       phone_number,
       contact_email,
       zip_code,
       in_stock,
+      shipping_charge_cents,
+      post_payment_method,
+      post_payment_info,
     } = req.body;
 
     console.log('📝 Creating new service post');
@@ -576,8 +578,6 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         service_category,
         price,
         delivery_timeline,
-        delivery_option: delivery_option || null,
-        delivery_fee: delivery_fee || null,
         phone_number,
         contact_email,
         zip_code,
@@ -586,6 +586,9 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         status: POST_STATUS.ACTIVE,
         request_status: post_type === 'request' ? 'pending' : null,
         in_stock: in_stock !== undefined ? in_stock : 1,
+        shipping_charge_cents: shipping_charge_cents || null,
+        post_payment_method: post_payment_method || null,
+        post_payment_info: post_payment_info || null,
       }])
       .select()
       .single();
@@ -637,6 +640,45 @@ if (post_type === 'request' && title.includes('[CATEGORY REQUEST]')) {
     // Don't fail the request creation if email fails
   }
 }
+    // ✅ Notify admin of every new service post (non-blocking)
+    if (!(post_type === 'request' && title.includes('[CATEGORY REQUEST]'))) {
+      (async () => {
+        try {
+          const { data: adminUsers } = await supabase
+            .from('users').select('email').eq('is_admin', true).limit(1);
+          const adminEmail = adminUsers?.[0]?.email;
+          if (!adminEmail) return;
+
+          const { data: posterData } = await supabase
+            .from('users')
+            .select('email, full_name')
+            .eq('user_id', user_id)
+            .single();
+          const { data: bizData } = await supabase
+            .from('business_owners')
+            .select('business_name')
+            .eq('user_id', user_id)
+            .single();
+
+          await sendNewPostNotification({
+            adminEmail,
+            posterName:    bizData?.business_name || posterData?.full_name || 'Unknown',
+            posterEmail:   posterData?.email || contact_email || '',
+            postTitle:     title,
+            postCategory:  service_category,
+            postType:      post_type,
+            price:         price || undefined,
+            zipCode:       zip_code || undefined,
+            city:          city || undefined,
+            state:         state || undefined,
+            postId:        newPost.id,
+          });
+        } catch (e) {
+          console.error('⚠️ Failed to send new post admin notification:', e);
+        }
+      })();
+    }
+
     res.status(201).json({
       success: true,
       post: newPost,
@@ -669,7 +711,7 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
         *,
         users!service_posts_user_id_fkey(
           email,
-          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, zelle_id, payment_method)
+          business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
       `)
       .eq('id', postId)
@@ -686,6 +728,52 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       throw error;
     }
 
+    // Build sold_photo_indexes:
+    //   completed orders  → permanently sold, always show as Sold
+    //   pending orders    → reserved (not yet expired), show as Sold
+    //   expired/cancelled → available again, exclude
+    const now12hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const [
+      { data: completedOrders },   // permanently sold
+      { data: pendingByDate },     // reserved with valid expires_at
+      { data: pendingNullExpiry }, // reserved, expires_at NULL but < 1h old
+    ] = await Promise.all([
+      supabase.from('payments').select('items').eq('status', 'completed'),
+      supabase.from('payments').select('items').eq('status', 'pending').gt('expires_at', new Date().toISOString()),
+      supabase.from('payments').select('items').eq('status', 'pending').is('expires_at', null).gt('created_at', now12hAgo),
+    ]);
+    const activeOrders = [
+      ...(completedOrders  || []),
+      ...(pendingByDate    || []),
+      ...(pendingNullExpiry || []),
+    ];
+
+    const soldPhotoIndexes: number[] = [];
+    for (const order of activeOrders || []) {
+      for (const orderItem of (order.items || [])) {
+        if (Number(orderItem.post_id) === Number(postId) && orderItem.photo_index != null) {
+          soldPhotoIndexes.push(Number(orderItem.photo_index));
+        }
+      }
+    }
+
+    // For thrifting posts, fetch which photo_indexes have at least one active request
+    // so the buyer modal can show Available / Pending Request / Unavailable badges
+    let thriftPendingIndexes: number[] = [];
+    if (data.service_category === 'Preloved & Thrifting') {
+      const { data: pendingRows } = await supabase
+        .from('thrift_requests')
+        .select('photo_index')
+        .eq('post_id', postId)
+        .eq('status', 'requested')
+        .not('photo_index', 'is', null);
+      if (pendingRows) {
+        thriftPendingIndexes = [...new Set(pendingRows.map((r: any) => Number(r.photo_index)))];
+      }
+    }
+
+    const mergedSoldIndexes = [...new Set([...soldPhotoIndexes, ...(data.sold_photo_indexes ?? [])])];
+
     const post = {
       ...data,
       post_id: data.id,
@@ -693,10 +781,14 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
                    data.users?.email,
       business_name: data.users?.business_owners?.business_name,
       average_rating: data.users?.business_owners?.average_rating || 0,
-      review_count: data.users?.business_owners?.review_count || 0
+      review_count: data.users?.business_owners?.review_count || 0,
+      // Merge boutique sold indexes (from payments) + thrift completed indexes (from service_posts column)
+      sold_photo_indexes: mergedSoldIndexes,
+      // Photos with at least one active thrift request (for badge display)
+      thrift_pending_indexes: thriftPendingIndexes,
     };
 
-    console.log('✅ Found service post:', post.id);
+    console.log('✅ Found service post:', post.id, '| sold:', post.sold_photo_indexes, '| pending:', post.thrift_pending_indexes);
 
     res.json({
       success: true,
@@ -726,13 +818,14 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
       service_category,
       price,
       delivery_timeline,
-      delivery_option,
-      delivery_fee,
       phone_number,
       contact_email,
       zip_code,
       post_type,
       in_stock,
+      shipping_charge_cents,
+      post_payment_method,
+      post_payment_info,
     } = req.body;
 
     console.log('🔄 Updating service post:', postId);
@@ -801,8 +894,6 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
         service_category,
         price,
         delivery_timeline,
-        delivery_option: delivery_option || null,
-        delivery_fee: delivery_fee || null,
         phone_number,
         contact_email,
         zip_code,
@@ -810,6 +901,9 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
         state,
         post_type,
         ...(in_stock !== undefined && { in_stock }),
+        ...(shipping_charge_cents !== undefined && { shipping_charge_cents }),
+        ...(post_payment_method !== undefined && { post_payment_method }),
+        ...(post_payment_info !== undefined && { post_payment_info }),
         updated_at: new Date().toISOString()
       })
       .eq('id', postId)

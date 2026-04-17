@@ -87,6 +87,9 @@ const SearchResultsScreen: React.FC = () => {
   const cartCount = useSelector((state: RootState) =>
     state.cart.items.filter(i => !i.saved_for_later).length
   );
+  const cartItems = useSelector((state: RootState) =>
+    state.cart.items.filter(i => !i.saved_for_later)
+  );
 
   const routeParams = route.params || {};
   const customerInfo: CustomerInfo | undefined = routeParams.customerInfo;
@@ -149,7 +152,9 @@ const SearchResultsScreen: React.FC = () => {
     photoIndex: number,
     photoUrl: string,
     photoPrice?: number,
-  ) => {
+  ): boolean => {
+    if (cartItems.length > 0) {
+    }
     dispatch(addToCart({
       post_id: item.post_id,
       photo_index: photoIndex,
@@ -163,7 +168,11 @@ const SearchResultsScreen: React.FC = () => {
       saved_for_later: false,
       quantity: 1,
       in_stock: item.in_stock,
+      shipping_charge_cents: item.shipping_charge_cents || undefined,
+      post_payment_method: item.post_payment_method || undefined,
+      post_payment_info: item.post_payment_info || undefined,
     }));
+    return true;
   };
 
   // --------------------------------------------------------------------------
@@ -217,6 +226,9 @@ const SearchResultsScreen: React.FC = () => {
         currentUserId,
         otherUserId,
         otherUserName,
+        postId: item.post_id || undefined,
+        postTitle: item.title || undefined,
+        serviceCategory: item.service_category || undefined,
       });
     } catch (error) {
       console.error('Chat navigation error:', error);
