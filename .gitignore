@@ -3,6 +3,13 @@
 # Test documentation
 *.csv
 
+# One-off backend debug/test scripts
+backend/test-*.js
+backend/resend-*.js
+backend/Test-*
+backend/Debug*
+backend/Check*
+
 # dependencies
 node_modules/
 
