@@ -74,7 +74,7 @@ const CATEGORY_META: Record<string, { icon: any; color: string }> = {
   "Dance Lessons":   { icon: "musical-notes",   color: "#9B59B6" },
   "Entertainment":   { icon: "mic",             color: "#E91E63" },
   "Event Planning":  { icon: "calendar",        color: "#F39C12" },
-  "Beauty Services": { icon: "cut",             color: "#D81B60" },
+  "Beauty Services": { icon: "eye-outline",      color: "#D81B60" },
   "Shoe Repair":     { icon: "construct",       color: "#795548" },
   "Plumbing":        { icon: "water",           color: "#1565C0" },
   "Electrical":      { icon: "flash",           color: "#F9A825" },
@@ -794,7 +794,7 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
           { key: 'all',       label: 'All' },
           { key: 'services',  label: 'Services' },
           { key: 'boutique',  label: 'Sale' },
-          { key: 'thrifting', label: 'Thrifting' },
+          { key: 'thrifting', label: 'Preloved & Thrifting' },
         ] as { key: Tab; label: string }[]).map(tab => (
           <TouchableOpacity
             key={tab.key}
