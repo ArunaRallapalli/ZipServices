@@ -12,7 +12,8 @@
     "baseUrl": ".",
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "ignoreDeprecations": "5.0"
   },      
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
