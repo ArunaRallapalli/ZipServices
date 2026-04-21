@@ -447,8 +447,7 @@ const DetailModal: React.FC<{
                     if (selectedSold) {
                       return (
                         <View style={modalStyles.unavailableBox}>
-                          <Text style={modalStyles.unavailableText}>This photo has been picked up.</Text>
-                          <Text style={[modalStyles.unavailableText, { fontSize: 11, color: '#bbb', marginBottom: 0 }]}>Select another photo to request.</Text>
+                          <Text style={modalStyles.unavailableText}>This item is unavailable. Try selecting a different one.</Text>
                         </View>
                       );
                     }
