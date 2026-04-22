@@ -71,7 +71,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
 
   const shippingFeeCents = activeItems[0]?.shipping_charge_cents ?? DEFAULT_SHIPPING_FEE_CENTS;
   const subtotalCents = activeItems.reduce((sum, item) => {
-    const u = item.photo_price != null ? item.photo_price : (parseFloat(String(item.price || 0)) || 0);
+    const u = item.photo_price != null ? Number(item.photo_price) : (parseFloat(String(item.price || 0)) || 0);
     return sum + Math.round(u * 100) * (item.quantity ?? 1);
   }, 0);
   const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? shippingFeeCents : 0);
@@ -106,7 +106,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
             <Text style={[styles.colAmount, styles.colHeaderText]}>Amount</Text>
           </View>
           {activeItems.map(item => {
-            const u = item.photo_price != null ? item.photo_price : (parseFloat(String(item.price || 0)) || 0);
+            const u = item.photo_price != null ? Number(item.photo_price) : (parseFloat(String(item.price || 0)) || 0);
             const qty = item.quantity ?? 1;
             const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
             return (
