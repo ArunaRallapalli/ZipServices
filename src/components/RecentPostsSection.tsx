@@ -261,7 +261,9 @@ const DetailModal: React.FC<{
           setSoldPhotoIndexes(post.sold_photo_indexes);
           if (post.sold_photo_indexes.includes(selectedPhotoIndex)) return;
         }
-        if (post?.in_stock != null && post.in_stock <= 0) return;
+        // Only block on in_stock for single-photo posts; multi-photo posts use sold_photo_indexes
+        const isMultiPhoto = photos.length > 1;
+        if (!isMultiPhoto && post?.in_stock != null && post.in_stock <= 0) return;
       } catch { /* proceed if check fails */ }
     }
     const firstPhotoUrl = photos[selectedPhotoIndex] ?? photos[0] ?? '';
@@ -315,7 +317,7 @@ const DetailModal: React.FC<{
                       <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
                     </View>
                     <Text style={modalStyles.thumbLabel}>#{item.post_id}-{index + 1}</Text>
-                    {isThriftingFree && (
+                    {(isThriftingFree || isSold) && (
                       <View style={[modalStyles.photoBadge, { backgroundColor: badgeColor }]}>
                         <Text style={modalStyles.photoBadgeText}>{badgeLabel}</Text>
                       </View>
