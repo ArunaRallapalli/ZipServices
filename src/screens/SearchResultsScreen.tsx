@@ -159,7 +159,7 @@ const SearchResultsScreen: React.FC = () => {
       post_id: item.post_id,
       photo_index: photoIndex,
       photo_url: photoUrl,
-      photo_price: photoPrice || undefined,
+      photo_price: photoPrice != null ? (parseFloat(String(photoPrice).replace(/[^0-9.]/g, '')) || undefined) : undefined,
       title: item.title,
       service_category: item.service_category,
       price: parseFloat(String(item.price || '').match(/[\d.]+/)?.[0] ?? '') || undefined,

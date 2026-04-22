@@ -49,7 +49,7 @@ const BoutiquePaymentScreen: React.FC = () => {
   }, []);
 
   const itemsSubtotal = (items || []).reduce((sum: number, item: any) => {
-    const u = item.photo_price != null ? Number(item.photo_price) : (parseFloat(String(item.price || 0)) || 0);
+    const u = item.photo_price != null ? (parseFloat(String(item.photo_price).replace(/[^0-9.]/g, '')) || 0) : (parseFloat(String(item.price || 0).replace(/[^0-9.]/g, '')) || 0);
     return sum + u * (item.quantity ?? 1);
   }, 0);
   const shippingFee = (totalCents || 0) / 100 - itemsSubtotal;
@@ -109,7 +109,7 @@ const BoutiquePaymentScreen: React.FC = () => {
             <Text style={[styles.colAmount, styles.colHeaderText]}>Amount</Text>
           </View>
           {(items || []).map((item: any) => {
-            const u = item.photo_price != null ? Number(item.photo_price) : (parseFloat(String(item.price || 0)) || 0);
+            const u = item.photo_price != null ? (parseFloat(String(item.photo_price).replace(/[^0-9.]/g, '')) || 0) : (parseFloat(String(item.price || 0).replace(/[^0-9.]/g, '')) || 0);
             const qty = item.quantity ?? 1;
             const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
             return (
