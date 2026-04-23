@@ -289,6 +289,7 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
       total_cents,
       items,
       shipping_address,
+      buyer_timezone,
     } = req.body;
 
     if (!provider_user_id || total_cents == null || !items?.length) {
@@ -427,6 +428,7 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
           items,
           totalCents:    total_cents,
           orderDate:     new Date().toISOString(),
+          buyerTimezone: buyer_timezone || undefined,
         });
       } catch (emailErr) {
         console.error(`❌ Order placement email error for #${data.id}:`, emailErr);

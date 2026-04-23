@@ -684,6 +684,7 @@ interface OrderPlacementEmailParams {
   items: any[];
   totalCents: number;
   orderDate: string;
+  buyerTimezone?: string;
 }
 
 function buildProviderPlacementHtml(params: {
@@ -693,10 +694,12 @@ function buildProviderPlacementHtml(params: {
   items: any[];
   totalCents: number;
   orderDate: string;
+  buyerTimezone?: string;
 }): string {
-  const { providerName, customerName, orderId, items, totalCents, orderDate } = params;
+  const { providerName, customerName, orderId, items, totalCents, orderDate, buyerTimezone } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
-  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(orderDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -820,10 +823,12 @@ function buildCustomerPlacementHtml(params: {
   items: any[];
   totalCents: number;
   orderDate: string;
+  buyerTimezone?: string;
 }): string {
-  const { customerName, providerName, orderId, items, totalCents, orderDate } = params;
+  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
-  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(orderDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -947,33 +952,107 @@ function buildAdminPlacementHtml(params: {
   items: any[];
   totalCents: number;
   orderDate: string;
+  buyerTimezone?: string;
 }): string {
-  const { customerName, providerName, orderId, totalCents, orderDate } = params;
+  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
-  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(orderDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+
+  const itemsSubtotal = (items || []).reduce((sum: number, item: any) => {
+    const u = item.photo_price != null ? Number(item.photo_price) : Number(item.price || 0);
+    return sum + u * (item.quantity ?? 1);
+  }, 0);
+  const totalDollars = totalCents / 100;
+  const shippingFee = Math.round((totalDollars - itemsSubtotal) * 100) / 100;
+
+  const itemRows = (items || []).map((item: any) => {
+    const unitPrice = item.photo_price != null ? item.photo_price : (item.price || 0);
+    const qty = item.quantity ?? 1;
+    const amount = unitPrice * qty;
+    const itemId = `#P${item.post_id}-${(item.photo_index ?? 0) + 1}`;
+    const thumbHtml = item.photo_url
+      ? `<img src="${item.photo_url}" width="40" height="40" style="border-radius:5px;display:block;margin-bottom:3px;object-fit:cover;" alt="${item.title || 'item'}" />`
+      : '';
+    return `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;vertical-align:top">
+          ${thumbHtml}
+          <span style="display:block;font-size:13px;font-weight:700">${item.title || '—'}</span>
+          <span style="display:block;font-size:11px;color:#888;font-weight:600;margin-top:2px">${itemId}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:center;vertical-align:top">${qty}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${unitPrice > 0 ? `$${Number(unitPrice).toFixed(2)}` : 'Free'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${amount > 0 ? `$${amount.toFixed(2)}` : 'Free'}</td>
+      </tr>`;
+  }).join('');
+
+  const shippingRow = shippingFee > 0
+    ? `<tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0" colspan="3">Shipping &amp; Handling</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">$${shippingFee.toFixed(2)}</td>
+       </tr>`
+    : '';
+
   return `
     <!DOCTYPE html>
     <html>
-      <head><meta charset="utf-8"/></head>
-      <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-        <div style="background:#4A90E2;color:#fff;padding:16px;border-radius:8px 8px 0 0;text-align:center">
-          <h2 style="margin:0">🛒 New Order Placed — Admin Notification</h2>
+      <head>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+          .wrap { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #4A90E2; color: #fff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+          .body { background: #fff; border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; color: #777; }
+          th:last-child, th:nth-child(3) { text-align: right; }
+          th:nth-child(2) { text-align: center; }
+          .total-row td { font-weight: 700; font-size: 15px; padding-top: 12px; }
+          .footer { text-align: center; font-size: 11px; color: #aaa; margin-top: 24px; }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="header">
+            <h2 style="margin:0">🛒 New Order Placed — Admin Notification</h2>
+          </div>
+          <div class="body">
+            <p>Hi Admin,</p>
+            <p>A new order has been placed on GoZipMarket.</p>
+
+            <table>
+              <tr><th>Order ID</th><td>#${displayId}</td></tr>
+              <tr><th>Date / Time</th><td>${formattedDate}</td></tr>
+              <tr><th>Customer</th><td>${customerName}</td></tr>
+              <tr><th>Provider</th><td>${providerName}</td></tr>
+              <tr><th>Status</th><td style="color:#FFA000;font-weight:bold">Awaiting Payment</td></tr>
+            </table>
+
+            <h3 style="margin-top:20px">🧾 Order Summary</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th><th style="text-align:center">Qty</th>
+                  <th style="text-align:right">Price</th><th style="text-align:right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemRows}
+                ${shippingRow}
+                <tr class="total-row">
+                  <td colspan="3" style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0">Total:</td>
+                  <td style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0;color:#4A90E2">
+                    ${totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : 'Free'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="footer">© 2025 GoZipMarket — Zip Market LLC</div>
         </div>
-        <div style="background:#fff;border:1px solid #e0e0e0;border-top:none;padding:24px;border-radius:0 0 8px 8px">
-          <p>Hi Admin,</p>
-          <p>A new order has been placed on GoZipMarket.</p>
-          <table style="width:100%;border-collapse:collapse;margin-top:12px">
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Order ID</th><td style="padding:8px">#${displayId}</td></tr>
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Date / Time</th><td style="padding:8px">${formattedDate}</td></tr>
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Customer</th><td style="padding:8px">${customerName}</td></tr>
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Provider</th><td style="padding:8px">${providerName}</td></tr>
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Total</th><td style="padding:8px;color:#4A90E2;font-weight:bold">${totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : 'Free'}</td></tr>
-            <tr><th style="text-align:left;padding:8px;background:#f5f5f5;font-size:12px;color:#777">Status</th><td style="padding:8px;color:#FFA000;font-weight:bold">Awaiting Payment</td></tr>
-          </table>
-        </div>
-        <div style="text-align:center;font-size:11px;color:#aaa;margin-top:24px">© 2025 GoZipMarket — Zip Market LLC</div>
       </body>
     </html>`;
 }
@@ -992,6 +1071,7 @@ export async function sendOrderPlacementEmails({
   items,
   totalCents,
   orderDate,
+  buyerTimezone,
 }: OrderPlacementEmailParams): Promise<void> {
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const date = orderDate || new Date().toISOString();
@@ -1002,7 +1082,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'support@gozipmarket.com',
       to:      providerEmail,
       subject: `New Order Request #${displayId} — GoZipMarket`,
-      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date }),
+      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
     }).then(() => console.log(`✅ Order placement email sent to provider ${providerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to provider ${providerEmail}:`, err)),
 
@@ -1011,7 +1091,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'support@gozipmarket.com',
       to:      customerEmail,
       subject: `Order Placed #${displayId} — GoZipMarket`,
-      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date }),
+      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
     }).then(() => console.log(`✅ Order placement email sent to customer ${customerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to customer ${customerEmail}:`, err)),
 
@@ -1021,7 +1101,7 @@ export async function sendOrderPlacementEmails({
         replyTo: 'support@gozipmarket.com',
         to:      email,
         subject: `New Order #${displayId} — Admin Notification`,
-        html:    buildAdminPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date }),
+        html:    buildAdminPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
       }).then(() => console.log(`✅ Order placement email sent to admin ${email}`))
         .catch(err => console.error(`❌ Failed to send placement email to admin ${email}:`, err))
     ),

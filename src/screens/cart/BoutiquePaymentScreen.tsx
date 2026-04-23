@@ -63,6 +63,7 @@ const BoutiquePaymentScreen: React.FC = () => {
         total_cents:               totalCents || 0,
         items,
         shipping_address:          shippingAddress || null,
+        buyer_timezone:            Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       dispatch(removeItems((items || []).map((i: any) => ({ post_id: i.post_id, photo_index: i.photo_index }))));
       dispatch(clearCheckout());
