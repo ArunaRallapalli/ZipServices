@@ -402,8 +402,8 @@ const MiniServiceCard: React.FC<{
                 {item.photos!.map((uri, index) => {
                   const isSold    = soldPhotoIndexes.includes(index);
                   const isPending = !isSold && isThriftingFree && thriftPendingIndexes.includes(index);
-                  const badgeLabel = isSold ? 'Unavailable' : isPending ? 'Active Requests' : 'Available';
-                  const badgeColor = isSold ? '#9E9E9E' : isPending ? '#F59E0B' : '#2E7D32';
+                  const badgeLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
+                  const badgeColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
                   return (
                     <TouchableOpacity
                       key={index}
