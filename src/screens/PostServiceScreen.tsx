@@ -396,8 +396,13 @@ const PostServiceScreen: React.FC = () => {
     if (!contactEmail.trim()) { Alert.alert('Validation Error', 'Please enter a contact email'); return false; }
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
     if (acceptsPayment && !isThrifting && priceRange.trim() === '') {
       Alert.alert('Validation Error', 'Please enter a price.');
+      return false;
+    }
+    if ((isThrifting || isBoutiqueCategory) && selectedPhotos.length === 0) {
+      Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       return false;
     }
     return true;
