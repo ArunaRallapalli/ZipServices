@@ -80,9 +80,19 @@ async function sendThriftRequestEmail(params: {
   buyerName: string;
   postTitle: string;
   requestId: string;
+  postPhotoUrl?: string | null;
+  requestDate: string;
+  buyerTimezone?: string;
 }): Promise<void> {
-  const { providerEmail, providerName, buyerName, postTitle, requestId } = params;
+  const { providerEmail, providerName, buyerName, postTitle, requestId, postPhotoUrl, requestDate, buyerTimezone } = params;
   const shortId = requestId.slice(0, 8).toUpperCase();
+  const formattedDate = new Date(requestDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const thumbHtml = postPhotoUrl
+    ? `<img src="${postPhotoUrl}" width="80" height="80" style="border-radius:8px;display:block;margin:0 auto 12px;object-fit:cover;" alt="${postTitle}" />`
+    : '';
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
@@ -108,8 +118,10 @@ async function sendThriftRequestEmail(params: {
               <div class="body">
                 <p>Hi ${providerName},</p>
                 <p>Someone has requested your free thrifting item. Log in and go to <strong>My Listings &rarr; Thrift Requests</strong> to Approve &amp; Complete or Reject.</p>
+                ${thumbHtml}
                 <div class="info-box">
                   <div><strong>Request ID:</strong> #${shortId}</div>
+                  <div><strong>Date / Time:</strong> ${formattedDate}</div>
                   <div><strong>Item:</strong> ${postTitle}</div>
                   <div><strong>Requested by:</strong> ${buyerName}</div>
                 </div>
@@ -139,9 +151,19 @@ async function sendBuyerRejectionEmail(params: {
   buyerName: string;
   postTitle: string;
   requestId: string;
+  postPhotoUrl?: string | null;
+  requestDate: string;
+  buyerTimezone?: string;
 }): Promise<void> {
-  const { buyerEmail, buyerName, postTitle, requestId } = params;
+  const { buyerEmail, buyerName, postTitle, requestId, postPhotoUrl, requestDate, buyerTimezone } = params;
   const shortId = requestId.slice(0, 8).toUpperCase();
+  const formattedDate = new Date(requestDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const thumbHtml = postPhotoUrl
+    ? `<img src="${postPhotoUrl}" width="80" height="80" style="border-radius:8px;display:block;margin:0 auto 12px;object-fit:cover;" alt="${postTitle}" />`
+    : '';
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
@@ -167,8 +189,10 @@ async function sendBuyerRejectionEmail(params: {
               <div class="body">
                 <p>Hi ${buyerName},</p>
                 <p>Unfortunately, your request for the following item was not fulfilled:</p>
+                ${thumbHtml}
                 <div class="info-box">
                   <div><strong>Request ID:</strong> #${shortId}</div>
+                  <div><strong>Date / Time:</strong> ${formattedDate}</div>
                   <div><strong>Item:</strong> ${postTitle}</div>
                 </div>
                 <p>This can happen when the seller rejects the request, or when another buyer's request was approved first and the item is no longer available.</p>
@@ -195,9 +219,19 @@ async function sendBuyerCompletionEmail(params: {
   buyerName: string;
   postTitle: string;
   requestId: string;
+  postPhotoUrl?: string | null;
+  requestDate: string;
+  buyerTimezone?: string;
 }): Promise<void> {
-  const { buyerEmail, buyerName, postTitle, requestId } = params;
+  const { buyerEmail, buyerName, postTitle, requestId, postPhotoUrl, requestDate, buyerTimezone } = params;
   const shortId = requestId.slice(0, 8).toUpperCase();
+  const formattedDate = new Date(requestDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const thumbHtml = postPhotoUrl
+    ? `<img src="${postPhotoUrl}" width="80" height="80" style="border-radius:8px;display:block;margin:0 auto 12px;object-fit:cover;" alt="${postTitle}" />`
+    : '';
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
@@ -223,8 +257,10 @@ async function sendBuyerCompletionEmail(params: {
               <div class="body">
                 <p>Hi ${buyerName},</p>
                 <p>Great news! The seller has approved your request for the following item:</p>
+                ${thumbHtml}
                 <div class="info-box">
                   <div><strong>Request ID:</strong> #${shortId}</div>
+                  <div><strong>Date / Time:</strong> ${formattedDate}</div>
                   <div><strong>Item:</strong> ${postTitle}</div>
                 </div>
                 <p>Please coordinate pickup or delivery directly with the seller using the <strong>Message Seller</strong> chat in the app.</p>
@@ -273,7 +309,7 @@ router.post('/api/thrift-requests', async (req: Request, res: Response): Promise
   const buyerUserId = getAuth(req, res);
   if (!buyerUserId) return;
 
-  const { post_id, provider_user_id, post_title, post_photo_url, photo_index } = req.body;
+  const { post_id, provider_user_id, post_title, post_photo_url, photo_index, buyer_timezone } = req.body;
   const photoIndex: number | null = photo_index !== undefined && photo_index !== null ? Number(photo_index) : null;
 
   if (!post_id || !provider_user_id) {
@@ -339,6 +375,7 @@ router.post('/api/thrift-requests', async (req: Request, res: Response): Promise
         post_title:       post_title || null,
         post_photo_url:   post_photo_url || null,
         photo_index:      photoIndex,
+        buyer_timezone:   buyer_timezone || null,
         status:           'requested',
         expires_at:       expiresAt,
       })
@@ -368,11 +405,14 @@ router.post('/api/thrift-requests', async (req: Request, res: Response): Promise
         ]);
         if (!providerRes.data?.email) return;
         await sendThriftRequestEmail({
-          providerEmail: providerRes.data.email,
-          providerName:  providerBizRes.data?.business_name || 'Seller',
-          buyerName:     buyerBizRes.data?.business_name || 'Customer',
-          postTitle:     post_title || `Item #${post_id}`,
-          requestId:     data.id,
+          providerEmail:  providerRes.data.email,
+          providerName:   providerBizRes.data?.business_name || 'Seller',
+          buyerName:      buyerBizRes.data?.business_name || 'Customer',
+          postTitle:      post_title || `Item #${post_id}`,
+          requestId:      data.id,
+          postPhotoUrl:   post_photo_url || null,
+          requestDate:    new Date().toISOString(),
+          buyerTimezone:  buyer_timezone || undefined,
         });
       } catch (emailErr) {
         console.error(`❌ Thrift request email error for #${data.id}:`, emailErr);
@@ -464,7 +504,7 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
   try {
     const { data: reqRow, error: fetchErr } = await supabase
       .from('thrift_requests')
-      .select('id, post_id, status, provider_user_id, buyer_user_id, photo_index, post_title')
+      .select('id, post_id, status, provider_user_id, buyer_user_id, photo_index, post_title, post_photo_url, buyer_timezone')
       .eq('id', requestId)
       .single();
 
@@ -560,10 +600,13 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
         ]);
         if (buyerUser?.email) {
           await sendBuyerCompletionEmail({
-            buyerEmail: buyerUser.email,
-            buyerName:  buyerBiz?.business_name || 'Customer',
+            buyerEmail:    buyerUser.email,
+            buyerName:     buyerBiz?.business_name || 'Customer',
             postTitle,
             requestId,
+            postPhotoUrl:  reqRow.post_photo_url || null,
+            requestDate:   new Date().toISOString(),
+            buyerTimezone: reqRow.buyer_timezone || undefined,
           });
         }
       } catch (emailErr) {
@@ -590,10 +633,13 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
             const email = emailMap[r.buyer_user_id];
             if (!email) continue;
             await sendBuyerRejectionEmail({
-              buyerEmail: email,
-              buyerName:  nameMap[r.buyer_user_id] || 'Customer',
+              buyerEmail:    email,
+              buyerName:     nameMap[r.buyer_user_id] || 'Customer',
               postTitle,
-              requestId:  r.id,
+              requestId:     r.id,
+              postPhotoUrl:  r.post_photo_url || null,
+              requestDate:   new Date().toISOString(),
+              buyerTimezone: r.buyer_timezone || undefined,
             });
           }
         } catch (emailErr) {
@@ -617,7 +663,7 @@ router.patch('/api/thrift-requests/:id/reject', async (req: Request, res: Respon
   try {
     const { data: reqRow, error: fetchErr } = await supabase
       .from('thrift_requests')
-      .select('id, status, provider_user_id, buyer_user_id, post_title, post_id')
+      .select('id, status, provider_user_id, buyer_user_id, post_title, post_id, post_photo_url, buyer_timezone')
       .eq('id', requestId)
       .single();
 
@@ -649,10 +695,13 @@ router.patch('/api/thrift-requests/:id/reject', async (req: Request, res: Respon
         ]);
         if (!buyerUser?.email) return;
         await sendBuyerRejectionEmail({
-          buyerEmail: buyerUser.email,
-          buyerName:  buyerBiz?.business_name || 'Customer',
-          postTitle:  reqRow.post_title || `Item #${reqRow.post_id}`,
+          buyerEmail:    buyerUser.email,
+          buyerName:     buyerBiz?.business_name || 'Customer',
+          postTitle:     reqRow.post_title || `Item #${reqRow.post_id}`,
           requestId,
+          postPhotoUrl:  reqRow.post_photo_url || null,
+          requestDate:   new Date().toISOString(),
+          buyerTimezone: reqRow.buyer_timezone || undefined,
         });
       } catch (emailErr) {
         console.error(`❌ Rejection email error for request #${requestId}:`, emailErr);

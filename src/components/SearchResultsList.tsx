@@ -245,6 +245,7 @@ const MiniServiceCard: React.FC<{
         provider_user_id: item.user_id,
         post_title:       item.title,
         post_photo_url:   item.photos?.[selectedPhotoIndex] ?? item.photos?.[0] ?? null,
+        buyer_timezone:   Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...(hasPhotos ? { photo_index: selectedPhotoIndex } : {}),
       });
       setRequestedPhotoIndexes(prev => new Set([...prev, selectedPhotoIndex]));

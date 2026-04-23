@@ -217,6 +217,7 @@ const DetailModal: React.FC<{
         provider_user_id: item.user_id,
         post_title:       item.title,
         post_photo_url:   photos[selectedPhotoIndex] ?? photos[0] ?? null,
+        buyer_timezone:   Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...(hasPhotos ? { photo_index: selectedPhotoIndex } : {}),
       });
       setRequestedPhotoIndexes(prev => new Set([...prev, selectedPhotoIndex]));
