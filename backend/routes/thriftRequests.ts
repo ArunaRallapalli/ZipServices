@@ -504,7 +504,7 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
   try {
     const { data: reqRow, error: fetchErr } = await supabase
       .from('thrift_requests')
-      .select('id, post_id, status, provider_user_id, buyer_user_id, photo_index, post_title, post_photo_url, buyer_timezone')
+      .select('id, post_id, status, provider_user_id, buyer_user_id, photo_index, post_title, post_photo_url, buyer_timezone, created_at')
       .eq('id', requestId)
       .single();
 
@@ -605,7 +605,7 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
             postTitle,
             requestId,
             postPhotoUrl:  reqRow.post_photo_url || null,
-            requestDate:   new Date().toISOString(),
+            requestDate:   reqRow.created_at || new Date().toISOString(),
             buyerTimezone: reqRow.buyer_timezone || undefined,
           });
         }
@@ -663,7 +663,7 @@ router.patch('/api/thrift-requests/:id/reject', async (req: Request, res: Respon
   try {
     const { data: reqRow, error: fetchErr } = await supabase
       .from('thrift_requests')
-      .select('id, status, provider_user_id, buyer_user_id, post_title, post_id, post_photo_url, buyer_timezone')
+      .select('id, status, provider_user_id, buyer_user_id, post_title, post_id, post_photo_url, buyer_timezone, created_at')
       .eq('id', requestId)
       .single();
 
@@ -700,7 +700,7 @@ router.patch('/api/thrift-requests/:id/reject', async (req: Request, res: Respon
           postTitle:     reqRow.post_title || `Item #${reqRow.post_id}`,
           requestId,
           postPhotoUrl:  reqRow.post_photo_url || null,
-          requestDate:   new Date().toISOString(),
+          requestDate:   reqRow.created_at || new Date().toISOString(),
           buyerTimezone: reqRow.buyer_timezone || undefined,
         });
       } catch (emailErr) {

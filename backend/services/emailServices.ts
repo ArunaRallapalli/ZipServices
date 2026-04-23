@@ -494,6 +494,7 @@ interface OrderStatusEmailParams {
   totalCents: number;
   orderDate?: string;
   businessName?: string | null;
+  buyerTimezone?: string;
 }
 
 function buildOrderStatusHtml(params: {
@@ -507,8 +508,9 @@ function buildOrderStatusHtml(params: {
   totalCents: number;
   orderDate: string;
   businessName?: string | null;
+  buyerTimezone?: string;
 }): string {
-  const { recipientLabel, role, orderId, status, customerName, providerName, items, totalCents, orderDate, businessName } = params;
+  const { recipientLabel, role, orderId, status, customerName, providerName, items, totalCents, orderDate, businessName, buyerTimezone } = params;
 
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const isCompleted = status === 'completed';
@@ -516,7 +518,8 @@ function buildOrderStatusHtml(params: {
   const statusIcon = isCompleted ? '✅' : '❌';
   const statusLabel = isCompleted ? 'Completed' : 'Cancelled';
 
-  const formattedDate = new Date(orderDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(orderDate).toLocaleString('en-US', {
+    timeZone: buyerTimezone || 'UTC',
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -631,6 +634,7 @@ export async function sendOrderStatusEmails({
   totalCents,
   orderDate,
   businessName,
+  buyerTimezone,
 }: OrderStatusEmailParams): Promise<void> {
   const date = orderDate || new Date().toISOString();
   const displayOrderId = String(orderId).slice(0, 8).toUpperCase();
@@ -663,6 +667,7 @@ export async function sendOrderStatusEmails({
         totalCents,
         orderDate: date,
         businessName,
+        buyerTimezone,
       }),
     })
     .then(() => console.log(`✅ Order ${status} email sent to ${email}`))

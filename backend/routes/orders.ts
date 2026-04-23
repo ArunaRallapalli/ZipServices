@@ -356,6 +356,7 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
         service_provider_zelle_id: service_provider_zelle_id || null,
         items:                     items,
         shipping_address:          shipping_address || null,
+        buyer_timezone:            buyer_timezone || null,
         expires_at:                new Date(Date.now() + BOUTIQUE_EXPIRY_MS).toISOString(), // 24h prod / 1h dev expiry window
       })
       .select('id')
@@ -565,7 +566,7 @@ router.patch('/api/orders/:id/status', async (req: Request, res: Response): Prom
         // Fetch full order details
         const { data: order } = await supabase
           .from('payments')
-          .select('buyer_user_id, provider_user_id, amount, items, shipping_address, created_at')
+          .select('buyer_user_id, provider_user_id, amount, items, shipping_address, created_at, buyer_timezone')
           .eq('id', orderId)
           .single();
 
@@ -595,7 +596,7 @@ router.patch('/api/orders/:id/status', async (req: Request, res: Response): Prom
 
         await sendOrderStatusEmails({
           orderId,
-          status: status as 'completed' | 'cancelled',
+          status:        status as 'completed' | 'cancelled',
           customerEmail: buyer.email,
           customerName:  buyerBizRes.data?.business_name || 'Customer',
           providerEmail: provider.email,
@@ -604,6 +605,7 @@ router.patch('/api/orders/:id/status', async (req: Request, res: Response): Prom
           items:         order.items || [],
           totalCents:    order.amount,
           orderDate:     order.created_at,
+          buyerTimezone: order.buyer_timezone || undefined,
         });
       } catch (emailErr) {
         console.error(`❌ Order status email error for #${orderId}:`, emailErr);
