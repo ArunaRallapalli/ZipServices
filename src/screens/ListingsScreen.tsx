@@ -657,20 +657,21 @@ const styles = createResponsiveStyles({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 10 },
   loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
-  header: { 
-    backgroundColor: "#4A90E2", 
-    paddingVertical: 20, 
-    paddingHorizontal: 20, 
+  header: {
+    backgroundColor: "#4A90E2",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     paddingTop: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
   },
   headerTextContainer: {
-    flex: 1,
     alignItems: "center",
   },
-  headerTitle: { fontSize: 26, fontWeight: "bold", color: "#fff", textAlign: "center" },
+  headerTitle: { fontSize: 20, fontWeight: "bold", color: "#fff", textAlign: "center" },
   headerSubtitle: { fontSize: 14, color: "#fff", textAlign: "center", marginTop: 5, opacity: 0.9 },
   searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", margin: 15, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#ddd" },
   searchIcon: { marginRight: 10 },
@@ -769,7 +770,7 @@ const styles = createResponsiveStyles({
   },
   ordersButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   ordersBadge: {
