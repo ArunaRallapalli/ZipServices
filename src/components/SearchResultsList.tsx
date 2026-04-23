@@ -250,6 +250,14 @@ const MiniServiceCard: React.FC<{
       });
       setRequestedPhotoIndexes(prev => new Set([...prev, selectedPhotoIndex]));
       setRequestStatus('idle');
+      // Refresh pending indexes so badge switches to "Active Requests" immediately
+      api.get(`/api/service-posts/${item.post_id}`)
+        .then((res: any) => {
+          const post = res.post ?? res;
+          if (Array.isArray(post?.thrift_pending_indexes)) setThriftPendingIndexes(post.thrift_pending_indexes);
+          if (Array.isArray(post?.sold_photo_indexes)) setSoldPhotoIndexes(post.sold_photo_indexes);
+        })
+        .catch(() => {});
       Alert.alert(
         'Request Sent!',
         `Your request for "${item.title}" has been sent to the seller. Select another photo to request more, or tap Done when finished.`,
