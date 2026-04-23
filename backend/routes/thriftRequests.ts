@@ -547,14 +547,14 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
     console.log(`✅ Thrift request ${requestId} approved & completed. Post #${reqRow.post_id} in_stock: ${currentStock} → ${newStock}`);
 
     // Collect auto-rejected buyer info for emails (sent non-blocking after response)
-    const autoRejected: Array<{ id: string; buyer_user_id: number }> = [];
+    const autoRejected: Array<{ id: string; buyer_user_id: number; post_photo_url?: string | null; buyer_timezone?: string | null }> = [];
 
     // Auto-reject step 1: always reject others who requested the exact same photo
     // (that specific physical item is now gone regardless of remaining stock)
     if (reqRow.photo_index !== null && reqRow.photo_index !== undefined) {
       const { data: samePhotoOthers } = await supabase
         .from('thrift_requests')
-        .select('id, buyer_user_id')
+        .select('id, buyer_user_id, post_photo_url, buyer_timezone')
         .eq('post_id', reqRow.post_id)
         .eq('status', 'requested')
         .eq('photo_index', reqRow.photo_index)
@@ -572,7 +572,7 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
     if (newStock === 0) {
       const { data: allOthers } = await supabase
         .from('thrift_requests')
-        .select('id, buyer_user_id')
+        .select('id, buyer_user_id, post_photo_url, buyer_timezone')
         .eq('post_id', reqRow.post_id)
         .eq('status', 'requested')
         .neq('id', requestId);
