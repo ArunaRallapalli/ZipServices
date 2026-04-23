@@ -663,12 +663,20 @@ const PostServiceScreen: React.FC = () => {
           {/* ── PHOTO UPLOAD SECTION ── */}
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
-              <Text style={styles.label}>Photos (Optional)</Text>
+              <Text style={styles.label}>
+                Photos {(isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
+                  ? <Text style={{ color: '#E53935' }}> *</Text>
+                  : <Text style={styles.optionalLabel}> (Optional)</Text>}
+              </Text>
               <Text style={styles.photoCount}>{selectedPhotos.length}/{maxPhotos}</Text>
             </View>
 
             <TouchableOpacity
-              style={styles.addPhotoButton}
+              style={[
+                styles.addPhotoButton,
+                (isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && selectedPhotos.length === 0
+                  ? { borderColor: '#E53935' } : {},
+              ]}
               onPress={pickPhotos}
               disabled={selectedPhotos.length >= maxPhotos}
             >
@@ -1085,6 +1093,7 @@ const styles = createResponsiveStyles({
     marginBottom: 8,
   },
   photoCount: { fontSize: 14, color: '#666', fontWeight: '600' },
+  optionalLabel: { fontSize: 14, color: '#999', fontWeight: '400' },
   addPhotoButton: {
     flexDirection: 'row',
     alignItems: 'center',
