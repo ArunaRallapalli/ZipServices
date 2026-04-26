@@ -434,6 +434,54 @@ async function sweepExpiredThriftRequests(): Promise<void> {
 sweepExpiredThriftRequests();
 setInterval(sweepExpiredThriftRequests, 30 * 60 * 1000);
 
+// ── Seed required service categories ────────────────────────────────────────
+// Ensures specific categories always exist in the database.
+// Safe to re-run — uses upsert on category_name.
+async function seedServiceCategories(): Promise<void> {
+  const required = [
+    'Bakery',
+    'Beauty Services',
+    'Catering',
+    'Cleaning',
+    'Construction/Renovation',
+    'Dance Lessons',
+    'DJ',
+    'Electrical',
+    'Entertainment',
+    'Event Planning',
+    'Home Repair',
+    'Landscaping',
+    'Moving',
+    'Other',
+    'Painting',
+    'Pet Care',
+    'Photography',
+    'Plumbing',
+    'Preloved & Thrifting',
+    'Rentals',
+    'Shoe Repair',
+    'Tailoring',
+    'Tech Support',
+    'Tutoring',
+  ];
+
+  try {
+    const rows = required.map(name => ({ category_name: name, is_active: true }));
+    const { error } = await supabase
+      .from('service_categories')
+      .upsert(rows, { onConflict: 'category_name', ignoreDuplicates: true });
+    if (error) {
+      console.error('⚠️ Category seed error:', error.message);
+    } else {
+      console.log(`✅ Service categories seeded (${required.length} entries ensured)`);
+    }
+  } catch (err: any) {
+    console.error('❌ Category seed failed:', err.message);
+  }
+}
+
+seedServiceCategories();
+
 server.on('error', (error: any) => {
   logger.error('Server failed to start', {
     error: error.message,
