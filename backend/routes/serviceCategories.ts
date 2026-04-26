@@ -36,14 +36,19 @@ router.get("/", async (req: Request, res: Response) => {
       .order('category_name', { ascending: true });
     
     if (error) throw error;
-    
+
     console.log(`✅ Service Categories: Found ${data.length} categories`);
-    
- // ✅ FIXED - Returns full objects with display_order
-res.json({
-  success: true,
-  categories: data  // Return full objects
-});
+
+    // Always put "Other" last regardless of alphabetical position
+    const sorted = [
+      ...data.filter((c: any) => c.category_name !== 'Other'),
+      ...data.filter((c: any) => c.category_name === 'Other'),
+    ];
+
+    res.json({
+      success: true,
+      categories: sorted,
+    });
   } catch (err: any) {
     console.error("❌ Error fetching service categories:", err);
     res.status(500).json({ 

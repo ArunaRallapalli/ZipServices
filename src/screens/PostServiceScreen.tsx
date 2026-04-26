@@ -333,19 +333,22 @@ const PostServiceScreen: React.FC = () => {
     } catch (error) {
       console.error('❌ Error loading service categories:', error);
       setServiceCategories([
-        { category_name: 'Cleaning', display_order: 1 },
-        { category_name: 'Plumbing', display_order: 2 },
-        { category_name: 'Electrical', display_order: 3 },
-        { category_name: 'Landscaping', display_order: 4 },
-        { category_name: 'Home Repair', display_order: 5 },
-        { category_name: 'Pet Care', display_order: 6 },
-        { category_name: 'Moving', display_order: 7 },
-        { category_name: 'Tutoring', display_order: 8 },
-        { category_name: 'Photography', display_order: 9 },
-        { category_name: 'Catering', display_order: 10 },
-        { category_name: 'Beauty Services', display_order: 11 },
-        { category_name: 'Tech Support', display_order: 12 },
-        { category_name: 'Other', display_order: 13 },
+        { category_name: 'Bakery', display_order: 1 },
+        { category_name: 'Beauty Services', display_order: 2 },
+        { category_name: 'Catering', display_order: 3 },
+        { category_name: 'Cleaning', display_order: 4 },
+        { category_name: 'Construction/Renovation', display_order: 5 },
+        { category_name: 'Electrical', display_order: 6 },
+        { category_name: 'Home Repair', display_order: 7 },
+        { category_name: 'Landscaping', display_order: 8 },
+        { category_name: 'Moving', display_order: 9 },
+        { category_name: 'Pet Care', display_order: 10 },
+        { category_name: 'Photography', display_order: 11 },
+        { category_name: 'Plumbing', display_order: 12 },
+        { category_name: 'Rentals', display_order: 13 },
+        { category_name: 'Tech Support', display_order: 14 },
+        { category_name: 'Tutoring', display_order: 15 },
+        { category_name: 'Other', display_order: 16 },
       ]);
     } finally {
       setLoadingCategories(false);

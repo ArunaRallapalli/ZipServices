@@ -155,11 +155,11 @@ export const isValidZipCode = (zip: string): boolean => {
 export const fetchCategories = async (): Promise<string[]> => {
   console.log("🔄 [searchUtils] Fetching categories from API...");
   
-  // Fallback categories used if API fails
+  // Fallback categories used if API fails (alphabetical, Other always last)
   const fallbackCategories = [
-    'Cleaning', 'Plumbing', 'Electrical', 'Landscaping', 'Home Repair',
-    'Pet Care', 'Moving', 'Tutoring', 'Photography', 'Catering',
-    'Beauty Services', 'Decorations', 'Tailoring'
+    'Bakery', 'Beauty Services', 'Catering', 'Cleaning', 'Construction/Renovation',
+    'Electrical', 'Home Repair', 'Landscaping', 'Moving', 'Pet Care',
+    'Photography', 'Plumbing', 'Rentals', 'Tailoring', 'Tutoring', 'Other',
   ];
 
   try {
