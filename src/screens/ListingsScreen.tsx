@@ -425,7 +425,7 @@ const ListingsScreen: React.FC = () => {
         <View style={styles.infoRow}>
           <Ionicons name="cash-outline" size={18} color="#2E7D32" />
           <Text style={styles.priceText}>
-            {item.post_type === 'offer' ? 'Price: ' : 'Budget: '}
+            {item.post_type === 'offer' ? 'Price: $' : 'Budget: $'}
             {item.price}
           </Text>
         </View>
