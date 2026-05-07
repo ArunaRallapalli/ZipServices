@@ -30,10 +30,12 @@ const BoutiquePaymentScreen: React.FC = () => {
   const dispatch = useDispatch();
 
   const { shippingAddress } = useSelector((state: RootState) => state.checkout);
-  const { totalCents, items, providerZelleId, providerPaymentMethod, fulfillmentMethod } = route.params || {};
+  const { totalCents, items, providerPaymentMethods, providerPaymentInfos, providerPaymentMethod, providerZelleId, fulfillmentMethod } = route.params || {};
 
-  const paymentMethodName = PAYMENT_METHOD_LABELS[providerPaymentMethod || ''] || 'Zelle';
-  const isOfflineMethod = providerPaymentMethod === 'cash' || providerPaymentMethod === 'check';
+  // Support both old single-method params and new multi-method params
+  const methods: string[] = providerPaymentMethods ?? (providerPaymentMethod ? [providerPaymentMethod] : []);
+  const infos: Record<string, string> = providerPaymentInfos ?? (providerZelleId && providerPaymentMethod ? { [providerPaymentMethod]: providerZelleId } : {});
+  const OFFLINE_METHODS = ['cash', 'check', 'cashapp'];
 
   const [loading, setLoading] = useState(false);
   const [businessName, setBusinessName] = useState<string | null>(null);
@@ -59,7 +61,7 @@ const BoutiquePaymentScreen: React.FC = () => {
     try {
       const result: any = await api.post('/api/orders', {
         provider_user_id:          items?.[0]?.provider_user_id,
-        service_provider_zelle_id: providerZelleId || null,
+        service_provider_zelle_id: infos['zelle'] || providerZelleId || null,
         total_cents:               totalCents || 0,
         items,
         shipping_address:          shippingAddress || null,
@@ -68,15 +70,15 @@ const BoutiquePaymentScreen: React.FC = () => {
       dispatch(removeItems((items || []).map((i: any) => ({ post_id: i.post_id, photo_index: i.photo_index }))));
       dispatch(clearCheckout());
       navigation.navigate('OrderReportScreen', {
-        orderId:           result?.id || result?.order_id || null,
-        orderDate:         new Date().toISOString(),
+        orderId:               result?.id || result?.order_id || null,
+        orderDate:             new Date().toISOString(),
         businessName,
         items,
-        totalCents:        totalCents || 0,
-        providerZelleId,
-        providerPaymentMethod,
+        totalCents:            totalCents || 0,
+        providerPaymentMethods: methods,
+        providerPaymentInfos:   infos,
         shippingAddress,
-        fulfillmentMethod: fulfillmentMethod || 'ship',
+        fulfillmentMethod:     fulfillmentMethod || 'ship',
       });
     } catch {
       Alert.alert('Error', 'Failed to confirm order. Please try again.');
@@ -142,37 +144,44 @@ const BoutiquePaymentScreen: React.FC = () => {
         </View>
 
         {/* Payment Instructions */}
-        {(totalCents || 0) > 0 && (
+        {(totalCents || 0) > 0 && methods.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Ionicons name="phone-portrait-outline" size={18} color="#4A90E2" />
-              <Text style={styles.sectionTitle}>Pay via {paymentMethodName}</Text>
+              <Text style={styles.sectionTitle}>Payment Options</Text>
             </View>
-            {isOfflineMethod ? (
-              <View style={styles.infoBox}>
-                <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
-                <Text style={styles.infoText}>
-                  Provider will contact you to arrange{' '}
-                  <Text style={styles.bold}>{paymentMethodName.toLowerCase()}</Text>{' '}
-                  payment after the order is confirmed.
-                </Text>
-              </View>
-            ) : providerZelleId ? (
-              <View style={styles.infoBox}>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#2E7D32" />
-                <Text style={[styles.infoText, { color: '#2E7D32' }]}>
-                  Send <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
-                  {' '}via {paymentMethodName} to: <Text style={styles.bold}>{providerZelleId}</Text>
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.infoBox}>
-                <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
-                <Text style={styles.infoText}>
-                  After confirming, the provider will contact you with their {paymentMethodName} details.
-                </Text>
-              </View>
-            )}
+            {methods.map(method => {
+              const label = PAYMENT_METHOD_LABELS[method] || method;
+              const handle = infos[method];
+              const isOffline = OFFLINE_METHODS.includes(method);
+              return (
+                <View key={method} style={[styles.infoBox, { marginBottom: 8 }]}>
+                  {handle ? (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#2E7D32" />
+                      <Text style={[styles.infoText, { color: '#2E7D32' }]}>
+                        Send <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
+                        {' '}via <Text style={styles.bold}>{label}</Text> to: <Text style={styles.bold}>{handle}</Text>
+                      </Text>
+                    </>
+                  ) : isOffline ? (
+                    <>
+                      <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
+                      <Text style={styles.infoText}>
+                        Provider will contact you to arrange <Text style={styles.bold}>{label.toLowerCase()}</Text> payment after the order is confirmed.
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="information-circle-outline" size={20} color="#4A90E2" />
+                      <Text style={styles.infoText}>
+                        Provider will contact you with their <Text style={styles.bold}>{label}</Text> details after confirming.
+                      </Text>
+                    </>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 

@@ -33,12 +33,20 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   const [fulfillmentMethod, setFulfillmentMethod] = useState<'ship' | 'pickup'>(
     route.params?.fulfillmentMethod ?? 'ship'
   );
-  // Use post-level payment info if set, otherwise fall back to provider profile
-  const [providerZelleId, setProviderZelleId] = useState<string | null>(
-    activeItems[0]?.post_payment_info || null
+  const parsePaymentMethods = (raw: string | null | undefined): string[] => {
+    if (!raw) return [];
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [raw]; } catch { return [raw]; }
+  };
+  const parsePaymentInfos = (raw: string | null | undefined): Record<string, string> => {
+    if (!raw) return {};
+    try { const p = JSON.parse(raw); return typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; }
+  };
+
+  const [providerPaymentMethods, setProviderPaymentMethods] = useState<string[]>(
+    parsePaymentMethods(activeItems[0]?.post_payment_method)
   );
-  const [providerPaymentMethod, setProviderPaymentMethod] = useState<string | null>(
-    activeItems[0]?.post_payment_method || null
+  const [providerPaymentInfos, setProviderPaymentInfos] = useState<Record<string, string>>(
+    parsePaymentInfos(activeItems[0]?.post_payment_info)
   );
   const [loadingProvider, setLoadingProvider] = useState(false);
 
@@ -55,15 +63,18 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Only fetch from profile if post doesn't have payment info set
-    if (activeItems[0]?.post_payment_info && activeItems[0]?.post_payment_method) return;
+    if (activeItems[0]?.post_payment_method) return;
     const providerUserId = activeItems[0]?.provider_user_id;
     if (!providerUserId) return;
     setLoadingProvider(true);
     api.get(`/business-owners/by-user/${providerUserId}`)
       .then((data: any) => {
-        if (!activeItems[0]?.post_payment_info && data?.payment_info) setProviderZelleId(data.payment_info);
-        if (!activeItems[0]?.post_payment_method && data?.payment_method) setProviderPaymentMethod(data.payment_method);
+        if (!activeItems[0]?.post_payment_method && data?.payment_method) {
+          setProviderPaymentMethods(parsePaymentMethods(data.payment_method));
+        }
+        if (!activeItems[0]?.post_payment_info && data?.payment_info) {
+          setProviderPaymentInfos(parsePaymentInfos(data.payment_info));
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingProvider(false));
@@ -77,9 +88,10 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? shippingFeeCents : 0);
   const canPlaceOrder = fulfillmentMethod === 'pickup' || !!shippingAddress;
 
-  const paymentMethodLabel = ({
-    zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App',
-  } as Record<string, string>)[providerPaymentMethod || 'zelle'] || 'Zelle';
+  const PAYMENT_LABELS: Record<string, string> = {
+    zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check',
+  };
+  const OFFLINE_METHODS = ['cash', 'check', 'cashapp'];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -199,26 +211,35 @@ const BoutiqueCheckoutScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="card" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>Payment Methods Accepted</Text>
           </View>
           {loadingProvider ? (
             <ActivityIndicator size="small" color="#4A90E2" style={{ marginTop: 8 }} />
-          ) : providerPaymentMethod === 'cashapp' || providerPaymentMethod === 'cash' || providerPaymentMethod === 'check' ? (
-            <Text style={styles.paymentLabel}>
-              Once your order is placed, the provider will reach out with payment details.
-            </Text>
-          ) : providerZelleId ? (
-            <>
-              <Text style={styles.paymentLabel}>Pay via {paymentMethodLabel} to:</Text>
-              <View style={styles.zelleReadOnly}>
-                <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
-                <Text style={styles.zelleReadOnlyText}>{providerZelleId}</Text>
-              </View>
-            </>
-          ) : (
+          ) : providerPaymentMethods.length === 0 ? (
             <Text style={styles.zelleUnavailable}>
               Provider payment details not set — they will contact you after order is placed.
             </Text>
+          ) : (
+            providerPaymentMethods.map(method => {
+              const label = PAYMENT_LABELS[method] || method;
+              const handle = providerPaymentInfos[method];
+              const isOffline = OFFLINE_METHODS.includes(method);
+              return (
+                <View key={method} style={{ marginBottom: 8 }}>
+                  <Text style={styles.paymentLabel}>{label}</Text>
+                  {handle ? (
+                    <View style={styles.zelleReadOnly}>
+                      <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
+                      <Text style={styles.zelleReadOnlyText}>{handle}</Text>
+                    </View>
+                  ) : isOffline ? (
+                    <Text style={{ fontSize: 12, color: '#888' }}>
+                      Provider will reach out with {label} details after order is placed.
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })
           )}
         </View>
 
@@ -239,8 +260,8 @@ const BoutiqueCheckoutScreen: React.FC = () => {
             onPress={() => navigation.navigate('BoutiquePaymentScreen', {
               totalCents,
               items: activeItems,
-              providerZelleId,
-              providerPaymentMethod,
+              providerPaymentMethods,
+              providerPaymentInfos,
               fulfillmentMethod,
             })}
           >

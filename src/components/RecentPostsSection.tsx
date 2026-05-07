@@ -742,7 +742,7 @@ const MiniServiceCard: React.FC<{
 // MAIN COMPONENT
 // ============================================================================
 
-type Tab = 'all' | 'services' | 'boutique' | 'thrifting';
+type Tab = 'all' | 'services' | 'boutique';
 
 const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   recentPosts,
@@ -781,10 +781,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   const allOffers = recentPosts.filter(p => p.post_type !== 'request' && p.is_active !== false);
   const offers = allOffers.filter(p => {
     const isThrifting = p.service_category?.toLowerCase().trim() === 'preloved & thrifting';
-    if (activeTab === 'thrifting') return isThrifting;
     if (activeTab === 'boutique') return !isThrifting && paymentCategories?.has(p.service_category);
     if (activeTab === 'services') return !isThrifting && !paymentCategories?.has(p.service_category);
-    return true; // 'all'
+    return true; // 'all' — thrifting items show under All
   });
   const rows: ServicePost[][] = [];
   for (let i = 0; i < offers.length; i += 2) {
@@ -804,10 +803,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
       {/* Tab buttons */}
       <View style={sectionStyles.tabRow}>
         {([
-          { key: 'all',       label: 'All' },
-          { key: 'services',  label: 'Services' },
-          { key: 'boutique',  label: 'Sale' },
-          { key: 'thrifting', label: 'Preloved & Thrifting' },
+          { key: 'all',      label: 'All' },
+          { key: 'services', label: 'Services' },
+          { key: 'boutique', label: 'Sale' },
         ] as { key: Tab; label: string }[]).map(tab => (
           <TouchableOpacity
             key={tab.key}
