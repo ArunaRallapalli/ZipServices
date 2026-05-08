@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
 
   searchRowPicker: {
-    flex: 3,                      // picker gets more space; ZIP is narrower
+    flex: 4,                      // picker gets more space; ZIP is narrower
     borderWidth: 1,
     borderColor: "#ffffff",
     borderRadius: 8,
@@ -248,14 +248,14 @@ const styles = StyleSheet.create({
   },
 
   zipInputInline: {
-    flex: 0.7,
+    flex: 0.55,
     height: 46,
     borderWidth: 1,
     borderColor: "#ffffff",
     backgroundColor: "#ffffff",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
   },
 
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
 // =============================================================================
 const pickerSelectStyles = StyleSheet.create({
   inputIOS: {
-    fontSize: 13,
+    fontSize: 15,
     paddingVertical: 12,
     paddingHorizontal: 10,
     color: '#333',
@@ -391,7 +391,7 @@ const pickerSelectStyles = StyleSheet.create({
   },
 
   inputAndroid: {
-    fontSize: 13,
+    fontSize: 15,
     paddingHorizontal: 10,
     paddingVertical: 8,
     color: '#333',
@@ -402,7 +402,7 @@ const pickerSelectStyles = StyleSheet.create({
   },
 
   inputWeb: {
-    fontSize: 13,
+    fontSize: 15,
     paddingVertical: 12,
     paddingHorizontal: 10,
     color: '#333',
@@ -429,7 +429,7 @@ const pickerSelectStyles = StyleSheet.create({
 
   placeholder: {
     color: '#999',
-    fontSize: 14,
+    fontSize: 15,
   },
 });
 
