@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
 
   searchRowPicker: {
-    flex: 4,                      // picker gets more space; ZIP is narrower
+    flex: 6,                      // picker gets more space; ZIP is narrower
     borderWidth: 1,
     borderColor: "#ffffff",
     borderRadius: 8,
@@ -248,12 +248,12 @@ const styles = StyleSheet.create({
   },
 
   zipInputInline: {
-    flex: 0.55,
+    flex: 0.38,
     height: 46,
     borderWidth: 1,
     borderColor: "#ffffff",
     backgroundColor: "#ffffff",
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     borderRadius: 8,
     fontSize: 13,
     textAlign: 'center',

@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   signInBtnText: {
     color: '#4A90E2',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
   },
 });
