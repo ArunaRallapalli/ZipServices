@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
 
   searchRowPicker: {
-    flex: 6,                      // picker gets more space; ZIP is narrower
+    flex: 1,                      // takes all space not used by fixed-width ZIP and Search
     borderWidth: 1,
     borderColor: "#ffffff",
     borderRadius: 8,
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
 
   zipInputInline: {
-    flex: 0.38,
+    width: 58,                    // fixed — just enough for 5 digits on all platforms
     height: 46,
     borderWidth: 1,
     borderColor: "#ffffff",
