@@ -131,6 +131,11 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     
   } catch (err: any) {
     console.error('❌ Profile fetch error:', err);
+    if (err?.status === 401) {
+      await signOut();
+      navigation.reset({ index: 0, routes: [{ name: 'BusinessOwnerHomeScreen' }] });
+      return;
+    }
     setError("Failed to load profile. Please check your network and try again.");
     Alert.alert("Error", "Failed to load profile. Please check your network and try again.");
   } finally {
