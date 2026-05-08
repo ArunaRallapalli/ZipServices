@@ -27,13 +27,6 @@ const SearchHeader: React.FC<SearchHeaderProps> = ({
       {/* Title row */}
       <View style={styles.headerTitleContainer}>
         <Text style={styles.mainTitle}>Find Local Services</Text>
-
-        {!isAuthenticated && (
-          <TouchableOpacity onPress={onSignInPress} style={styles.signInIcon}>
-            <Ionicons name="person-circle-outline" size={26} color="#ffffff" />
-            <Text style={styles.signInIconText}>Sign In</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Compact subtitle */}
@@ -41,6 +34,14 @@ const SearchHeader: React.FC<SearchHeaderProps> = ({
        <Text style={styles.subtitleLink}>Welcome to Gozipmarket.com</Text>
         {' '}— your local services marketplace.
       </Text>
+
+      {/* Sign In button — shown only to guests */}
+      {!isAuthenticated && (
+        <TouchableOpacity onPress={onSignInPress} style={styles.signInBtn}>
+          <Ionicons name="person-circle-outline" size={18} color="#4A90E2" />
+          <Text style={styles.signInBtnText}>Sign In</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Authenticated welcome badge */}
       {isAuthenticated && (
@@ -105,18 +106,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-  signInIcon: {
-    position: 'absolute',
-    right: 0,
-    padding: 4,
+  signInBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingVertical: 9,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  signInIconText: {
-    color: '#ffffff',
-    fontSize: 16,
-    marginTop: 2,
-    fontWeight: '600',
-    textAlign: 'center',
+  signInBtnText: {
+    color: '#4A90E2',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
 
