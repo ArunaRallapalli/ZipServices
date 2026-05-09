@@ -42,8 +42,11 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     try { const p = JSON.parse(raw); return typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; }
   };
 
+  const customerSelectedMethod = activeItems[0]?.selected_payment_method;
   const [providerPaymentMethods, setProviderPaymentMethods] = useState<string[]>(
-    parsePaymentMethods(activeItems[0]?.post_payment_method)
+    customerSelectedMethod
+      ? [customerSelectedMethod]
+      : parsePaymentMethods(activeItems[0]?.post_payment_method)
   );
   const [providerPaymentInfos, setProviderPaymentInfos] = useState<Record<string, string>>(
     parsePaymentInfos(activeItems[0]?.post_payment_info)
@@ -63,6 +66,8 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Skip provider fetch if customer already chose a method at add-to-cart time
+    if (customerSelectedMethod) return;
     if (activeItems[0]?.post_payment_method) return;
     const providerUserId = activeItems[0]?.provider_user_id;
     if (!providerUserId) return;
@@ -211,7 +216,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="card" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Payment Methods Accepted</Text>
+            <Text style={styles.sectionTitle}>{customerSelectedMethod ? 'Your Selected Payment Method' : 'Payment Methods Accepted'}</Text>
           </View>
           {loadingProvider ? (
             <ActivityIndicator size="small" color="#4A90E2" style={{ marginTop: 8 }} />
