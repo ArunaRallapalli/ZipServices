@@ -232,11 +232,31 @@ let userInfo: {
           [
             {
               text: 'Get Started',
-              onPress: () => {
+              onPress: async () => {
                 navigation.reset({
                   index: 0,
                   routes: [{ name: 'TabWrapperScreen' }],
                 });
+                const showPrompt = await AsyncStorage.getItem('post_prompt_pending');
+                if (showPrompt) {
+                  await AsyncStorage.removeItem('post_prompt_pending');
+                  setTimeout(() => {
+                    Alert.alert(
+                      'Want to Post Your First Service? 🚀',
+                      'You\'re all set! Head to Post / Request to list your service and start reaching customers in your area.',
+                      [
+                        {
+                          text: 'Maybe Later',
+                          style: 'cancel',
+                        },
+                        {
+                          text: 'Yes, Post Now!',
+                          onPress: () => navigation.navigate('PostServiceScreen'),
+                        },
+                      ]
+                    );
+                  }, 600);
+                }
               }
             }
           ]
