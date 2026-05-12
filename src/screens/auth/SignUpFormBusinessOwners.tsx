@@ -169,7 +169,21 @@ const handleCancel = () => {
           {
             text: "OK",
             onPress: () => {
-              navigation.navigate('SigninBusinessOwners');
+              Alert.alert(
+                "Want to Post Your First Service?",
+                "Once you verify your email and sign in, head to Post / Request to list your service and start reaching customers in your area!",
+                [
+                  {
+                    text: "Maybe Later",
+                    style: "cancel",
+                    onPress: () => navigation.navigate('SigninBusinessOwners'),
+                  },
+                  {
+                    text: "Yes, Let's Go!",
+                    onPress: () => navigation.navigate('SigninBusinessOwners'),
+                  },
+                ]
+              );
             }
           }
         ]
