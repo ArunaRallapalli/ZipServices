@@ -62,7 +62,7 @@ const PostServiceScreen: React.FC = () => {
   const [deliveryTimeline, setDeliveryTimeline] = useState('5 to 7 business days');
   const [zipCode, setZipCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
+  const [contactEmail, setContactEmail] = useState(userInfo?.email || '');
   const [inStock, setInStock] = useState('1');
   const [shippingCharge, setShippingCharge] = useState('10.00');
   const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
