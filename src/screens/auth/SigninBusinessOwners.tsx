@@ -242,15 +242,15 @@ let userInfo: {
                   await AsyncStorage.removeItem('post_prompt_pending');
                   setTimeout(() => {
                     Alert.alert(
-                      'Want to Post Your First Service? 🚀',
-                      'You\'re all set! Head to Post / Request to list your service and start reaching customers in your area.',
+                      'Welcome to GoZipMarket! 🎉',
+                      'What would you like to do first?',
                       [
                         {
-                          text: 'Maybe Later',
+                          text: 'Browse Local Services',
                           style: 'cancel',
                         },
                         {
-                          text: 'Yes, Post Now!',
+                          text: 'Post My First Service',
                           onPress: () => navigation.navigate('PostServiceScreen'),
                         },
                       ]
