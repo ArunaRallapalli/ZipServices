@@ -439,30 +439,38 @@ setInterval(sweepExpiredThriftRequests, 30 * 60 * 1000);
 // Safe to re-run — uses upsert on category_name.
 async function seedServiceCategories(): Promise<void> {
   const required = [
+    'Babysitting',
     'Bakery',
     'Beauty Services',
+    'Boutique',
     'Catering',
     'Cleaning',
     'Construction/Renovation',
     'Dance Lessons',
+    'Decorations',
     'DJ',
     'Electrical',
     'Entertainment',
     'Event Planning',
+    'Financial Planning',
+    'Home Help',
     'Home Repair',
     'Landscaping',
     'Moving',
+    'Nanny Services',
     'Other',
     'Painting',
     'Pet Care',
     'Photography',
     'Plumbing',
     'Preloved & Thrifting',
+    'Priest Services',
     'Rentals',
     'Shoe Repair',
     'Tailoring',
     'Tech Support',
     'Tutoring',
+    'Yoga Instruction',
   ];
 
   try {

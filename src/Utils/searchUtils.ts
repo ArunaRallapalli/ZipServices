@@ -63,6 +63,9 @@ export interface ServicePost {
   accepts_payment?: boolean;
   provider_accepts_zelle?: boolean;
   in_stock?: number;        // 0 = not available, 1+ = available (default 1)
+  shipping_charge_cents?: number;
+  post_payment_method?: string;   // JSON string: '["zelle","venmo"]'
+  post_payment_info?: string;     // JSON string: '{"zelle":"handle"}'
 }
 
 /**

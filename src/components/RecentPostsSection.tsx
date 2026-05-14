@@ -53,7 +53,12 @@ type AddToCartFn = (
   photoIndex: number,
   photoUrl: string,
   photoPrice?: number,
+  selectedPayMethod?: string,
 ) => void;
+
+const PAYMENT_LABELS: Record<string, string> = {
+  zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check',
+};
 
 interface RecentPostsSectionProps {
   recentPosts: ServicePost[];
@@ -141,8 +146,17 @@ const DetailModal: React.FC<{
   const [thriftPendingIndexes, setThriftPendingIndexes] = useState<number[]>([]);
   const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
   const [stockChecking, setStockChecking] = useState(false);
+  const [selectedPayMethod, setSelectedPayMethod] = useState<string | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const photos = item.photos ?? [];
+
+  const availablePayMethods = React.useMemo(() => {
+    if (!item.post_payment_method) return [];
+    try {
+      const parsed = JSON.parse(item.post_payment_method);
+      return Array.isArray(parsed) ? parsed : [item.post_payment_method];
+    } catch { return [item.post_payment_method]; }
+  }, [item.post_payment_method]);
 
   const isThriftingFree =
     item.service_category?.toLowerCase().trim() === 'preloved & thrifting';
@@ -169,6 +183,7 @@ const DetailModal: React.FC<{
     // a previous user session (logout/login) doesn't disable the button.
     if (visible) {
       setSelectedPhotoIndex(0);
+      setSelectedPayMethod(availablePayMethods.length === 1 ? availablePayMethods[0] : null);
       if (isThriftingFree && photos.length > 0) {
         setRequestStatus('idle');
       }
@@ -278,8 +293,12 @@ const DetailModal: React.FC<{
         if (!isMultiPhoto && post?.in_stock != null && post.in_stock <= 0) return;
       } catch { /* proceed if check fails */ }
     }
+    if (availablePayMethods.length > 0 && !selectedPayMethod) {
+      Alert.alert('Select Payment Method', 'Please choose how you would like to pay before adding to cart.');
+      return;
+    }
     const firstPhotoUrl = photos[selectedPhotoIndex] ?? photos[0] ?? '';
-    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex] || undefined);
+    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex] || undefined, selectedPayMethod ?? undefined);
     if (added === false) return;
     setAddedToCart(true);
     Alert.alert(
@@ -495,7 +514,7 @@ const DetailModal: React.FC<{
                   })()}
                 </>
               ) : (
-                /* ── Paid categories: Add to Cart ── */
+                /* ── Paid categories: Payment method selector + Add to Cart ── */
                 paymentCategories?.has(item.service_category) && (
                   soldPhotoIndexes.includes(selectedPhotoIndex) || (photos.length > 0 && soldPhotoIndexes.length >= photos.length) ? (
                     <View style={modalStyles.unavailableBox}>
@@ -505,16 +524,37 @@ const DetailModal: React.FC<{
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      style={[modalStyles.cartButton, (addedToCart || stockChecking) && modalStyles.cartButtonAdded, stockChecking && { opacity: 0.6 }]}
-                      onPress={addedToCart
-                        ? () => { onClose(); setTimeout(() => navigation.navigate('CartScreen'), 300); }
-                        : handleAddListingToCart}
-                      disabled={stockChecking}
-                    >
-                      <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
-                      <Text style={modalStyles.buttonText}>{stockChecking ? ' Checking...' : addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
-                    </TouchableOpacity>
+                    <>
+                      {availablePayMethods.length > 0 && !addedToCart && (
+                        <View style={modalStyles.payMethodSection}>
+                          <Text style={modalStyles.payMethodLabel}>How would you like to pay?</Text>
+                          <View style={modalStyles.payMethodChips}>
+                            {availablePayMethods.map(method => (
+                              <TouchableOpacity
+                                key={method}
+                                style={[modalStyles.payChip, selectedPayMethod === method && modalStyles.payChipSelected]}
+                                onPress={() => setSelectedPayMethod(method)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[modalStyles.payChipText, selectedPayMethod === method && modalStyles.payChipTextSelected]}>
+                                  {PAYMENT_LABELS[method] || method}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        style={[modalStyles.cartButton, (addedToCart || stockChecking) && modalStyles.cartButtonAdded, stockChecking && { opacity: 0.6 }]}
+                        onPress={addedToCart
+                          ? () => { onClose(); setTimeout(() => navigation.navigate('CartScreen'), 300); }
+                          : handleAddListingToCart}
+                        disabled={stockChecking}
+                      >
+                        <Ionicons name={addedToCart ? 'cart' : 'cart-outline'} size={18} color="#fff" />
+                        <Text style={modalStyles.buttonText}>{stockChecking ? ' Checking...' : addedToCart ? ' View Cart' : ' Add to Cart'}</Text>
+                      </TouchableOpacity>
+                    </>
                   )
                 )
               )}
@@ -742,7 +782,7 @@ const MiniServiceCard: React.FC<{
 // MAIN COMPONENT
 // ============================================================================
 
-type Tab = 'all' | 'services' | 'boutique' | 'thrifting';
+type Tab = 'all' | 'services' | 'boutique';
 
 const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   recentPosts,
@@ -781,10 +821,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   const allOffers = recentPosts.filter(p => p.post_type !== 'request' && p.is_active !== false);
   const offers = allOffers.filter(p => {
     const isThrifting = p.service_category?.toLowerCase().trim() === 'preloved & thrifting';
-    if (activeTab === 'thrifting') return isThrifting;
     if (activeTab === 'boutique') return !isThrifting && paymentCategories?.has(p.service_category);
     if (activeTab === 'services') return !isThrifting && !paymentCategories?.has(p.service_category);
-    return true; // 'all'
+    return true; // 'all' — thrifting items show under All
   });
   const rows: ServicePost[][] = [];
   for (let i = 0; i < offers.length; i += 2) {
@@ -804,10 +843,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
       {/* Tab buttons */}
       <View style={sectionStyles.tabRow}>
         {([
-          { key: 'all',       label: 'All' },
-          { key: 'services',  label: 'Services' },
-          { key: 'boutique',  label: 'Sale' },
-          { key: 'thrifting', label: 'Preloved & Thrifting' },
+          { key: 'all',      label: 'All' },
+          { key: 'services', label: 'Services' },
+          { key: 'boutique', label: 'Sale' },
         ] as { key: Tab; label: string }[]).map(tab => (
           <TouchableOpacity
             key={tab.key}
@@ -1269,6 +1307,16 @@ const modalStyles = StyleSheet.create({
   unavailableText: { color: '#999', fontSize: 12, fontWeight: '600', marginBottom: 8 },
   keepBrowsingBtn: { backgroundColor: '#4A90E2', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
   keepBrowsingText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  payMethodSection: { width: '100%', marginBottom: 10 },
+  payMethodLabel: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 8 },
+  payMethodChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  payChip: {
+    paddingVertical: 7, paddingHorizontal: 16, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#4A90E2', backgroundColor: '#fff',
+  },
+  payChipSelected: { backgroundColor: '#4A90E2' },
+  payChipText: { fontSize: 13, fontWeight: '600', color: '#4A90E2' },
+  payChipTextSelected: { color: '#fff' },
 });
 
 // ============================================================================

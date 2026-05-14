@@ -152,6 +152,7 @@ const SearchResultsScreen: React.FC = () => {
     photoIndex: number,
     photoUrl: string,
     photoPrice?: number,
+    selectedPayMethod?: string,
   ): boolean => {
     if (cartItems.length > 0) {
     }
@@ -171,6 +172,7 @@ const SearchResultsScreen: React.FC = () => {
       shipping_charge_cents: item.shipping_charge_cents || undefined,
       post_payment_method: item.post_payment_method || undefined,
       post_payment_info: item.post_payment_info || undefined,
+      selected_payment_method: selectedPayMethod || undefined,
     }));
     return true;
   };

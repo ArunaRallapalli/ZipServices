@@ -690,6 +690,8 @@ interface OrderPlacementEmailParams {
   totalCents: number;
   orderDate: string;
   buyerTimezone?: string;
+  paymentMethods?: string[];
+  paymentInfos?: Record<string, string>;
 }
 
 function buildProviderPlacementHtml(params: {
@@ -829,8 +831,10 @@ function buildCustomerPlacementHtml(params: {
   totalCents: number;
   orderDate: string;
   buyerTimezone?: string;
+  paymentMethods?: string[];
+  paymentInfos?: Record<string, string>;
 }): string {
-  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone } = params;
+  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const formattedDate = new Date(orderDate).toLocaleString('en-US', {
     timeZone: buyerTimezone || 'UTC',
@@ -928,7 +932,16 @@ function buildCustomerPlacementHtml(params: {
             ${totalCents > 0 ? `
             <div class="next-step-box">
               <strong>⏳ Next Step — Action Required Within 24 Hours</strong><br/>
-              Please complete your Zelle payment to confirm this order. The service provider will begin processing only after payment is received.<br/><br/>
+              Please complete your payment to confirm this order. The service provider will begin processing only after payment is received.<br/><br/>
+              ${(paymentMethods && paymentMethods.length > 0 && paymentInfos)
+                ? `<strong>Payment Method${paymentMethods.length > 1 ? 's' : ''}:</strong><br/>
+                  ${paymentMethods.map((m: string) => {
+                    const LABELS: Record<string, string> = { zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' };
+                    const label = LABELS[m] || m;
+                    const info = paymentInfos[m];
+                    return info ? `&nbsp;&bull;&nbsp;<strong>${label}:</strong> ${info}` : `&nbsp;&bull;&nbsp;${label}`;
+                  }).join('<br/>')}<br/><br/>`
+                : ''}
               <span style="color:#E65100;font-weight:700;">⚠️ Important:</span> If payment is not completed within <strong>24 hours</strong> of placing this order, it will be <strong>automatically cancelled</strong> and the items will be released back for others to purchase.
             </div>
             ` : ''}
@@ -1077,6 +1090,8 @@ export async function sendOrderPlacementEmails({
   totalCents,
   orderDate,
   buyerTimezone,
+  paymentMethods,
+  paymentInfos,
 }: OrderPlacementEmailParams): Promise<void> {
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const date = orderDate || new Date().toISOString();
@@ -1096,7 +1111,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'support@gozipmarket.com',
       to:      customerEmail,
       subject: `Order Placed #${displayId} — GoZipMarket`,
-      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
+      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
     }).then(() => console.log(`✅ Order placement email sent to customer ${customerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to customer ${customerEmail}:`, err)),
 

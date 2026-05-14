@@ -286,6 +286,8 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
       provider_user_id,
       buyer_zelle_id,
       service_provider_zelle_id,
+      payment_methods,
+      payment_infos,
       total_cents,
       items,
       shipping_address,
@@ -420,16 +422,18 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
         }
 
         await sendOrderPlacementEmails({
-          orderId:       data.id,
-          customerEmail: buyer.email,
-          customerName:  buyerBizRes.data?.business_name || 'Customer',
-          providerEmail: provider.email,
-          providerName:  providerBizRes.data?.business_name || 'Service Provider',
-          adminEmails:   admins.map((a: any) => a.email),
+          orderId:        data.id,
+          customerEmail:  buyer.email,
+          customerName:   buyerBizRes.data?.business_name || 'Customer',
+          providerEmail:  provider.email,
+          providerName:   providerBizRes.data?.business_name || 'Service Provider',
+          adminEmails:    admins.map((a: any) => a.email),
           items,
-          totalCents:    total_cents,
-          orderDate:     new Date().toISOString(),
-          buyerTimezone: buyer_timezone || undefined,
+          totalCents:     total_cents,
+          orderDate:      new Date().toISOString(),
+          buyerTimezone:  buyer_timezone || undefined,
+          paymentMethods: payment_methods || [],
+          paymentInfos:   payment_infos || {},
         });
       } catch (emailErr) {
         console.error(`❌ Order placement email error for #${data.id}:`, emailErr);

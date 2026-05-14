@@ -117,8 +117,8 @@ const EditListing: React.FC = () => {
 
   // Boutique-specific fields
   const [shippingCharge, setShippingCharge] = useState('10.00');
-  const [postPaymentMethod, setPostPaymentMethod] = useState('');
-  const [postPaymentInfo, setPostPaymentInfo] = useState('');
+  const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
+  const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
 
   // ADDED: February 19, 2026 - Photo states
   // existingPhotos: URLs already saved on the post (loaded from backend)
@@ -431,8 +431,12 @@ const EditListing: React.FC = () => {
         if ((post as any).shipping_charge_cents != null) {
           setShippingCharge(((post as any).shipping_charge_cents / 100).toFixed(2));
         }
-        if ((post as any).post_payment_method) setPostPaymentMethod((post as any).post_payment_method);
-        if ((post as any).post_payment_info) setPostPaymentInfo((post as any).post_payment_info);
+        if ((post as any).post_payment_method) {
+          try { setPostPaymentMethods(JSON.parse((post as any).post_payment_method)); } catch { setPostPaymentMethods([]); }
+        }
+        if ((post as any).post_payment_info) {
+          try { setPostPaymentInfos(JSON.parse((post as any).post_payment_info)); } catch { setPostPaymentInfos({}); }
+        }
 
         // ADDED: February 19, 2026 - Load existing photos from the post data
         if (Array.isArray(post.photos) && post.photos.length > 0) {
@@ -493,6 +497,13 @@ const EditListing: React.FC = () => {
       newErrors.phoneNumber = "Phone number must be 10 digits";
     }
 
+    // Price is required and must be > 0 for payment-accepting non-thrifting categories
+    const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
+    const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
+      newErrors.price = "Please enter a price greater than $0.00";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -533,8 +544,8 @@ const EditListing: React.FC = () => {
         ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
         ...(isBoutique ? {
           shipping_charge_cents: Math.round(parseFloat(shippingCharge || '0') * 100) || 1000,
-          post_payment_method: postPaymentMethod || null,
-          post_payment_info: postPaymentInfo.trim() || null,
+          post_payment_method: postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
+          post_payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
         } : {}),
       };
 
@@ -548,10 +559,10 @@ const EditListing: React.FC = () => {
       // Show success message and navigate back if update successful
       if (data.success) {
         // Save payment method + shipping as profile defaults for future posts
-        if (isBoutique && (postPaymentMethod || postPaymentInfo)) {
+        if (isBoutique && postPaymentMethods.length > 0) {
           api.put(`/business-owners/by-user/${userInfo?.user_id}`, {
-            payment_method: postPaymentMethod || null,
-            payment_info: postPaymentInfo.trim() || null,
+            payment_method: JSON.stringify(postPaymentMethods),
+            payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
           }).catch((err: any) => console.warn('⚠️ Could not save payment defaults to profile:', err));
         }
 
@@ -797,6 +808,7 @@ const EditListing: React.FC = () => {
                   editable={!saving}
                 />
               </View>
+              {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
             </View>
           ) : (
             <View style={styles.section}>
@@ -926,55 +938,56 @@ const EditListing: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Payment Method */}
-          {serviceCategory.toLowerCase().trim() === 'boutique' && (
-            <View style={styles.section}>
-              <Text style={styles.label}>Payment Method</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={postPaymentMethod}
-                  onValueChange={(val) => { setPostPaymentMethod(val); setPostPaymentInfo(''); }}
-                  style={styles.picker}
-                  enabled={!saving}
-                >
-                  <Picker.Item label="Select payment method..." value="" />
-                  {[
-                    { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
-                    { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
-                    { value: 'paypal',  label: 'PayPal',   handleLabel: 'PayPal email or phone' },
-                    { value: 'cashapp', label: 'Cash App', handleLabel: 'Cash App $cashtag' },
-                    { value: 'cash',    label: 'Cash',     handleLabel: null },
-                    { value: 'check',   label: 'Check',    handleLabel: null },
-                  ].map(o => (
-                    <Picker.Item key={o.value} label={o.label} value={o.value} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-          )}
-
-          {/* Boutique-only: Payment Handle */}
-          {(() => {
+          {/* Boutique-only: Payment Methods (multi-select checkboxes) */}
+          {serviceCategory.toLowerCase().trim() === 'boutique' && (() => {
             const PAYMENT_OPTIONS = [
-              { value: 'zelle',   handleLabel: 'Zelle email or phone' },
-              { value: 'venmo',   handleLabel: 'Venmo username' },
-              { value: 'paypal',  handleLabel: 'PayPal email or phone' },
-              { value: 'cashapp', handleLabel: 'Cash App $cashtag' },
+              { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
+              { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
+              { value: 'paypal',  label: 'PayPal',   handleLabel: 'PayPal email or phone' },
+              { value: 'cashapp', label: 'Cash App', handleLabel: 'Cash App $cashtag' },
+              { value: 'cash',    label: 'Cash',     handleLabel: null },
+              { value: 'check',   label: 'Check',    handleLabel: null },
             ];
-            const handleLabel = PAYMENT_OPTIONS.find(o => o.value === postPaymentMethod)?.handleLabel;
-            return serviceCategory.toLowerCase().trim() === 'boutique' && handleLabel ? (
+            const togglePaymentMethod = (value: string) => {
+              setPostPaymentMethods(prev =>
+                prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
+              );
+            };
+            return (
               <View style={styles.section}>
-                <Text style={styles.label}>{handleLabel}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={postPaymentInfo}
-                  onChangeText={setPostPaymentInfo}
-                  placeholder={handleLabel}
-                  autoCapitalize="none"
-                  editable={!saving}
-                />
+                <Text style={styles.label}>Payment Methods (select all you accept)</Text>
+                {PAYMENT_OPTIONS.map(o => {
+                  const checked = postPaymentMethods.includes(o.value);
+                  return (
+                    <View key={o.value}>
+                      <TouchableOpacity
+                        style={styles.checkboxRow}
+                        onPress={() => togglePaymentMethod(o.value)}
+                        activeOpacity={0.7}
+                        disabled={saving}
+                      >
+                        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                          {checked && <Text style={styles.checkboxTick}>✓</Text>}
+                        </View>
+                        <Text style={styles.checkboxLabel}>{o.label}</Text>
+                      </TouchableOpacity>
+                      {checked && o.handleLabel && (
+                        <TextInput
+                          style={[styles.input, { marginLeft: 32, marginTop: 4 }]}
+                          value={postPaymentInfos[o.value] || ''}
+                          onChangeText={text =>
+                            setPostPaymentInfos(prev => ({ ...prev, [o.value]: text }))
+                          }
+                          placeholder={o.handleLabel}
+                          autoCapitalize="none"
+                          editable={!saving}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
-            ) : null;
+            );
           })()}
 
           {/* ====================================================================
@@ -1235,6 +1248,14 @@ const styles = createResponsiveStyles({
   picker: {
     height: 50,
   },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#4A90E2',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff',
+  },
+  checkboxChecked: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' },
+  checkboxTick: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  checkboxLabel: { fontSize: 15, color: '#333' },
   postTypeContainer: {
     flexDirection: "row",
     gap: 10,

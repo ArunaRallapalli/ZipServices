@@ -32,6 +32,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../navigation/MainStackNavigator";
 import api from '../../api';
 import { validateZipCode } from '../../Services/zipCodeService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SignUpBusinessNavProp = StackNavigationProp<
   RootStackParamList,
@@ -162,15 +163,14 @@ const handleCancel = () => {
       console.log("📥 Registration response:", data);
       console.log("✅ Registration successful!");
 
+      await AsyncStorage.setItem('post_prompt_pending', 'true');
       Alert.alert(
         "Account Created! 📧",
         "Please check your email to verify your account. You must verify your email before you can sign in.",
         [
           {
             text: "OK",
-            onPress: () => {
-              navigation.navigate('SigninBusinessOwners');
-            }
+            onPress: () => navigation.navigate('SigninBusinessOwners'),
           }
         ]
       );

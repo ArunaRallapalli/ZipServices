@@ -51,8 +51,9 @@ export interface CartItem {
   in_stock?: number;             // copied from post to enforce quantity cap
   price?: number;                // flat price per item in dollars (fallback when photo_price unset)
   shipping_charge_cents?: number; // per-post shipping charge set by provider
-  post_payment_method?: string;   // payment method set on this post
-  post_payment_info?: string;     // payment handle set on this post
+  post_payment_method?: string;     // payment methods configured on this post (JSON array string)
+  post_payment_info?: string;       // payment handles configured on this post (JSON object string)
+  selected_payment_method?: string; // payment method chosen by the customer at add-to-cart time
 }
 
 interface CartState {

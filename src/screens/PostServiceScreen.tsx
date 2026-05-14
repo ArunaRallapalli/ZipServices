@@ -62,11 +62,11 @@ const PostServiceScreen: React.FC = () => {
   const [deliveryTimeline, setDeliveryTimeline] = useState('5 to 7 business days');
   const [zipCode, setZipCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
+  const [contactEmail, setContactEmail] = useState(userInfo?.email || '');
   const [inStock, setInStock] = useState('1');
   const [shippingCharge, setShippingCharge] = useState('10.00');
-  const [postPaymentMethod, setPostPaymentMethod] = useState<string>('');
-  const [postPaymentInfo, setPostPaymentInfo] = useState<string>('');
+  const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
+  const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
 
   // Photo state — each entry is { asset, description }
   const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
@@ -379,8 +379,19 @@ const PostServiceScreen: React.FC = () => {
       // Pre-fill payment method from business owner profile
       if (userId) {
         const boData = await api.get(`/business-owners/by-user/${userId}`);
-        if (boData?.payment_method) setPostPaymentMethod(boData.payment_method);
-        if (boData?.payment_info) setPostPaymentInfo(boData.payment_info);
+        if (boData?.payment_method) {
+          try {
+            const parsed = JSON.parse(boData.payment_method);
+            if (Array.isArray(parsed)) setPostPaymentMethods(parsed);
+            else setPostPaymentMethods([boData.payment_method]);
+          } catch { setPostPaymentMethods([boData.payment_method]); }
+        }
+        if (boData?.payment_info) {
+          try {
+            const parsed = JSON.parse(boData.payment_info);
+            if (typeof parsed === 'object' && !Array.isArray(parsed)) setPostPaymentInfos(parsed);
+          } catch {}
+        }
       }
     } catch (error) {
       console.error('❌ Error loading user profile:', error);
@@ -400,8 +411,8 @@ const PostServiceScreen: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
-    if (acceptsPayment && !isThrifting && priceRange.trim() === '') {
-      Alert.alert('Validation Error', 'Please enter a price.');
+    if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
+      Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
     if ((isThrifting || isBoutiqueCategory) && selectedPhotos.length === 0) {
@@ -422,8 +433,16 @@ const PostServiceScreen: React.FC = () => {
     { value: 'cash',    label: 'Cash',     handleLabel: null },
     { value: 'check',   label: 'Check',    handleLabel: null },
   ];
-  const selectedPaymentOption = PAYMENT_OPTIONS.find(o => o.value === postPaymentMethod);
-  const handleLabel = selectedPaymentOption?.handleLabel || null;
+  const togglePaymentMethod = (value: string) => {
+    setPostPaymentMethods(prev =>
+      prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
+    );
+    setPostPaymentInfos(prev => {
+      const next = { ...prev };
+      if (next[value]) delete next[value];
+      return next;
+    });
+  };
 
   // --------------------------------------------------------------------------
   // SUBMIT
@@ -469,8 +488,8 @@ const PostServiceScreen: React.FC = () => {
         contact_email: contactEmail.trim(),
         in_stock: parseInt(inStock) || 1,
         shipping_charge_cents: isBoutique ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
-        post_payment_method: isBoutique ? (postPaymentMethod || null) : null,
-        post_payment_info: isBoutique ? (postPaymentInfo.trim() || null) : null,
+        post_payment_method: isBoutique && postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
+        post_payment_info: isBoutique && Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
       };
 
       console.log('📤 Submitting service offer...');
@@ -478,10 +497,10 @@ const PostServiceScreen: React.FC = () => {
       console.log('✅ Post created successfully:', data.post.id);
 
       // Save payment method + shipping as profile defaults for future posts
-      if (isBoutique && (postPaymentMethod || postPaymentInfo)) {
+      if (isBoutique && postPaymentMethods.length > 0) {
         api.put(`/business-owners/by-user/${userId}`, {
-          payment_method: postPaymentMethod || null,
-          payment_info: postPaymentInfo.trim() || null,
+          payment_method: JSON.stringify(postPaymentMethods),
+          payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
         }).catch(err => console.warn('⚠️ Could not save payment defaults to profile:', err));
       }
 
@@ -900,36 +919,38 @@ const PostServiceScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Payment Method */}
+          {/* Boutique-only: Payment Methods (multi-select) */}
           {isBoutique && (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Payment Method</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={postPaymentMethod}
-                  onValueChange={(val) => { setPostPaymentMethod(val); setPostPaymentInfo(''); }}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Select payment method..." value="" />
-                  {PAYMENT_OPTIONS.map(o => (
-                    <Picker.Item key={o.value} label={o.label} value={o.value} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-          )}
-
-          {/* Boutique-only: Payment Handle (Zelle/Venmo/PayPal/CashApp) */}
-          {isBoutique && handleLabel && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{handleLabel}</Text>
-              <TextInput
-                style={styles.input}
-                value={postPaymentInfo}
-                onChangeText={setPostPaymentInfo}
-                placeholder={handleLabel}
-                autoCapitalize="none"
-              />
+              <Text style={styles.label}>Payment Methods (select all you accept)</Text>
+              {PAYMENT_OPTIONS.map(o => {
+                const checked = postPaymentMethods.includes(o.value);
+                return (
+                  <View key={o.value}>
+                    <TouchableOpacity
+                      style={styles.checkboxRow}
+                      onPress={() => togglePaymentMethod(o.value)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                        {checked && <Text style={styles.checkboxTick}>✓</Text>}
+                      </View>
+                      <Text style={styles.checkboxLabel}>{o.label}</Text>
+                    </TouchableOpacity>
+                    {checked && o.handleLabel && (
+                      <TextInput
+                        style={[styles.input, { marginLeft: 32, marginTop: 4 }]}
+                        value={postPaymentInfos[o.value] || ''}
+                        onChangeText={text =>
+                          setPostPaymentInfos(prev => ({ ...prev, [o.value]: text }))
+                        }
+                        placeholder={o.handleLabel}
+                        autoCapitalize="none"
+                      />
+                    )}
+                  </View>
+                );
+              })}
             </View>
           )}
 
@@ -1087,6 +1108,14 @@ const styles = createResponsiveStyles({
     overflow: 'hidden',
   },
   picker: { height: 50 },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#4A90E2',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff',
+  },
+  checkboxChecked: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' },
+  checkboxTick: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  checkboxLabel: { fontSize: 15, color: '#333' },
 
   // Photo upload styles
   photoHeader: {

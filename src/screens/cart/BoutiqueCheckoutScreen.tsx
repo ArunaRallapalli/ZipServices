@@ -14,9 +14,13 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAgreedAmount } from '../../store/cartSlice';
+import { setShippingAddress } from '../../store/checkoutSlice';
 import type { RootState } from '../../store/store';
 import api from '../../api';
+
+const SAVED_ADDRESS_KEY = '@gozipmarket_saved_address';
 
 const DEFAULT_SHIPPING_FEE_CENTS = 1000; // $10 fallback
 
@@ -33,14 +37,39 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   const [fulfillmentMethod, setFulfillmentMethod] = useState<'ship' | 'pickup'>(
     route.params?.fulfillmentMethod ?? 'ship'
   );
-  // Use post-level payment info if set, otherwise fall back to provider profile
-  const [providerZelleId, setProviderZelleId] = useState<string | null>(
-    activeItems[0]?.post_payment_info || null
+  const parsePaymentMethods = (raw: string | null | undefined): string[] => {
+    if (!raw) return [];
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [raw]; } catch { return [raw]; }
+  };
+  const parsePaymentInfos = (raw: string | null | undefined): Record<string, string> => {
+    if (!raw) return {};
+    try { const p = JSON.parse(raw); return typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; }
+  };
+
+  const customerSelectedMethod = activeItems[0]?.selected_payment_method;
+  const [providerPaymentMethods, setProviderPaymentMethods] = useState<string[]>(
+    customerSelectedMethod
+      ? [customerSelectedMethod]
+      : parsePaymentMethods(activeItems[0]?.post_payment_method)
   );
-  const [providerPaymentMethod, setProviderPaymentMethod] = useState<string | null>(
-    activeItems[0]?.post_payment_method || null
+  const [providerPaymentInfos, setProviderPaymentInfos] = useState<Record<string, string>>(
+    parsePaymentInfos(activeItems[0]?.post_payment_info)
   );
   const [loadingProvider, setLoadingProvider] = useState(false);
+
+  // Auto-restore saved address from AsyncStorage if Redux has none
+  useEffect(() => {
+    if (shippingAddress) return;
+    AsyncStorage.getItem(SAVED_ADDRESS_KEY).then(stored => {
+      if (!stored) return;
+      try {
+        const addr = JSON.parse(stored);
+        if (addr.street && addr.city && addr.state && addr.zipCode) {
+          dispatch(setShippingAddress(addr));
+        }
+      } catch {}
+    });
+  }, []);
 
   useEffect(() => {
     activeItems.forEach(item => {
@@ -55,15 +84,20 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Only fetch from profile if post doesn't have payment info set
-    if (activeItems[0]?.post_payment_info && activeItems[0]?.post_payment_method) return;
+    // Skip provider fetch if customer already chose a method at add-to-cart time
+    if (customerSelectedMethod) return;
+    if (activeItems[0]?.post_payment_method) return;
     const providerUserId = activeItems[0]?.provider_user_id;
     if (!providerUserId) return;
     setLoadingProvider(true);
     api.get(`/business-owners/by-user/${providerUserId}`)
       .then((data: any) => {
-        if (!activeItems[0]?.post_payment_info && data?.payment_info) setProviderZelleId(data.payment_info);
-        if (!activeItems[0]?.post_payment_method && data?.payment_method) setProviderPaymentMethod(data.payment_method);
+        if (!activeItems[0]?.post_payment_method && data?.payment_method) {
+          setProviderPaymentMethods(parsePaymentMethods(data.payment_method));
+        }
+        if (!activeItems[0]?.post_payment_info && data?.payment_info) {
+          setProviderPaymentInfos(parsePaymentInfos(data.payment_info));
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingProvider(false));
@@ -77,9 +111,10 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? shippingFeeCents : 0);
   const canPlaceOrder = fulfillmentMethod === 'pickup' || !!shippingAddress;
 
-  const paymentMethodLabel = ({
-    zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App',
-  } as Record<string, string>)[providerPaymentMethod || 'zelle'] || 'Zelle';
+  const PAYMENT_LABELS: Record<string, string> = {
+    zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check',
+  };
+  const OFFLINE_METHODS = ['cash', 'check', 'cashapp'];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -115,6 +150,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
                   {item.photo_url ? <Image source={{ uri: item.photo_url }} style={styles.itemThumb} /> : null}
                   <Text style={[styles.colBodyText, { fontWeight: '700' }]} numberOfLines={2}>{item.title}</Text>
                   <Text style={styles.itemId}>{itemId}</Text>
+                  {item.provider_name ? <Text style={styles.itemProvider}>by {item.provider_name}</Text> : null}
                 </View>
                 <Text style={[styles.colQty, styles.colBodyText]}>{qty}</Text>
                 <Text style={[styles.colPrice, styles.colBodyText]}>${u.toFixed(2)}</Text>
@@ -187,10 +223,15 @@ const BoutiqueCheckoutScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.addAddressBtn} onPress={() => navigation.navigate('ServiceAddressScreen')}>
-                <Ionicons name="add-circle-outline" size={20} color="#4A90E2" />
-                <Text style={styles.addAddressText}>Add Shipping Address</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={styles.addAddressBtn} onPress={() => navigation.navigate('ServiceAddressScreen')}>
+                  <Ionicons name="add-circle-outline" size={20} color="#4A90E2" />
+                  <Text style={styles.addAddressText}>Add Shipping Address</Text>
+                </TouchableOpacity>
+                <Text style={styles.addressHint}>
+                  Tap above, fill in your address, then tap "Deliver to this Address" to enable Place Order.
+                </Text>
+              </>
             )}
           </View>
         )}
@@ -199,26 +240,35 @@ const BoutiqueCheckoutScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="card" size={18} color="#4A90E2" />
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>{customerSelectedMethod ? 'Your Selected Payment Method' : 'Payment Methods Accepted'}</Text>
           </View>
           {loadingProvider ? (
             <ActivityIndicator size="small" color="#4A90E2" style={{ marginTop: 8 }} />
-          ) : providerPaymentMethod === 'cashapp' || providerPaymentMethod === 'cash' || providerPaymentMethod === 'check' ? (
-            <Text style={styles.paymentLabel}>
-              Once your order is placed, the provider will reach out with payment details.
-            </Text>
-          ) : providerZelleId ? (
-            <>
-              <Text style={styles.paymentLabel}>Pay via {paymentMethodLabel} to:</Text>
-              <View style={styles.zelleReadOnly}>
-                <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
-                <Text style={styles.zelleReadOnlyText}>{providerZelleId}</Text>
-              </View>
-            </>
-          ) : (
+          ) : providerPaymentMethods.length === 0 ? (
             <Text style={styles.zelleUnavailable}>
               Provider payment details not set — they will contact you after order is placed.
             </Text>
+          ) : (
+            providerPaymentMethods.map(method => {
+              const label = PAYMENT_LABELS[method] || method;
+              const handle = providerPaymentInfos[method];
+              const isOffline = OFFLINE_METHODS.includes(method);
+              return (
+                <View key={method} style={{ marginBottom: 8 }}>
+                  <Text style={styles.paymentLabel}>{label}</Text>
+                  {handle ? (
+                    <View style={styles.zelleReadOnly}>
+                      <Ionicons name="phone-portrait-outline" size={16} color="#2E7D32" />
+                      <Text style={styles.zelleReadOnlyText}>{handle}</Text>
+                    </View>
+                  ) : isOffline ? (
+                    <Text style={{ fontSize: 12, color: '#888' }}>
+                      Provider will reach out with {label} details after order is placed.
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })
           )}
         </View>
 
@@ -239,8 +289,8 @@ const BoutiqueCheckoutScreen: React.FC = () => {
             onPress={() => navigation.navigate('BoutiquePaymentScreen', {
               totalCents,
               items: activeItems,
-              providerZelleId,
-              providerPaymentMethod,
+              providerPaymentMethods,
+              providerPaymentInfos,
               fulfillmentMethod,
             })}
           >
@@ -284,6 +334,7 @@ const styles = StyleSheet.create({
   colTitle: { flex: 3, paddingRight: 4 },
   itemThumb: { width: 48, height: 48, borderRadius: 6, marginBottom: 4, backgroundColor: '#f0f0f0' },
   itemId: { fontSize: 12, fontWeight: '700', color: '#555', marginTop: 2 },
+  itemProvider: { fontSize: 11, color: '#888', marginTop: 1 },
   colQty: { flex: 1, textAlign: 'center' },
   colPrice: { flex: 1.5, textAlign: 'right' },
   colAmount: { flex: 1.5, textAlign: 'right' },
@@ -313,6 +364,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#4A90E2', borderStyle: 'dashed',
   },
   addAddressText: { fontSize: 14, color: '#4A90E2', fontWeight: '600' },
+  addressHint: { fontSize: 12, color: '#888', fontStyle: 'italic', marginTop: 8, textAlign: 'center' },
   paymentLabel: { fontSize: 13, color: '#555', fontWeight: '600', marginBottom: 8 },
   zelleReadOnly: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
