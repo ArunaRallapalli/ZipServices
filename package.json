@@ -13,7 +13,10 @@
     "dev": "expo start",
     "android": "expo run:android",
     "dev-backend": "nodemon --watch backend --ext ts --exec ts-node backend/server.ts",
-    "start-backend": "ts-node backend/server.ts"
+    "start-backend": "ts-node backend/server.ts",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report tests/reports"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
@@ -33,7 +36,6 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
     "expo": "~53.0.0",
     "expo-asset": "^12.0.8",
     "expo-checkbox": "~4.1.4",
@@ -74,6 +76,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@playwright/test": "^1.60.0",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/dotenv": "^6.1.1",
@@ -88,6 +91,7 @@
     "@types/uuid": "^10.0.0",
     "babel-preset-expo": "~13.0.0",
     "cross-env": "^10.1.0",
+    "dotenv": "^17.4.2",
     "gh-pages": "^5.0.0",
     "nodemon": "^3.1.11",
     "serve-handler": "^6.1.6",
