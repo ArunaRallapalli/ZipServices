@@ -14,9 +14,13 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAgreedAmount } from '../../store/cartSlice';
+import { setShippingAddress } from '../../store/checkoutSlice';
 import type { RootState } from '../../store/store';
 import api from '../../api';
+
+const SAVED_ADDRESS_KEY = '@gozipmarket_saved_address';
 
 const DEFAULT_SHIPPING_FEE_CENTS = 1000; // $10 fallback
 
@@ -52,6 +56,20 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     parsePaymentInfos(activeItems[0]?.post_payment_info)
   );
   const [loadingProvider, setLoadingProvider] = useState(false);
+
+  // Auto-restore saved address from AsyncStorage if Redux has none
+  useEffect(() => {
+    if (shippingAddress) return;
+    AsyncStorage.getItem(SAVED_ADDRESS_KEY).then(stored => {
+      if (!stored) return;
+      try {
+        const addr = JSON.parse(stored);
+        if (addr.street && addr.city && addr.state && addr.zipCode) {
+          dispatch(setShippingAddress(addr));
+        }
+      } catch {}
+    });
+  }, []);
 
   useEffect(() => {
     activeItems.forEach(item => {
@@ -132,6 +150,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
                   {item.photo_url ? <Image source={{ uri: item.photo_url }} style={styles.itemThumb} /> : null}
                   <Text style={[styles.colBodyText, { fontWeight: '700' }]} numberOfLines={2}>{item.title}</Text>
                   <Text style={styles.itemId}>{itemId}</Text>
+                  {item.provider_name ? <Text style={styles.itemProvider}>by {item.provider_name}</Text> : null}
                 </View>
                 <Text style={[styles.colQty, styles.colBodyText]}>{qty}</Text>
                 <Text style={[styles.colPrice, styles.colBodyText]}>${u.toFixed(2)}</Text>
@@ -204,10 +223,15 @@ const BoutiqueCheckoutScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.addAddressBtn} onPress={() => navigation.navigate('ServiceAddressScreen')}>
-                <Ionicons name="add-circle-outline" size={20} color="#4A90E2" />
-                <Text style={styles.addAddressText}>Add Shipping Address</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={styles.addAddressBtn} onPress={() => navigation.navigate('ServiceAddressScreen')}>
+                  <Ionicons name="add-circle-outline" size={20} color="#4A90E2" />
+                  <Text style={styles.addAddressText}>Add Shipping Address</Text>
+                </TouchableOpacity>
+                <Text style={styles.addressHint}>
+                  Tap above, fill in your address, then tap "Deliver to this Address" to enable Place Order.
+                </Text>
+              </>
             )}
           </View>
         )}
@@ -310,6 +334,7 @@ const styles = StyleSheet.create({
   colTitle: { flex: 3, paddingRight: 4 },
   itemThumb: { width: 48, height: 48, borderRadius: 6, marginBottom: 4, backgroundColor: '#f0f0f0' },
   itemId: { fontSize: 12, fontWeight: '700', color: '#555', marginTop: 2 },
+  itemProvider: { fontSize: 11, color: '#888', marginTop: 1 },
   colQty: { flex: 1, textAlign: 'center' },
   colPrice: { flex: 1.5, textAlign: 'right' },
   colAmount: { flex: 1.5, textAlign: 'right' },
@@ -339,6 +364,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#4A90E2', borderStyle: 'dashed',
   },
   addAddressText: { fontSize: 14, color: '#4A90E2', fontWeight: '600' },
+  addressHint: { fontSize: 12, color: '#888', fontStyle: 'italic', marginTop: 8, textAlign: 'center' },
   paymentLabel: { fontSize: 13, color: '#555', fontWeight: '600', marginBottom: 8 },
   zelleReadOnly: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

@@ -76,7 +76,10 @@ const CartScreen: React.FC = () => {
             {item.title}
           </Text>
           <Text style={styles.productId}>#P{item.post_id}-{(item.photo_index ?? 0) + 1}</Text>
-          <Text style={styles.category}>{item.service_category}</Text>
+
+          {item.provider_name && (
+            <Text style={styles.provider}>by {item.provider_name}</Text>
+          )}
 
           {/* Price × Qty */}
           {unitPrice > 0 ? (
@@ -87,10 +90,6 @@ const CartScreen: React.FC = () => {
           ) : item.price ? (
             <Text style={styles.price}>{item.price}</Text>
           ) : null}
-
-          {item.provider_name && (
-            <Text style={styles.provider}>by {item.provider_name}</Text>
-          )}
 
           {/* Quantity controls */}
           <View style={styles.qtyRow}>

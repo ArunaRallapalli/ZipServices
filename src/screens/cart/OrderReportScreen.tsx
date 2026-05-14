@@ -32,6 +32,7 @@ const OrderReportScreen: React.FC = () => {
     businessName,
     items,
     totalCents,
+    shippingCents,
     providerZelleId,
     providerPaymentMethod,
     shippingAddress,
@@ -75,7 +76,7 @@ const OrderReportScreen: React.FC = () => {
           </View>
           {businessName ? (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Boutique</Text>
+              <Text style={styles.infoLabel}>Provider</Text>
               <Text style={styles.infoValue}>{businessName}</Text>
             </View>
           ) : null}
@@ -116,6 +117,16 @@ const OrderReportScreen: React.FC = () => {
                 </View>
               );
             })}
+            {shippingCents > 0 && (
+              <View style={styles.tableRow}>
+                <View style={{ flex: 3, paddingRight: 4 }}>
+                  <Text style={styles.tableCell}>Shipping &amp; Handling</Text>
+                </View>
+                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]} />
+                <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]} />
+                <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>${(shippingCents / 100).toFixed(2)}</Text>
+              </View>
+            )}
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>${((totalCents || 0) / 100).toFixed(2)}</Text>

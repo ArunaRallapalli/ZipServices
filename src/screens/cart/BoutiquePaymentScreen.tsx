@@ -62,6 +62,8 @@ const BoutiquePaymentScreen: React.FC = () => {
       const result: any = await api.post('/api/orders', {
         provider_user_id:          items?.[0]?.provider_user_id,
         service_provider_zelle_id: infos['zelle'] || providerZelleId || null,
+        payment_methods:           methods,
+        payment_infos:             infos,
         total_cents:               totalCents || 0,
         items,
         shipping_address:          shippingAddress || null,
@@ -75,6 +77,7 @@ const BoutiquePaymentScreen: React.FC = () => {
         businessName,
         items,
         totalCents:            totalCents || 0,
+        shippingCents:         shippingFee > 0 ? Math.round(shippingFee * 100) : 0,
         providerPaymentMethods: methods,
         providerPaymentInfos:   infos,
         shippingAddress,
@@ -121,6 +124,7 @@ const BoutiquePaymentScreen: React.FC = () => {
                   {item.photo_url ? <Image source={{ uri: item.photo_url }} style={styles.itemThumb} /> : null}
                   <Text style={[styles.colBodyText, { fontWeight: '700' }]} numberOfLines={2}>{item.title}</Text>
                   <Text style={styles.itemId}>{itemId}</Text>
+                  {item.provider_name ? <Text style={styles.itemProvider}>by {item.provider_name}</Text> : null}
                 </View>
                 <Text style={[styles.colQty, styles.colBodyText]}>{qty}</Text>
                 <Text style={[styles.colPrice, styles.colBodyText]}>${u.toFixed(2)}</Text>
@@ -267,6 +271,7 @@ const styles = StyleSheet.create({
   colTitle: { flex: 3, paddingRight: 4 },
   itemThumb: { width: 48, height: 48, borderRadius: 6, marginBottom: 4, backgroundColor: '#f0f0f0' },
   itemId: { fontSize: 12, fontWeight: '700', color: '#555', marginTop: 2 },
+  itemProvider: { fontSize: 11, color: '#888', marginTop: 1 },
   colQty: { flex: 1, textAlign: 'center' },
   colPrice: { flex: 1.5, textAlign: 'right' },
   colAmount: { flex: 1.5, textAlign: 'right' },

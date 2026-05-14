@@ -411,8 +411,8 @@ const PostServiceScreen: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
-    if (acceptsPayment && !isThrifting && priceRange.trim() === '') {
-      Alert.alert('Validation Error', 'Please enter a price.');
+    if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
+      Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
     if ((isThrifting || isBoutiqueCategory) && selectedPhotos.length === 0) {
