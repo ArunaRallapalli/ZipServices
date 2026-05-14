@@ -86,7 +86,8 @@ const BusinessOwnerProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paymentCategories, setPaymentCategories] = useState<Set<string>>(new Set());
-  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
+  const [paymentInfoMap, setPaymentInfoMap] = useState<Record<string, string>>({});
 
   // Prevent double fetch in React 18 strict mode
   const didFetch = useRef(false);
@@ -128,6 +129,18 @@ const BusinessOwnerProfileScreen: React.FC = () => {
     };
     
     setProfile(profileWithAdmin);
+
+    // Parse saved payment methods into multi-select state
+    try {
+      const pm = response.payment_method;
+      const parsed = pm ? JSON.parse(pm) : [];
+      setSelectedPaymentMethods(Array.isArray(parsed) ? parsed : [pm]);
+    } catch { if (response.payment_method) setSelectedPaymentMethods([response.payment_method]); }
+    try {
+      const pi = response.payment_info;
+      const parsed = pi ? JSON.parse(pi) : {};
+      setPaymentInfoMap(typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+    } catch { setPaymentInfoMap({}); }
     
   } catch (err: any) {
     console.error('❌ Profile fetch error:', err);
@@ -163,8 +176,8 @@ const BusinessOwnerProfileScreen: React.FC = () => {
         state: profile.state,
         email: profile.email,
         password: profile.password,
-        payment_info: profile.payment_info || null,
-        payment_method: profile.payment_method || null,
+        payment_method: selectedPaymentMethods.length > 0 ? JSON.stringify(selectedPaymentMethods) : null,
+        payment_info: Object.keys(paymentInfoMap).length > 0 ? JSON.stringify(paymentInfoMap) : null,
       };
 
       console.log(`💾 Saving profile for user_id: ${user_id}`);
@@ -250,57 +263,48 @@ const BusinessOwnerProfileScreen: React.FC = () => {
           <TextInput style={[styles.input, { height: 80 }]} value={profile.description || ""} multiline numberOfLines={4} onChangeText={(text) => setProfile({ ...profile, description: text })} />
           <Text style={styles.label}>Phone Number:</Text>
           <TextInput style={styles.input} value={profile.phone_number || ""} keyboardType="phone-pad" onChangeText={(text) => setProfile({ ...profile, phone_number: text })} />
-          {paymentCategories.has(profile.service_category) && !profile.payment_method && (
+          {paymentCategories.has(profile.service_category) && selectedPaymentMethods.length === 0 && (
             <View style={styles.zelleBanner}>
               <Text style={styles.zelleBannerText}>
-                Your category supports payments. Select a payment method below so customers can purchase from your listing.
+                Your category supports payments. Select one or more payment methods below so customers can purchase from your listing.
               </Text>
             </View>
           )}
-          <Text style={styles.label}>Payment Method:</Text>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => setShowPaymentDropdown(!showPaymentDropdown)}
-          >
-            <Text style={styles.dropdownBtnText}>
-              {PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.label || 'Select a payment method...'}
-            </Text>
-            <Text style={styles.dropdownArrow}>{showPaymentDropdown ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {showPaymentDropdown && (
-            <View style={styles.dropdownList}>
-              {PAYMENT_METHOD_OPTIONS.map(option => (
+          <Text style={styles.label}>Payment Methods (select all you accept):</Text>
+          {PAYMENT_METHOD_OPTIONS.map(option => {
+            const isSelected = selectedPaymentMethods.includes(option.value);
+            return (
+              <View key={option.value}>
                 <TouchableOpacity
-                  key={option.value}
-                  style={[styles.dropdownItem, profile.payment_method === option.value && styles.dropdownItemSelected]}
+                  style={styles.checkboxRow}
                   onPress={() => {
-                    setProfile({ ...profile, payment_method: option.value });
-                    setShowPaymentDropdown(false);
+                    setSelectedPaymentMethods(prev =>
+                      prev.includes(option.value)
+                        ? prev.filter(m => m !== option.value)
+                        : [...prev, option.value]
+                    );
                   }}
                 >
-                  <Text style={[styles.dropdownItemText, profile.payment_method === option.value && styles.dropdownItemTextSelected]}>
-                    {option.label}
-                  </Text>
+                  <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                    {isSelected && <Text style={styles.checkboxTick}>✓</Text>}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{option.label}</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          {profile.payment_method && profile.payment_method !== 'cash' && profile.payment_method !== 'check' && (
-            <>
-              <Text style={styles.label}>
-                {PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.handleLabel || 'Payment handle'}:
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={profile.payment_info || ''}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="default"
-                placeholder={PAYMENT_METHOD_OPTIONS.find(o => o.value === profile.payment_method)?.handleLabel || ''}
-                onChangeText={(text) => setProfile({ ...profile, payment_info: text })}
-              />
-            </>
-          )}
+                {isSelected && option.handleLabel && (
+                  <TextInput
+                    style={[styles.input, { marginTop: 4, marginBottom: 8, marginLeft: 32 }]}
+                    value={paymentInfoMap[option.value] || ''}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder={option.handleLabel}
+                    onChangeText={(text) =>
+                      setPaymentInfoMap(prev => ({ ...prev, [option.value]: text }))
+                    }
+                  />
+                )}
+              </View>
+            );
+          })}
 
           {/* Location */}
           <Text style={styles.sectionHeader}>Location & Service Area</Text>
@@ -372,14 +376,11 @@ const styles = createResponsiveStyles({
   input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginTop: 5, borderRadius: 5 },
   zelleBanner: { backgroundColor: '#FFF8E1', borderLeftWidth: 4, borderLeftColor: '#F59E0B', borderRadius: 6, padding: 12, marginTop: 16, marginBottom: 4 },
   zelleBannerText: { fontSize: 13, color: '#92400E', lineHeight: 18 },
-  dropdownBtn: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginTop: 5, borderRadius: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff' },
-  dropdownBtnText: { fontSize: 15, color: '#333' },
-  dropdownArrow: { fontSize: 14, color: '#888' },
-  dropdownList: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 2, backgroundColor: '#fff' },
-  dropdownItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  dropdownItemSelected: { backgroundColor: '#EEF2FF' },
-  dropdownItemText: { fontSize: 15, color: '#333' },
-  dropdownItemTextSelected: { color: '#4f46e5', fontWeight: '700' },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#4A90E2', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', marginRight: 10 },
+  checkboxChecked: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' },
+  checkboxTick: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  checkboxLabel: { fontSize: 15, color: '#333' },
   legalMenuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#e0e0e0' },
   legalMenuText: { fontSize: 16, color: '#333', fontWeight: '500' },
   arrow: { fontSize: 20, color: '#999' },

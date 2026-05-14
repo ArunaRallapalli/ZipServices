@@ -149,10 +149,15 @@ router.put("/by-user/:user_id", authenticateToken, authorizeUser, async (req: Au
         state,
         payment_info: payment_info || null,
         payment_method: payment_method || null,
-        accepts_zelle_payment:
-          payment_method === 'cash' || payment_method === 'check'
-            ? true
-            : !!(payment_info?.trim()),
+        accepts_zelle_payment: (() => {
+          let methods: string[] = [];
+          try { const p = JSON.parse(payment_method); methods = Array.isArray(p) ? p : [payment_method]; }
+          catch { methods = payment_method ? [payment_method] : []; }
+          const offlineOnly = methods.length > 0 && methods.every((m: string) => m === 'cash' || m === 'check');
+          if (offlineOnly) return true;
+          try { const info = typeof payment_info === 'string' ? JSON.parse(payment_info) : payment_info; return !!(info && Object.values(info).some((v: any) => v?.trim())); }
+          catch { return !!(payment_info?.trim()); }
+        })(),
       })
       .eq('user_id', userId)
       .select()
