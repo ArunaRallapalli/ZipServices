@@ -84,18 +84,20 @@ const BoutiqueCheckoutScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Skip provider fetch if customer already chose a method at add-to-cart time
+    // Skip fetch only if customer already chose a method AND info is available
     if (customerSelectedMethod) return;
-    if (activeItems[0]?.post_payment_method) return;
+    const hasMethod = !!activeItems[0]?.post_payment_method;
+    const hasInfo = !!activeItems[0]?.post_payment_info;
+    if (hasMethod && hasInfo) return;
     const providerUserId = activeItems[0]?.provider_user_id;
     if (!providerUserId) return;
     setLoadingProvider(true);
     api.get(`/business-owners/by-user/${providerUserId}`)
       .then((data: any) => {
-        if (!activeItems[0]?.post_payment_method && data?.payment_method) {
+        if (!hasMethod && data?.payment_method) {
           setProviderPaymentMethods(parsePaymentMethods(data.payment_method));
         }
-        if (!activeItems[0]?.post_payment_info && data?.payment_info) {
+        if (!hasInfo && data?.payment_info) {
           setProviderPaymentInfos(parsePaymentInfos(data.payment_info));
         }
       })
