@@ -41,9 +41,16 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     if (!raw) return [];
     try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [raw]; } catch { return [raw]; }
   };
-  const parsePaymentInfos = (raw: string | null | undefined): Record<string, string> => {
+  const parsePaymentInfos = (raw: string | null | undefined, methods?: string[]): Record<string, string> => {
     if (!raw) return {};
-    try { const p = JSON.parse(raw); return typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; }
+    try {
+      const p = JSON.parse(raw);
+      return typeof p === 'object' && !Array.isArray(p) ? p : {};
+    } catch {
+      // Old format: plain string is the contact handle for the first payment method
+      const key = methods?.[0] ?? 'zelle';
+      return { [key]: raw };
+    }
   };
 
   const customerSelectedMethod = activeItems[0]?.selected_payment_method;
@@ -53,7 +60,7 @@ const BoutiqueCheckoutScreen: React.FC = () => {
       : parsePaymentMethods(activeItems[0]?.post_payment_method)
   );
   const [providerPaymentInfos, setProviderPaymentInfos] = useState<Record<string, string>>(
-    parsePaymentInfos(activeItems[0]?.post_payment_info)
+    parsePaymentInfos(activeItems[0]?.post_payment_info, parsePaymentMethods(activeItems[0]?.post_payment_method))
   );
   const [loadingProvider, setLoadingProvider] = useState(false);
 
@@ -94,11 +101,13 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     setLoadingProvider(true);
     api.get(`/business-owners/by-user/${providerUserId}`)
       .then((data: any) => {
-        if (!hasMethod && data?.payment_method) {
-          setProviderPaymentMethods(parsePaymentMethods(data.payment_method));
+        const fetchedMethods = data?.payment_method ? parsePaymentMethods(data.payment_method) : [];
+        if (!hasMethod && fetchedMethods.length > 0) {
+          setProviderPaymentMethods(fetchedMethods);
         }
         if (!hasInfo && data?.payment_info) {
-          setProviderPaymentInfos(parsePaymentInfos(data.payment_info));
+          const effectiveMethods = fetchedMethods.length > 0 ? fetchedMethods : providerPaymentMethods;
+          setProviderPaymentInfos(parsePaymentInfos(data.payment_info, effectiveMethods));
         }
       })
       .catch(() => {})
