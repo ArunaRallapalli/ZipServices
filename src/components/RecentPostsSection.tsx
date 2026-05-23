@@ -54,7 +54,7 @@ type AddToCartFn = (
   photoUrl: string,
   photoPrice?: number,
   selectedPayMethod?: string,
-) => void;
+) => boolean | void;
 
 const PAYMENT_LABELS: Record<string, string> = {
   zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check',
