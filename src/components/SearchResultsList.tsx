@@ -175,6 +175,7 @@ const MiniServiceCard: React.FC<{
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [zoomVisible, setZoomVisible] = useState(false);
   const [requestStatus, setRequestStatus] = useState<'idle' | 'loading' | 'requested' | 'completed' | 'unavailable'>(
     item.service_category?.toLowerCase().trim() === 'preloved & thrifting' && item.in_stock != null && item.in_stock <= 0 ? 'unavailable' : 'idle'
   );
@@ -187,6 +188,11 @@ const MiniServiceCard: React.FC<{
   const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const photos = item.photos ?? [];
+
+  const openZoom = (index: number) => { setSelectedPhotoIndex(index); setZoomVisible(true); };
+  const goNext = () => { if (selectedPhotoIndex < photos.length - 1) setSelectedPhotoIndex(i => i + 1); };
+  const goPrev = () => { if (selectedPhotoIndex > 0) setSelectedPhotoIndex(i => i - 1); };
 
   const availablePayMethods = React.useMemo(() => {
     if (!item.post_payment_method) return [];
@@ -440,7 +446,7 @@ const MiniServiceCard: React.FC<{
                   return (
                     <TouchableOpacity
                       key={index}
-                      onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
+                      onPress={() => { openZoom(index); setAddedToCart(false); }}
                       style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
                       activeOpacity={0.7}
                     >
@@ -674,6 +680,27 @@ const MiniServiceCard: React.FC<{
             <View style={{ height: 30 }} />
           </ScrollView>
         </SafeAreaView>
+      </Modal>
+
+      {/* Zoom Modal */}
+      <Modal visible={zoomVisible} transparent animationType="fade" onRequestClose={() => setZoomVisible(false)}>
+        <TouchableOpacity style={zoomStyles.overlay} activeOpacity={1} onPress={() => setZoomVisible(false)}>
+          <TouchableOpacity style={zoomStyles.closeBtn} onPress={() => setZoomVisible(false)}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+          {photos[selectedPhotoIndex] && (
+            <Image source={{ uri: photos[selectedPhotoIndex] }} style={zoomStyles.zoomedImage} resizeMode="contain" />
+          )}
+          <View style={zoomStyles.navRow}>
+            <TouchableOpacity style={zoomStyles.navBtn} onPress={goPrev}>
+              <Ionicons name="chevron-back" size={28} color={selectedPhotoIndex === 0 ? '#555' : '#fff'} />
+            </TouchableOpacity>
+            <Text style={zoomStyles.counter}>{selectedPhotoIndex + 1} / {photos.length}</Text>
+            <TouchableOpacity style={zoomStyles.navBtn} onPress={goNext}>
+              <Ionicons name="chevron-forward" size={28} color={selectedPhotoIndex === photos.length - 1 ? '#555' : '#fff'} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* ReviewsModal — opened from mini card stars */}
@@ -946,6 +973,15 @@ const styles = createResponsiveStyles({
   noResultsContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 20 },
   noResultsText: { marginTop: 20, fontSize: 18, fontWeight: "600", color: "#666", textAlign: "center" },
   noResultsSubtext: { marginTop: 12, fontSize: 14, color: "#999", textAlign: "center", lineHeight: 22 },
+});
+
+const zoomStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  closeBtn: { position: 'absolute', top: 48, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 6 },
+  zoomedImage: { width: '100%', height: '70%' },
+  navRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  navBtn: { padding: 12 },
+  counter: { color: '#fff', fontSize: 14, marginHorizontal: 16 },
 });
 
 export default SearchResultsList;
