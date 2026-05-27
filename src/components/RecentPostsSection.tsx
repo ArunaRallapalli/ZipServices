@@ -340,7 +340,7 @@ const DetailModal: React.FC<{
                 return (
                   <TouchableOpacity
                     key={index}
-                    onPress={() => { setSelectedPhotoIndex(index); setAddedToCart(false); }}
+                    onPress={() => { openZoom(index); setAddedToCart(false); }}
                     style={[modalStyles.thumbCard, index === selectedPhotoIndex && modalStyles.thumbSelected]}
                     activeOpacity={0.8}
                   >
