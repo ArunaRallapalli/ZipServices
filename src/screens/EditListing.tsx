@@ -500,12 +500,58 @@ const EditListing: React.FC = () => {
     // Price is required and must be > 0 for payment-accepting non-thrifting categories
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
     if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       newErrors.price = "Please enter a price greater than $0.00";
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length > 0) return false;
+
+    // Payment method format validation for boutique
+    if (isBoutiqueCategory) {
+      if (postPaymentMethods.length === 0) {
+        Alert.alert('Validation Error', 'Please select at least one payment method.');
+        return false;
+      }
+      const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const US_PHONE_RE = /^\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/;
+      const VENMO_RE    = /^[a-zA-Z0-9_-]{3,}$/;
+      const CASHAPP_RE  = /^\$[a-zA-Z0-9_]{1,}$/;
+
+      for (const method of postPaymentMethods) {
+        const val = postPaymentInfos[method]?.trim() ?? '';
+        if (method === 'zelle') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Zelle email or phone number.'); return false; }
+          if (!EMAIL_RE.test(val) && !US_PHONE_RE.test(val)) {
+            Alert.alert('Invalid Zelle', 'Please enter a valid email address or 10-digit US phone number.');
+            return false;
+          }
+        } else if (method === 'venmo') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Venmo username.'); return false; }
+          if (!VENMO_RE.test(val)) {
+            Alert.alert('Invalid Venmo', 'Venmo username must be at least 3 characters and can only contain letters, numbers, underscores, or hyphens.');
+            return false;
+          }
+        } else if (method === 'paypal') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your PayPal email address.'); return false; }
+          if (!EMAIL_RE.test(val)) {
+            Alert.alert('Invalid PayPal', 'Please enter a valid PayPal email address.');
+            return false;
+          }
+        } else if (method === 'cashapp') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Cash App $cashtag.'); return false; }
+          const normalized = val.startsWith('$') ? val : `$${val}`;
+          if (!CASHAPP_RE.test(normalized)) {
+            Alert.alert('Invalid Cash App', 'Please enter a valid $cashtag (letters, numbers, underscores only).');
+            return false;
+          }
+          postPaymentInfos[method] = normalized;
+        }
+      }
+    }
+
+    return true;
   };
 
   /**
