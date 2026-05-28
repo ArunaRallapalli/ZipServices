@@ -173,7 +173,7 @@ const OrdersScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={{ width: 40 }} />
-        <Text style={styles.headerTitle}>Order History</Text>
+        <Text style={styles.headerTitle}>Order Status & History</Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
           <Ionicons name="close" size={26} color="#666" />
         </TouchableOpacity>

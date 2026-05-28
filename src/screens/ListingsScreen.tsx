@@ -581,7 +581,7 @@ const ListingsScreen: React.FC = () => {
             onPress={() => navigation.navigate('OrdersScreen')}
           >
             <Ionicons name="receipt-outline" size={16} color="#fff" />
-            <Text style={styles.ordersButtonText}>Order History</Text>
+            <Text style={styles.ordersButtonText}>Order Status & History</Text>
             {pendingOrderCount > 0 && (
               <View style={styles.ordersBadge}>
                 <Text style={styles.ordersBadgeText}>{pendingOrderCount}</Text>

@@ -415,6 +415,24 @@ const PostServiceScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
+    if (isBoutiqueCategory) {
+      if (postPaymentMethods.length === 0) {
+        Alert.alert('Validation Error', 'Please select at least one payment method.');
+        return false;
+      }
+      const HANDLE_REQUIRED: Record<string, string> = {
+        zelle: 'Zelle email or phone',
+        venmo: 'Venmo username',
+        paypal: 'PayPal email or phone',
+        cashapp: 'Cash App $cashtag',
+      };
+      for (const method of postPaymentMethods) {
+        if (HANDLE_REQUIRED[method] && !postPaymentInfos[method]?.trim()) {
+          Alert.alert('Validation Error', `Please enter your ${HANDLE_REQUIRED[method]}.`);
+          return false;
+        }
+      }
+    }
     if ((isThrifting || isBoutiqueCategory) && selectedPhotos.length === 0) {
       Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       return false;
