@@ -67,6 +67,8 @@ const PostServiceScreen: React.FC = () => {
   const [shippingCharge, setShippingCharge] = useState('10.00');
   const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
   const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
+  const [profilePaymentMethods, setProfilePaymentMethods] = useState<string[]>([]);
+  const [profilePaymentInfos, setProfilePaymentInfos] = useState<Record<string, string>>({});
 
   // Photo state — each entry is { asset, description }
   const [selectedPhotos, setSelectedPhotos] = useState<PhotoWithDesc[]>([]);
@@ -382,14 +384,21 @@ const PostServiceScreen: React.FC = () => {
         if (boData?.payment_method) {
           try {
             const parsed = JSON.parse(boData.payment_method);
-            if (Array.isArray(parsed)) setPostPaymentMethods(parsed);
-            else setPostPaymentMethods([boData.payment_method]);
-          } catch { setPostPaymentMethods([boData.payment_method]); }
+            const methods = Array.isArray(parsed) ? parsed : [boData.payment_method];
+            setPostPaymentMethods(methods);
+            setProfilePaymentMethods(methods);
+          } catch {
+            setPostPaymentMethods([boData.payment_method]);
+            setProfilePaymentMethods([boData.payment_method]);
+          }
         }
         if (boData?.payment_info) {
           try {
             const parsed = JSON.parse(boData.payment_info);
-            if (typeof parsed === 'object' && !Array.isArray(parsed)) setPostPaymentInfos(parsed);
+            if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+              setPostPaymentInfos(parsed);
+              setProfilePaymentInfos(parsed);
+            }
           } catch {}
         }
       }
@@ -538,11 +547,13 @@ const PostServiceScreen: React.FC = () => {
       const data = await api.post('/api/service-posts', servicePostData);
       console.log('✅ Post created successfully:', data.post.id);
 
-      // Save payment method + shipping as profile defaults for future posts
+      // Merge and save payment methods to profile (never remove existing methods)
       if (isBoutique && postPaymentMethods.length > 0) {
+        const mergedMethods = Array.from(new Set([...profilePaymentMethods, ...postPaymentMethods]));
+        const mergedInfos = { ...profilePaymentInfos, ...postPaymentInfos };
         api.put(`/business-owners/by-user/${userId}`, {
-          payment_method: JSON.stringify(postPaymentMethods),
-          payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
+          payment_method: JSON.stringify(mergedMethods),
+          payment_info: Object.keys(mergedInfos).length > 0 ? JSON.stringify(mergedInfos) : null,
         }).catch(err => console.warn('⚠️ Could not save payment defaults to profile:', err));
       }
 

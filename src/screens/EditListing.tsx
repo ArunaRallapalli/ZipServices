@@ -119,6 +119,8 @@ const EditListing: React.FC = () => {
   const [shippingCharge, setShippingCharge] = useState('10.00');
   const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
   const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
+  const [profilePaymentMethods, setProfilePaymentMethods] = useState<string[]>([]);
+  const [profilePaymentInfos, setProfilePaymentInfos] = useState<Record<string, string>>({});
 
   // ADDED: February 19, 2026 - Photo states
   // existingPhotos: URLs already saved on the post (loaded from backend)
@@ -432,10 +434,18 @@ const EditListing: React.FC = () => {
           setShippingCharge(((post as any).shipping_charge_cents / 100).toFixed(2));
         }
         if ((post as any).post_payment_method) {
-          try { setPostPaymentMethods(JSON.parse((post as any).post_payment_method)); } catch { setPostPaymentMethods([]); }
+          try {
+            const methods = JSON.parse((post as any).post_payment_method);
+            setPostPaymentMethods(methods);
+            setProfilePaymentMethods(methods);
+          } catch { setPostPaymentMethods([]); }
         }
         if ((post as any).post_payment_info) {
-          try { setPostPaymentInfos(JSON.parse((post as any).post_payment_info)); } catch { setPostPaymentInfos({}); }
+          try {
+            const infos = JSON.parse((post as any).post_payment_info);
+            setPostPaymentInfos(infos);
+            setProfilePaymentInfos(infos);
+          } catch { setPostPaymentInfos({}); }
         }
 
         // ADDED: February 19, 2026 - Load existing photos from the post data
@@ -601,11 +611,13 @@ const EditListing: React.FC = () => {
 
       // Show success message and navigate back if update successful
       if (data.success) {
-        // Save payment method + shipping as profile defaults for future posts
+        // Merge and save payment methods to profile (never remove existing methods)
         if (isBoutique && postPaymentMethods.length > 0) {
+          const mergedMethods = Array.from(new Set([...profilePaymentMethods, ...postPaymentMethods]));
+          const mergedInfos = { ...profilePaymentInfos, ...postPaymentInfos };
           api.put(`/business-owners/by-user/${userInfo?.user_id}`, {
-            payment_method: JSON.stringify(postPaymentMethods),
-            payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
+            payment_method: JSON.stringify(mergedMethods),
+            payment_info: Object.keys(mergedInfos).length > 0 ? JSON.stringify(mergedInfos) : null,
           }).catch((err: any) => console.warn('⚠️ Could not save payment defaults to profile:', err));
         }
 
