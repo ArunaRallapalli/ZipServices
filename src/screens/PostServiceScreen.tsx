@@ -420,16 +420,40 @@ const PostServiceScreen: React.FC = () => {
         Alert.alert('Validation Error', 'Please select at least one payment method.');
         return false;
       }
-      const HANDLE_REQUIRED: Record<string, string> = {
-        zelle: 'Zelle email or phone',
-        venmo: 'Venmo username',
-        paypal: 'PayPal email or phone',
-        cashapp: 'Cash App $cashtag',
-      };
+      const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const US_PHONE_RE = /^\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/;
+      const VENMO_RE    = /^[a-zA-Z0-9_-]{3,}$/;
+      const CASHAPP_RE  = /^\$[a-zA-Z0-9_]{1,}$/;
+
       for (const method of postPaymentMethods) {
-        if (HANDLE_REQUIRED[method] && !postPaymentInfos[method]?.trim()) {
-          Alert.alert('Validation Error', `Please enter your ${HANDLE_REQUIRED[method]}.`);
-          return false;
+        const val = postPaymentInfos[method]?.trim() ?? '';
+        if (method === 'zelle') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Zelle email or phone number.'); return false; }
+          if (!EMAIL_RE.test(val) && !US_PHONE_RE.test(val)) {
+            Alert.alert('Invalid Zelle', 'Please enter a valid email address or 10-digit US phone number.');
+            return false;
+          }
+        } else if (method === 'venmo') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Venmo username.'); return false; }
+          if (!VENMO_RE.test(val)) {
+            Alert.alert('Invalid Venmo', 'Venmo username must be at least 3 characters and can only contain letters, numbers, underscores, or hyphens.');
+            return false;
+          }
+        } else if (method === 'paypal') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your PayPal email address.'); return false; }
+          if (!EMAIL_RE.test(val)) {
+            Alert.alert('Invalid PayPal', 'Please enter a valid PayPal email address.');
+            return false;
+          }
+        } else if (method === 'cashapp') {
+          if (!val) { Alert.alert('Validation Error', 'Please enter your Cash App $cashtag.'); return false; }
+          const normalized = val.startsWith('$') ? val : `$${val}`;
+          if (!CASHAPP_RE.test(normalized)) {
+            Alert.alert('Invalid Cash App', 'Please enter a valid $cashtag (letters, numbers, underscores only).');
+            return false;
+          }
+          // Store normalized with $ prefix
+          postPaymentInfos[method] = normalized;
         }
       }
     }
