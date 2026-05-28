@@ -564,10 +564,7 @@ const EditListing: React.FC = () => {
     console.log("Save button pressed");
     
     // Validate form before saving
-    if (!validateForm()) {
-      Alert.alert("Validation Error", "Please fix the errors before saving.");
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setSaving(true);
