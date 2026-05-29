@@ -544,9 +544,9 @@ const EditListing: React.FC = () => {
             return false;
           }
         } else if (method === 'paypal') {
-          if (!val) { Alert.alert('Validation Error', 'Please enter your PayPal email address.'); return false; }
-          if (!EMAIL_RE.test(val)) {
-            Alert.alert('Invalid PayPal', 'Please enter a valid PayPal email address.');
+          if (!val) { Alert.alert('Validation Error', 'Please enter your PayPal email address or phone number.'); return false; }
+          if (!EMAIL_RE.test(val) && !US_PHONE_RE.test(val)) {
+            Alert.alert('Invalid PayPal', 'Please enter a valid PayPal email address or 10-digit US phone number.');
             return false;
           }
         } else if (method === 'cashapp') {
