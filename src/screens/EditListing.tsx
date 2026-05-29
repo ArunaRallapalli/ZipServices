@@ -511,6 +511,14 @@ const EditListing: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
+
+    // Photo is mandatory for boutique and thrifting
+    if ((isBoutiqueCategory || isThrifting) && existingPhotos.length === 0 && selectedPhotos.length === 0) {
+      Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
+      setErrors(newErrors);
+      return false;
+    }
+
     if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       newErrors.price = "Please enter a price greater than $0.00";
     }
