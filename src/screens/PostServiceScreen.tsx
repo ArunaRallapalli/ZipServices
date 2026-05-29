@@ -489,9 +489,13 @@ const PostServiceScreen: React.FC = () => {
       prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
     );
     setPostPaymentInfos(prev => {
-      const next = { ...prev };
-      if (next[value]) delete next[value];
-      return next;
+      const isChecked = postPaymentMethods.includes(value);
+      if (isChecked) return prev; // unchecking — keep info so it restores on re-check
+      // re-checking — restore from profile if not already set
+      if (!prev[value] && profilePaymentInfos[value]) {
+        return { ...prev, [value]: profilePaymentInfos[value] };
+      }
+      return prev;
     });
   };
 

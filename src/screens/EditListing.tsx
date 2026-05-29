@@ -1007,6 +1007,14 @@ const EditListing: React.FC = () => {
               setPostPaymentMethods(prev =>
                 prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
               );
+              setPostPaymentInfos(prev => {
+                const isChecked = postPaymentMethods.includes(value);
+                if (isChecked) return prev; // unchecking — keep info so it restores on re-check
+                if (!prev[value] && profilePaymentInfos[value]) {
+                  return { ...prev, [value]: profilePaymentInfos[value] };
+                }
+                return prev;
+              });
             };
             return (
               <View style={styles.section}>
