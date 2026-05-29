@@ -155,8 +155,8 @@ const PostServiceScreen: React.FC = () => {
   // UPLOAD PHOTOS — sends description alongside each photo
   // --------------------------------------------------------------------------
 
-  const uploadPhotos = async (postId: string, postPrice?: string) => {
-    if (selectedPhotos.length === 0) return;
+  const uploadPhotos = async (postId: string, postPrice?: string): Promise<{ uploaded: number; failed: number }> => {
+    if (selectedPhotos.length === 0) return { uploaded: 0, failed: 0 };
 
     setUploadingPhotos(true);
     console.log(`📤 Uploading ${selectedPhotos.length} photos for post ${postId}`);
@@ -284,21 +284,49 @@ const PostServiceScreen: React.FC = () => {
         }
 
       } catch (error) {
-        failedCount++;
-        console.error('❌ Photo upload failed:', error);
+        // Retry up to 2 more times before marking as failed
+        let retrySuccess = false;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            console.log(`🔄 Retrying photo upload (attempt ${attempt + 1})...`);
+            await new Promise(res => setTimeout(res, 1000 * attempt));
+            const token = await AsyncStorage.getItem('access_token');
+            if (!token) break;
+            const uri = photo.asset.uri;
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            const retryResponse = await fetch(`${API_URL}/api/service-posts/${postId}/upload-photo`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                photo: base64,
+                filename: `photo_${Date.now()}.jpg`,
+                mimetype: 'image/jpeg',
+                description: photo.description.trim(),
+                price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
+              }),
+            });
+            if (retryResponse.ok) { retrySuccess = true; uploadedCount++; break; }
+          } catch (retryError) {
+            console.warn(`⚠️ Retry ${attempt} failed:`, retryError);
+          }
+        }
+        if (!retrySuccess) {
+          failedCount++;
+          console.error('❌ Photo upload failed after retries:', error);
+        }
       }
     }
 
     setUploadingPhotos(false);
-
-    if (failedCount > 0) {
-      Alert.alert(
-        'Upload Complete',
-        `${uploadedCount} photos uploaded successfully. ${failedCount} failed.`,
-      );
-    }
-
     console.log(`✅ Upload complete: ${uploadedCount} succeeded, ${failedCount} failed`);
+    return { uploaded: uploadedCount, failed: failedCount };
   };
 
   // --------------------------------------------------------------------------
@@ -563,7 +591,10 @@ const PostServiceScreen: React.FC = () => {
 
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
-        await uploadPhotos(data.post.id, priceRange);
+        const { uploaded, failed } = await uploadPhotos(data.post.id, priceRange);
+        if (failed > 0) {
+          console.warn(`⚠️ ${failed} photo(s) failed after retries — post saved with ${uploaded} photo(s)`);
+        }
       }
 
       console.log('════════════════════════════════════════');
