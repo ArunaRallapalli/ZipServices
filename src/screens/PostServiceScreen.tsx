@@ -592,8 +592,23 @@ const PostServiceScreen: React.FC = () => {
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
         const { uploaded, failed } = await uploadPhotos(data.post.id, priceRange);
+
+        if (failed > 0 && uploaded === 0) {
+          // All photos failed — delete the post and tell the user
+          await api.delete(`/api/service-posts/${data.post.id}`).catch(() => {});
+          Alert.alert(
+            'Upload Failed',
+            'Your photos could not be uploaded (file may be too large). Please resize your images under 2MB and try again. Your post was not saved.',
+          );
+          return;
+        }
+
         if (failed > 0) {
-          console.warn(`⚠️ ${failed} photo(s) failed after retries — post saved with ${uploaded} photo(s)`);
+          // Some photos failed — post saved with partial photos, notify clearly
+          Alert.alert(
+            'Partial Upload',
+            `${uploaded} photo(s) uploaded successfully. ${failed} photo(s) failed — they may be too large. Please resize under 2MB and add them via Edit Listing.`,
+          );
         }
       }
 
