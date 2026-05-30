@@ -589,9 +589,11 @@ const PostServiceScreen: React.FC = () => {
         }).catch(err => console.warn('⚠️ Could not save payment defaults to profile:', err));
       }
 
+      let uploadedCount = 0;
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
         const { uploaded, failed } = await uploadPhotos(data.post.id, priceRange);
+        uploadedCount = uploaded;
 
         if (failed > 0 && uploaded === 0) {
           // All photos failed — delete the post and tell the user
@@ -604,11 +606,17 @@ const PostServiceScreen: React.FC = () => {
         }
 
         if (failed > 0) {
-          // Some photos failed — post saved with partial photos, notify clearly
+          // Some photos failed — show combined result and stop, no separate success alert
+          clearForm();
           Alert.alert(
-            'Partial Upload',
-            `${uploaded} photo(s) uploaded successfully. ${failed} photo(s) failed — they may be too large. Please resize under 2MB and add them via Edit Listing.`,
+            'Post Saved — Photo Issue',
+            `Your post was saved with ${uploaded} of ${selectedPhotos.length} photo(s). ${failed} photo(s) failed to upload (file may be too large — resize under 2MB). You can add them via Edit Listing.`,
+            [
+              { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
+              { text: 'OK' },
+            ],
           );
+          return;
         }
       }
 
@@ -621,7 +629,7 @@ const PostServiceScreen: React.FC = () => {
       Alert.alert(
         'Success!',
         selectedPhotos.length > 0
-          ? `Your service offer with ${selectedPhotos.length} photo(s) has been posted!`
+          ? `Your service offer with ${uploadedCount} photo(s) has been posted!`
           : 'Your service offer has been posted successfully!',
         [
           { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
