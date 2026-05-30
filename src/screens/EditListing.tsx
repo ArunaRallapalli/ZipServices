@@ -629,10 +629,25 @@ const EditListing: React.FC = () => {
           }).catch((err: any) => console.warn('⚠️ Could not save payment defaults to profile:', err));
         }
 
-        // ADDED: February 19, 2026 - Upload any new photos before navigating back
+        // Upload any new photos before navigating back
         if (selectedPhotos.length > 0) {
           console.log(`📸 Uploading ${selectedPhotos.length} new photos...`);
           await uploadPhotos(postId);
+
+          // Verify actual saved count by re-fetching post from server
+          const verifyData = await api.get(`/api/service-posts/${postId}`).catch(() => null);
+          const actualSaved = verifyData?.post?.photos?.length ?? 0;
+          const expectedTotal = existingPhotos.length + selectedPhotos.length;
+
+          if (actualSaved < expectedTotal) {
+            const failed = expectedTotal - actualSaved;
+            Alert.alert(
+              'Listing Saved — Photo Issue',
+              `${actualSaved} of ${expectedTotal} photo(s) saved. ${failed} photo(s) failed — please resize under 2MB and add them again.`,
+              [{ text: 'OK', onPress: () => navigation.goBack() }],
+            );
+            return;
+          }
         }
 
         Alert.alert("Success", "Your listing has been updated successfully!", [
