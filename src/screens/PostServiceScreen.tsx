@@ -592,11 +592,15 @@ const PostServiceScreen: React.FC = () => {
       let uploadedCount = 0;
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
-        const { uploaded, failed } = await uploadPhotos(data.post.id, priceRange);
-        uploadedCount = uploaded;
+        await uploadPhotos(data.post.id, priceRange);
 
-        if (failed > 0 && uploaded === 0) {
-          // All photos failed — delete the post and tell the user
+        // Verify actual saved count by re-fetching the post from server
+        const verifyData = await api.get(`/api/service-posts/${data.post.id}`).catch(() => null);
+        const actualSaved = verifyData?.post?.photos?.length ?? 0;
+        const expectedCount = selectedPhotos.length;
+        uploadedCount = actualSaved;
+
+        if (actualSaved === 0) {
           await api.delete(`/api/service-posts/${data.post.id}`).catch(() => {});
           Alert.alert(
             'Upload Failed',
@@ -605,12 +609,12 @@ const PostServiceScreen: React.FC = () => {
           return;
         }
 
-        if (failed > 0) {
-          // Some photos failed — show combined result and stop, no separate success alert
+        if (actualSaved < expectedCount) {
+          const failedCount = expectedCount - actualSaved;
           clearForm();
           Alert.alert(
             'Post Saved — Photo Issue',
-            `Your post was saved with ${uploaded} of ${selectedPhotos.length} photo(s). ${failed} photo(s) failed to upload (file may be too large — resize under 2MB). You can add them via Edit Listing.`,
+            `${actualSaved} of ${expectedCount} photo(s) uploaded successfully. ${failedCount} photo(s) failed — please resize under 2MB and add via Edit Listing.`,
             [
               { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
               { text: 'OK' },
