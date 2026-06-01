@@ -574,7 +574,8 @@ const PostServiceScreen: React.FC = () => {
     if (!validateForm()) return;
 
     // Warn if photo count and quantity don't match (informational only)
-    if (isBoutique && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
+    const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    if ((isBoutique || isThriftingCategory) && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',

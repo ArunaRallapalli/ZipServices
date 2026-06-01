@@ -608,7 +608,8 @@ const EditListing: React.FC = () => {
     // Warn if photo count and quantity don't match (informational only)
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
     const isBoutiqueEdit = serviceCategory?.toLowerCase().trim() === 'boutique';
-    if (isBoutiqueEdit && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
+    const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+    if ((isBoutiqueEdit || isThriftingEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
