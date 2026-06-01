@@ -573,6 +573,21 @@ const PostServiceScreen: React.FC = () => {
 
     if (!validateForm()) return;
 
+    // Warn if photo count and quantity don't match (informational only)
+    if (isBoutique && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
+      const proceed = await new Promise<boolean>(resolve =>
+        Alert.alert(
+          'Quantity Mismatch',
+          `You have ${selectedPhotos.length} photo(s) but quantity is set to ${inStock}. Please verify the quantity reflects the actual number of items available for sale.\n\nDo you want to continue?`,
+          [
+            { text: 'Review', onPress: () => resolve(false), style: 'cancel' },
+            { text: 'Continue', onPress: () => resolve(true) },
+          ]
+        )
+      );
+      if (!proceed) return;
+    }
+
     try {
       setLoading(true);
       console.log('════════════════════════════════════════');
@@ -1037,11 +1052,6 @@ const PostServiceScreen: React.FC = () => {
                 maxLength={4}
               />
               <Text style={styles.helperText}>Set to 0 to mark as "Not Available"</Text>
-              {isBoutique && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length && (
-                <Text style={styles.stockWarning}>
-                  ⚠️ You have {selectedPhotos.length} photo(s) but quantity is set to {inStock}. Please verify the quantity reflects the actual number of items available for sale.
-                </Text>
-              )}
             </View>
           )}
 
