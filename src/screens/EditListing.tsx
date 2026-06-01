@@ -226,6 +226,33 @@ const EditListing: React.FC = () => {
    * - Web: Base64 JSON upload
    * - Mobile: FormData XHR upload
    */
+  const compressImage = (blob: Blob, maxDimension = 1920, quality = 0.85): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new (window as any).Image() as HTMLImageElement;
+      const url = (window as any).URL.createObjectURL(blob);
+      img.onload = () => {
+        (window as any).URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) { height = Math.round((height / width) * maxDimension); width = maxDimension; }
+          else { width = Math.round((width / height) * maxDimension); height = maxDimension; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas not supported'));
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(result => {
+          if (result) resolve(result);
+          else reject(new Error('Compression failed'));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
   const uploadPhotos = async (postId: string | number) => {
     if (selectedPhotos.length === 0) return;
 
@@ -247,16 +274,10 @@ const EditListing: React.FC = () => {
 
         if (Platform.OS === 'web') {
           const response = await fetch(uri);
-          blob = await response.blob();
-          mimeType = blob.type || 'image/jpeg';
-          const extensionMap: { [key: string]: string } = {
-            'image/jpeg': 'jpg',
-            'image/png': 'png',
-            'image/webp': 'webp',
-            'image/heic': 'heic',
-            'image/heif': 'heic',
-          };
-          fileExtension = extensionMap[mimeType] || 'jpg';
+          const rawBlob = await response.blob();
+          blob = await compressImage(rawBlob); // compress before upload
+          mimeType = 'image/jpeg';
+          fileExtension = 'jpg';
         } else {
           fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
           if (fileExtension === 'png') mimeType = 'image/png';
