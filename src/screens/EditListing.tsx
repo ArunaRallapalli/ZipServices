@@ -1009,6 +1009,11 @@ const EditListing: React.FC = () => {
               <Text style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
                 Set to 0 to mark as "Not Available"
               </Text>
+              {serviceCategory?.toLowerCase().trim() === 'boutique' && (existingPhotos.length + selectedPhotos.length) > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== (existingPhotos.length + selectedPhotos.length) && (
+                <Text style={{ fontSize: 12, color: '#E65100', marginTop: 6, lineHeight: 18 }}>
+                  ⚠️ You have {existingPhotos.length + selectedPhotos.length} photo(s) but quantity is set to {inStock}. Please verify the quantity reflects the actual number of items available for sale.
+                </Text>
+              )}
             </View>
           )}
 

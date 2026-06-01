@@ -1037,6 +1037,11 @@ const PostServiceScreen: React.FC = () => {
                 maxLength={4}
               />
               <Text style={styles.helperText}>Set to 0 to mark as "Not Available"</Text>
+              {isBoutique && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length && (
+                <Text style={styles.stockWarning}>
+                  ⚠️ You have {selectedPhotos.length} photo(s) but quantity is set to {inStock}. Please verify the quantity reflects the actual number of items available for sale.
+                </Text>
+              )}
             </View>
           )}
 
@@ -1228,6 +1233,7 @@ const styles = createResponsiveStyles({
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 16, fontWeight: '600', color: '#4A90E2', marginBottom: 8 },
   helperText: { fontSize: 12, color: '#888', marginTop: 4 },
+  stockWarning: { fontSize: 12, color: '#E65100', marginTop: 6, lineHeight: 18 },
   priceInputRow: { flexDirection: 'row', alignItems: 'center' },
   currencyPrefix: { fontSize: 16, fontWeight: '700', color: '#333', paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRightWidth: 0, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
   priceInputFlex: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
