@@ -643,7 +643,7 @@ const EditListing: React.FC = () => {
             const failed = expectedTotal - actualSaved;
             Alert.alert(
               'Listing Saved — Photo Issue',
-              `${actualSaved} of ${expectedTotal} photo(s) saved. ${failed} photo(s) failed — please resize under 2MB and add them again.`,
+              `${actualSaved} of ${expectedTotal} photo(s) saved. ${failed} photo(s) failed — please check your connection and try adding them again.`,
               [{ text: 'OK', onPress: () => navigation.goBack() }],
             );
             return;

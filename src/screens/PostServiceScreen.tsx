@@ -155,6 +155,35 @@ const PostServiceScreen: React.FC = () => {
   // UPLOAD PHOTOS — sends description alongside each photo
   // --------------------------------------------------------------------------
 
+  const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10MB — matches backend limit
+
+  const compressImage = (blob: Blob, maxDimension = 1920, quality = 0.85): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new (window as any).Image() as HTMLImageElement;
+      const url = (window as any).URL.createObjectURL(blob);
+      img.onload = () => {
+        (window as any).URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) { height = Math.round((height / width) * maxDimension); width = maxDimension; }
+          else { width = Math.round((width / height) * maxDimension); height = maxDimension; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas not supported'));
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(result => {
+          if (result) resolve(result);
+          else reject(new Error('Compression failed'));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
   const uploadPhotos = async (postId: string, postPrice?: string): Promise<{ uploaded: number; failed: number }> => {
     if (selectedPhotos.length === 0) return { uploaded: 0, failed: 0 };
 
@@ -176,8 +205,9 @@ const PostServiceScreen: React.FC = () => {
 
         if (Platform.OS === 'web') {
           const response = await fetch(uri);
-          blob = await response.blob();
-          mimeType = blob.type || 'image/jpeg';
+          const rawBlob = await response.blob();
+          blob = await compressImage(rawBlob); // compress before upload
+          mimeType = 'image/jpeg';
           const extensionMap: { [key: string]: string } = {
             'image/jpeg': 'jpg',
             'image/png': 'png',
@@ -604,7 +634,7 @@ const PostServiceScreen: React.FC = () => {
           await api.delete(`/api/service-posts/${data.post.id}`).catch(() => {});
           Alert.alert(
             'Upload Failed',
-            'Your photos could not be uploaded (file may be too large). Please resize your images under 2MB and try again. Your post was not saved.',
+            'Your photos could not be uploaded. Please check your connection and try again. Your post was not saved.',
           );
           return;
         }
@@ -614,7 +644,7 @@ const PostServiceScreen: React.FC = () => {
           clearForm();
           Alert.alert(
             'Post Saved — Photo Issue',
-            `${actualSaved} of ${expectedCount} photo(s) uploaded successfully. ${failedCount} photo(s) failed — please resize under 2MB and add via Edit Listing.`,
+            `${actualSaved} of ${expectedCount} photo(s) uploaded successfully. ${failedCount} photo(s) failed — please try adding them again via Edit Listing.`,
             [
               { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
               { text: 'OK' },
