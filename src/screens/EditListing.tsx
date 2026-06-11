@@ -1127,7 +1127,7 @@ const EditListing: React.FC = () => {
             {/* Header row: label + total count */}
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(isBoutiqueCategory || isThrifting || isJewelryCategory)
+                Photos {(['boutique', 'preloved & thrifting', 'jewelry'].includes(serviceCategory?.toLowerCase().trim()))
                   ? <Text style={styles.required}> *</Text>
                   : <Text style={{ color: '#888', fontSize: 13 }}> (Optional)</Text>}
               </Text>
