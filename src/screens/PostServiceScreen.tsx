@@ -478,6 +478,7 @@ const PostServiceScreen: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
+    const isJewelryCategory = serviceCategory?.toLowerCase().trim() === 'jewelry';
     if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
@@ -524,7 +525,7 @@ const PostServiceScreen: React.FC = () => {
         }
       }
     }
-    if ((isThrifting || isBoutiqueCategory) && selectedPhotos.length === 0) {
+    if ((isThrifting || isBoutiqueCategory || isJewelryCategory) && selectedPhotos.length === 0) {
       Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       return false;
     }
@@ -847,7 +848,7 @@ const PostServiceScreen: React.FC = () => {
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
+                Photos {(isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' || serviceCategory?.toLowerCase().trim() === 'jewelry')
                   ? <Text style={{ color: '#E53935' }}> *</Text>
                   : <Text style={styles.optionalLabel}> (Optional)</Text>}
               </Text>
@@ -857,7 +858,7 @@ const PostServiceScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.addPhotoButton,
-                (isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && selectedPhotos.length === 0
+                (isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' || serviceCategory?.toLowerCase().trim() === 'jewelry') && selectedPhotos.length === 0
                   ? { borderColor: '#E53935' } : {},
               ]}
               onPress={pickPhotos}

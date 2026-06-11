@@ -532,9 +532,10 @@ const EditListing: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
+    const isJewelryCategory = serviceCategory?.toLowerCase().trim() === 'jewelry';
 
-    // Photo is mandatory for boutique and thrifting
-    if ((isBoutiqueCategory || isThrifting) && existingPhotos.length === 0 && selectedPhotos.length === 0) {
+    // Photo is mandatory for boutique, thrifting, and jewelry
+    if ((isBoutiqueCategory || isThrifting || isJewelryCategory) && existingPhotos.length === 0 && selectedPhotos.length === 0) {
       Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       setErrors(newErrors);
       return false;
@@ -609,7 +610,8 @@ const EditListing: React.FC = () => {
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
     const isBoutiqueEdit = serviceCategory?.toLowerCase().trim() === 'boutique';
     const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if ((isBoutiqueEdit || isThriftingEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
+    const isJewelryEdit = serviceCategory?.toLowerCase().trim() === 'jewelry';
+    if ((isBoutiqueEdit || isThriftingEdit || isJewelryEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
@@ -1123,7 +1125,11 @@ const EditListing: React.FC = () => {
           <View style={styles.section}>
             {/* Header row: label + total count */}
             <View style={styles.photoHeader}>
-              <Text style={styles.label}>Photos</Text>
+              <Text style={styles.label}>
+                Photos {(isBoutiqueCategory || isThrifting || isJewelryCategory)
+                  ? <Text style={styles.required}> *</Text>
+                  : <Text style={{ color: '#888', fontSize: 13 }}> (Optional)</Text>}
+              </Text>
               <Text style={styles.photoCount}>
                 {existingPhotos.length + selectedPhotos.length}/{maxPhotos}
               </Text>
