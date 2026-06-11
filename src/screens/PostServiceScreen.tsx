@@ -483,7 +483,7 @@ const PostServiceScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
-    if (isBoutiqueCategory) {
+    if (isBoutiqueCategory || isJewelryCategory) {
       if (postPaymentMethods.length === 0) {
         Alert.alert('Validation Error', 'Please select at least one payment method.');
         return false;
@@ -534,6 +534,8 @@ const PostServiceScreen: React.FC = () => {
 
   const BOUTIQUE_CATEGORY = 'boutique';
   const isBoutique = serviceCategory?.toLowerCase().trim() === BOUTIQUE_CATEGORY;
+  const isJewelry = serviceCategory?.toLowerCase().trim() === 'jewelry';
+  const isBoutiqueOrJewelry = isBoutique || isJewelry;
 
   const PAYMENT_OPTIONS = [
     { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
@@ -576,7 +578,7 @@ const PostServiceScreen: React.FC = () => {
 
     // Warn if photo count and quantity don't match (informational only)
     const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if ((isBoutique || isThriftingCategory) && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
+    if ((isBoutiqueOrJewelry || isThriftingCategory) && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
@@ -617,9 +619,9 @@ const PostServiceScreen: React.FC = () => {
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
         in_stock: parseInt(inStock) || 1,
-        shipping_charge_cents: isBoutique ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
-        post_payment_method: isBoutique && postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
-        post_payment_info: isBoutique && Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
+        shipping_charge_cents: isBoutiqueOrJewelry ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
+        post_payment_method: isBoutiqueOrJewelry && postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
+        post_payment_info: isBoutiqueOrJewelry && Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
       };
 
       console.log('📤 Submitting service offer...');
@@ -627,7 +629,7 @@ const PostServiceScreen: React.FC = () => {
       console.log('✅ Post created successfully:', data.post.id);
 
       // Merge and save payment methods to profile (never remove existing methods)
-      if (isBoutique && postPaymentMethods.length > 0) {
+      if (isBoutiqueOrJewelry && postPaymentMethods.length > 0) {
         const mergedMethods = Array.from(new Set([...profilePaymentMethods, ...postPaymentMethods]));
         const mergedInfos = { ...profilePaymentInfos, ...postPaymentInfos };
         api.put(`/business-owners/by-user/${userId}`, {
@@ -1057,8 +1059,8 @@ const PostServiceScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Shipping Charge */}
-          {isBoutique && (
+          {/* Boutique/Jewelry: Shipping Charge */}
+          {isBoutiqueOrJewelry && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Shipping Charge ($)</Text>
               <View style={styles.priceInputRow}>
@@ -1081,8 +1083,8 @@ const PostServiceScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Payment Methods (multi-select) */}
-          {isBoutique && (
+          {/* Boutique/Jewelry: Payment Methods (multi-select) */}
+          {isBoutiqueOrJewelry && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Payment Methods (select all you accept)</Text>
               {PAYMENT_OPTIONS.map(o => {

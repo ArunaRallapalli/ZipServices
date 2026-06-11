@@ -548,8 +548,8 @@ const EditListing: React.FC = () => {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return false;
 
-    // Payment method format validation for boutique
-    if (isBoutiqueCategory) {
+    // Payment method format validation for boutique and jewelry
+    if (isBoutiqueCategory || isJewelryCategory) {
       if (postPaymentMethods.length === 0) {
         Alert.alert('Validation Error', 'Please select at least one payment method.');
         return false;
@@ -631,6 +631,7 @@ const EditListing: React.FC = () => {
 
       const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
       const isBoutique = serviceCategory.toLowerCase().trim() === 'boutique';
+      const isBoutiqueOrJewelry = isBoutique || serviceCategory.toLowerCase().trim() === 'jewelry';
 
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
@@ -644,7 +645,7 @@ const EditListing: React.FC = () => {
         zip_code: zipCode.trim() || null,
         post_type: postType,
         ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
-        ...(isBoutique ? {
+        ...(isBoutiqueOrJewelry ? {
           shipping_charge_cents: Math.round(parseFloat(shippingCharge || '0') * 100) || 1000,
           post_payment_method: postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
           post_payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
@@ -661,7 +662,7 @@ const EditListing: React.FC = () => {
       // Show success message and navigate back if update successful
       if (data.success) {
         // Merge and save payment methods to profile (never remove existing methods)
-        if (isBoutique && postPaymentMethods.length > 0) {
+        if (isBoutiqueOrJewelry && postPaymentMethods.length > 0) {
           const mergedMethods = Array.from(new Set([...profilePaymentMethods, ...postPaymentMethods]));
           const mergedInfos = { ...profilePaymentInfos, ...postPaymentInfos };
           api.put(`/business-owners/by-user/${userInfo?.user_id}`, {
@@ -1032,8 +1033,8 @@ const EditListing: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Shipping Charge */}
-          {serviceCategory.toLowerCase().trim() === 'boutique' && (
+          {/* Boutique/Jewelry: Shipping Charge */}
+          {(serviceCategory.toLowerCase().trim() === 'boutique' || serviceCategory.toLowerCase().trim() === 'jewelry') && (
             <View style={styles.section}>
               <Text style={styles.label}>Shipping Charge ($)</Text>
               <View style={styles.priceInputRow}>
@@ -1057,8 +1058,8 @@ const EditListing: React.FC = () => {
             </View>
           )}
 
-          {/* Boutique-only: Payment Methods (multi-select checkboxes) */}
-          {serviceCategory.toLowerCase().trim() === 'boutique' && (() => {
+          {/* Boutique/Jewelry: Payment Methods (multi-select checkboxes) */}
+          {(serviceCategory.toLowerCase().trim() === 'boutique' || serviceCategory.toLowerCase().trim() === 'jewelry') && (() => {
             const PAYMENT_OPTIONS = [
               { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
               { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
