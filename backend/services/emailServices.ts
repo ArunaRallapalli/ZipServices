@@ -523,6 +523,12 @@ function buildOrderStatusHtml(params: {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
+  const itemsSubtotal = (items || []).reduce((sum: number, item: any) => {
+    const u = item.photo_price != null ? item.photo_price : (item.price || 0);
+    return sum + u * (item.quantity ?? 1);
+  }, 0);
+  const shippingFeeStatus = Math.round(((totalCents / 100) - itemsSubtotal) * 100) / 100;
+
   const itemRows = (items || []).map((item: any) => {
     const unitPrice = item.photo_price || item.price || 0;
     const qty = item.quantity ?? 1;
@@ -543,6 +549,13 @@ function buildOrderStatusHtml(params: {
         <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${amount > 0 ? `$${amount.toFixed(2)}` : '—'}</td>
       </tr>`;
   }).join('');
+
+  const shippingRowStatus = shippingFeeStatus > 0
+    ? `<tr>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0" colspan="3">Shipping &amp; Handling</td>
+        <td style="padding:8px;border-bottom:1px solid #f0f0f0;text-align:right">$${shippingFeeStatus.toFixed(2)}</td>
+       </tr>`
+    : '';
 
   const roleMessage = {
     customer: isCompleted
@@ -598,6 +611,7 @@ function buildOrderStatusHtml(params: {
               </thead>
               <tbody>
                 ${itemRows}
+                ${shippingRowStatus}
                 <tr class="total-row">
                   <td colspan="3" style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0">Total:</td>
                   <td style="padding-top:12px;text-align:right;border-top:2px solid #e0e0e0;color:#4A90E2">
