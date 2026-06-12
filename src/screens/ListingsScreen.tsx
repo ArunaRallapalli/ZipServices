@@ -140,13 +140,11 @@ const ListingsScreen: React.FC = () => {
         if (storedUserInfo) {
           try {
             info = JSON.parse(storedUserInfo);
-            // Always override with the current userId to avoid stale data
-            if (info) info.user_id = parseInt(userId);
           } catch (e) {
             console.error("Error parsing user info:", e);
           }
         }
-
+        
         // If parsing failed, create basic info object
         if (!info) {
           info = {
