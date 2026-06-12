@@ -33,14 +33,17 @@ const OrderReportScreen: React.FC = () => {
     items,
     totalCents,
     shippingCents,
-    providerZelleId,
-    providerPaymentMethod,
+    providerPaymentMethods,
+    providerPaymentInfos,
     shippingAddress,
     fulfillmentMethod,
   } = route.params || {};
 
-  const paymentMethodName = ({ zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' } as Record<string, string>)[providerPaymentMethod || ''] || 'Zelle';
-  const isOfflineMethod = providerPaymentMethod === 'cash' || providerPaymentMethod === 'check';
+  const METHOD_LABELS: Record<string, string> = { zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' };
+  const methods: string[] = Array.isArray(providerPaymentMethods) ? providerPaymentMethods : [];
+  const infos: Record<string, string> = providerPaymentInfos || {};
+  const hasOnlineMethod = methods.some(m => m !== 'cash' && m !== 'check');
+  const hasOfflineMethod = methods.some(m => m === 'cash' || m === 'check');
 
   const formattedDate = orderDate
     ? new Date(orderDate).toLocaleDateString('en-US', {
@@ -153,29 +156,30 @@ const OrderReportScreen: React.FC = () => {
         </View>
 
         {/* Payment Reminder */}
-        {(totalCents || 0) > 0 && (providerZelleId || isOfflineMethod) && (
+        {(totalCents || 0) > 0 && methods.length > 0 && (
           <View style={styles.zelleReminder}>
             <Ionicons name="phone-portrait-outline" size={20} color="#1565C0" />
             <View style={{ flex: 1 }}>
-              {isOfflineMethod ? (
-                <>
-                  <Text style={styles.zelleReminderTitle}>Payment: {paymentMethodName}</Text>
-                  <Text style={styles.zelleReminderBody}>
-                    The provider will contact you to arrange {paymentMethodName.toLowerCase()} payment.
+              <Text style={styles.zelleReminderTitle}>Action Required: Send Payment</Text>
+              <Text style={styles.zelleReminderBody}>
+                Please send <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text> to the provider using one of the methods below:
+              </Text>
+              {methods.map(m => {
+                const label = METHOD_LABELS[m] || m;
+                const handle = infos[m];
+                if (m === 'cash' || m === 'check') {
+                  return (
+                    <Text key={m} style={[styles.zelleReminderBody, { marginTop: 4 }]}>
+                      • <Text style={styles.bold}>{label}:</Text> The provider will contact you to arrange payment.
+                    </Text>
+                  );
+                }
+                return handle ? (
+                  <Text key={m} style={[styles.zelleReminderBody, { marginTop: 4 }]}>
+                    • <Text style={styles.bold}>{label}:</Text> {handle}
                   </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.zelleReminderTitle}>Action Required: Send Payment</Text>
-                  <Text style={styles.zelleReminderBody}>
-                    Please send{' '}
-                    <Text style={styles.bold}>${((totalCents || 0) / 100).toFixed(2)}</Text>
-                    {' '}via {paymentMethodName} to{' '}
-                    <Text style={styles.bold}>{providerZelleId}</Text>
-                    {' '}to complete your purchase.
-                  </Text>
-                </>
-              )}
+                ) : null;
+              })}
             </View>
           </View>
         )}
