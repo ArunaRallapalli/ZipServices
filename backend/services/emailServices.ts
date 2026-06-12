@@ -716,8 +716,10 @@ function buildProviderPlacementHtml(params: {
   totalCents: number;
   orderDate: string;
   buyerTimezone?: string;
+  paymentMethods?: string[];
+  paymentInfos?: Record<string, string>;
 }): string {
-  const { providerName, customerName, orderId, items, totalCents, orderDate, buyerTimezone } = params;
+  const { providerName, customerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const formattedDate = new Date(orderDate).toLocaleString('en-US', {
     timeZone: buyerTimezone || 'UTC',
@@ -816,6 +818,17 @@ function buildProviderPlacementHtml(params: {
             <div class="warning-box">
               <strong>⚠️ Status: Awaiting Payment</strong><br/>
               The customer has not completed payment yet.<br/><br/>
+              ${(paymentMethods && paymentMethods.length > 0)
+                ? (() => {
+                    const LABELS: Record<string, string> = { zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check' };
+                    const lines = paymentMethods.map((m: string) => {
+                      const label = LABELS[m] || m;
+                      const info = paymentInfos ? paymentInfos[m] : undefined;
+                      return info ? `&nbsp;&bull;&nbsp;<strong>${label}:</strong> ${info}` : `&nbsp;&bull;&nbsp;${label}`;
+                    }).join('<br/>');
+                    return `<strong>Payment Method${paymentMethods.length > 1 ? 's' : ''} Selected by Buyer:</strong><br/>${lines}<br/><br/>`;
+                  })()
+                : ''}
               Please do not start the service until the payment is confirmed. You will receive another notification once the payment is completed.
             </div>
             ` : ''}
@@ -1116,7 +1129,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'support@gozipmarket.com',
       to:      providerEmail,
       subject: `New Order Request #${displayId} — GoZipMarket`,
-      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
+      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
     }).then(() => console.log(`✅ Order placement email sent to provider ${providerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to provider ${providerEmail}:`, err)),
 
