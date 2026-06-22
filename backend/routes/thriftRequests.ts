@@ -96,7 +96,7 @@ async function sendThriftRequestEmail(params: {
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      providerEmail,
       subject: `New Thrift Request — "${postTitle}"`,
       html: `
@@ -167,7 +167,7 @@ async function sendBuyerRejectionEmail(params: {
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      buyerEmail,
       subject: `Update on Your Thrift Request — "${postTitle}"`,
       html: `
@@ -235,7 +235,7 @@ async function sendBuyerCompletionEmail(params: {
   try {
     await resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      buyerEmail,
       subject: `Your Thrift Request Was Approved — "${postTitle}"`,
       html: `

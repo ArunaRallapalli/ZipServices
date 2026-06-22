@@ -30,7 +30,7 @@ const PrivacyPolicyScreen: React.FC = () => {
           • Business Name: GoZipMarket{'\n'}
           • Legal Entity: Zip Market LLC{'\n'}
           • Address: 30 N Gould St Ste N, Sheridan, WY 82801{'\n'}
-          • Email: support@gozipmarket.com
+          • Email: zipmarket333@gmail.com
         </Text>
 
         <Text style={styles.paragraph}>
@@ -156,7 +156,7 @@ const PrivacyPolicyScreen: React.FC = () => {
 
         <Text style={styles.subSectionTitle}>6.2 Data Deletion</Text>
         <Text style={styles.paragraph}>
-          You have the right to request deletion of your account and associated personal information. Contact us at support@gozipmarket.com to request deletion.
+          You have the right to request deletion of your account and associated personal information. Contact us at zipmarket333@gmail.com to request deletion.
         </Text>
 
         <Text style={styles.subSectionTitle}>6.3 Data Portability</Text>
@@ -212,7 +212,7 @@ const PrivacyPolicyScreen: React.FC = () => {
           Zip Market LLC{'\n'}
           30 N Gould St Ste N{'\n'}
           Sheridan, WY 82801{'\n'}
-          Email: support@gozipmarket.com
+          Email: zipmarket333@gmail.com
         </Text>
 
         <Text style={styles.sectionTitle}>11. Consent</Text>

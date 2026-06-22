@@ -102,7 +102,7 @@ const webResetLink = `${frontendUrl}/reset-password.html?token=${resetToken}&ema
 const emailResult = await resend.emails.send({
   // To this:
 from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
-replyTo: 'support@gozipmarket.com',  // Users can still reply to support@
+replyTo: 'zipmarket333@gmail.com',  // Users can still reply to support@
   to: email,
   subject: 'Reset Your GoZipMarket Password',
       html: `
