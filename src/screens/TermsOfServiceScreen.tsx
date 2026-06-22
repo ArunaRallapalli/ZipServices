@@ -18,7 +18,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <Text style={styles.title}>Terms of Service for GoZipMarket</Text>
         
         <Text style={styles.date}>Effective Date: December 14, 2024</Text>
-        <Text style={styles.date}>Last Updated: December 14, 2024</Text>
+        <Text style={styles.date}>Last Updated: June 22, 2026</Text>
 
         <Text style={styles.sectionTitle}>1. Agreement to Terms</Text>
         <Text style={styles.paragraph}>
@@ -284,7 +284,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Zip Market LLC</Text>
           <Text style={styles.footerText}>Operating as: GoZipMarket</Text>
-          <Text style={styles.footerText}>Last Updated: December 14, 2024</Text>
+          <Text style={styles.footerText}>Last Updated: June 22, 2026</Text>
           <Text style={styles.footerText}>These Terms of Service are effective as of the date stated above and apply to all users of the Service.</Text>
         </View>
       </View>

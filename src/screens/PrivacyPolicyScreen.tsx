@@ -18,7 +18,7 @@ const PrivacyPolicyScreen: React.FC = () => {
         <Text style={styles.title}>Privacy Policy for GoZipMarket</Text>
         
         <Text style={styles.date}>Effective Date: December 14, 2024</Text>
-        <Text style={styles.date}>Last Updated: December 14, 2024</Text>
+        <Text style={styles.date}>Last Updated: June 22, 2026</Text>
 
         <Text style={styles.sectionTitle}>1. Introduction</Text>
         <Text style={styles.paragraph}>
@@ -223,7 +223,7 @@ const PrivacyPolicyScreen: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Zip Market LLC</Text>
           <Text style={styles.footerText}>Operating as: GoZipMarket</Text>
-          <Text style={styles.footerText}>Last Updated: December 14, 2024</Text>
+          <Text style={styles.footerText}>Last Updated: June 22, 2026</Text>
         </View>
       </View>
     </ScrollView>
