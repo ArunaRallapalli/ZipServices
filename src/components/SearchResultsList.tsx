@@ -189,9 +189,6 @@ const MiniServiceCard: React.FC<{
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const photos = (item.photos ?? []).filter((uri: string) => !!uri);
   const firstPhoto = photos[0] ?? null;
-  const thumbPhoto = firstPhoto?.includes('/storage/v1/object/public/')
-    ? firstPhoto.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + '?width=200&quality=70&resize=cover'
-    : firstPhoto;
 
   const openZoom = (index: number) => { setSelectedPhotoIndex(index); setZoomVisible(true); };
   const goNext = () => { if (selectedPhotoIndex < photos.length - 1) setSelectedPhotoIndex(i => i + 1); };
@@ -373,7 +370,7 @@ const MiniServiceCard: React.FC<{
         {firstPhoto ? (
           <View style={miniStyles.photoWrapper}>
             <Image
-              source={{ uri: thumbPhoto }}
+              source={{ uri: firstPhoto }}
               style={miniStyles.photoImage}
               resizeMode="cover"
             />
