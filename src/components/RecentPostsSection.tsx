@@ -668,7 +668,7 @@ const MiniServiceCard: React.FC<{
 }> = ({ item, isOwnPost, onChatPress, onReviewSubmitted, onAddToCart, isAuthenticated, paymentCategories }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
-  const firstPhoto = item.photos?.[0] ?? null;
+  const firstPhoto = (item.photos ?? []).filter((uri: string) => !!uri)[0] ?? null;
 
   return (
     <>
