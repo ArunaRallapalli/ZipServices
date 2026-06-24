@@ -1427,11 +1427,12 @@ if (mimeType === 'image/heic' || mimeType === 'image/heif') {
 try {
   const originalSize = fileBuffer.length;
   fileBuffer = await sharp(fileBuffer)
+    .rotate()                  // auto-correct EXIF orientation before resizing
     .resize(800, 800, {
       fit: 'inside',           // preserves aspect ratio
       withoutEnlargement: true // don't upscale small images
     })
-    .jpeg({ quality: 70 })     // normalize everything to JPEG
+    .jpeg({ quality: 70 })     // normalize everything to JPEG, strips EXIF metadata
     .toBuffer();
   
   mimeType = 'image/jpeg';
