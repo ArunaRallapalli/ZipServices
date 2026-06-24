@@ -92,11 +92,11 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
         <View style={styles.compactRow}>
           {Platform.OS === 'web' ? (
             <a 
-              href="mailto:support@gozipmarket.com?subject=Support%20Request%20-%20GoZipMarket"
+              href="mailto:zipmarket333@gmail.com?subject=Support%20Request%20-%20GoZipMarket"
               style={{ flex: 1, textDecoration: 'none', marginRight: 8 }}
             >
               <View style={styles.compactButton}>
-                <Text style={styles.compactButtonText}>📧 support@gozipmarket.com</Text>
+                <Text style={styles.compactButtonText}>📧 zipmarket333@gmail.com</Text>
               </View>
             </a>
           ) : (
@@ -104,15 +104,15 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
               style={styles.compactButton}
               onPress={() => {
                 const Linking = require('react-native').Linking;
-                Linking.openURL('mailto:support@gozipmarket.com?subject=Support%20Request%20-%20GoZipMarket');
+                Linking.openURL('mailto:zipmarket333@gmail.com?subject=Support%20Request%20-%20GoZipMarket');
               }}
             >
-              <Text style={styles.compactButtonText}>📧 support@gozipmarket.com</Text>
+              <Text style={styles.compactButtonText}>📧 zipmarket333@gmail.com</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity 
             style={styles.compactCopyButton}
-            onPress={() => copyToClipboard('support@gozipmarket.com')}
+            onPress={() => copyToClipboard('zipmarket333@gmail.com')}
           >
             <Text style={styles.copyIcon}>📋</Text>
           </TouchableOpacity>
@@ -122,11 +122,11 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
         <View style={styles.compactRow}>
           {Platform.OS === 'web' ? (
             <a 
-              href="mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20GoZipMarket"
+              href="mailto:zipmarket333@gmail.com?subject=Business%20Inquiry%20-%20GoZipMarket"
               style={{ flex: 1, textDecoration: 'none', marginRight: 8 }}
             >
               <View style={styles.compactButton}>
-                <Text style={styles.compactButtonText}>💼 business@gozipmarket.com</Text>
+                <Text style={styles.compactButtonText}>💼 zipmarket333@gmail.com</Text>
               </View>
             </a>
           ) : (
@@ -134,15 +134,15 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
               style={styles.compactButton}
               onPress={() => {
                 const Linking = require('react-native').Linking;
-                Linking.openURL('mailto:business@gozipmarket.com?subject=Business%20Inquiry%20-%20GoZipMarket');
+                Linking.openURL('mailto:zipmarket333@gmail.com?subject=Business%20Inquiry%20-%20GoZipMarket');
               }}
             >
-              <Text style={styles.compactButtonText}>💼 business@gozipmarket.com</Text>
+              <Text style={styles.compactButtonText}>💼 zipmarket333@gmail.com</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity 
             style={styles.compactCopyButton}
-            onPress={() => copyToClipboard('business@gozipmarket.com')}
+            onPress={() => copyToClipboard('zipmarket333@gmail.com')}
           >
             <Text style={styles.copyIcon}>📋</Text>
           </TouchableOpacity>
@@ -159,25 +159,25 @@ export const ContactSupportSection: React.FC<ContactSupportProps> = ({
       )}
       
       <EmailLink 
-        email="support@gozipmarket.com"
+        email="zipmarket333@gmail.com"
         label="Contact Support"
         icon="📧"
       />
       
       <EmailLink 
-        email="business@gozipmarket.com"
+        email="zipmarket333@gmail.com"
         label="Business Inquiries"
         icon="💼"
       />
       
       <EmailLink 
-        email="info@gozipmarket.com"
+        email="zipmarket333@gmail.com"
         label="General Information"
         icon="ℹ️"
       />
       
       <EmailLink 
-        email="support@gozipmarket.com"
+        email="zipmarket333@gmail.com"
         label="Report a Bug"
         icon="🐛"
       />

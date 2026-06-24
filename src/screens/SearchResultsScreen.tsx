@@ -517,7 +517,7 @@ const SearchResultsScreen: React.FC = () => {
 
         {/* Support line */}
         <Text style={styles.supportText}>
-          For questions or support, please contact us at support@gozipmarket.com
+          For questions or support, please contact us at zipmarket333@gmail.com
         </Text>
       </ScrollView>
 

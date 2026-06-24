@@ -232,7 +232,7 @@ async function sendOrderEmails(
   await Promise.all(recipients.map(({ email, label }) =>
     resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      email,
       subject: `Order Confirmed #${displayId} — GoZipMarket`,
       html:    buildOrderReportHtml({

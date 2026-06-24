@@ -136,7 +136,7 @@ console.log('🔗 Verification link created:', verificationLink);
 const emailResult = await resend.emails.send({
  // To this:
 from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← VERIFIED, WORKS!
-replyTo: 'support@gozipmarket.com',
+replyTo: 'zipmarket333@gmail.com',
   to: email,
   subject: 'Verify Your GoZipMarket Email',  
       html: `

@@ -692,7 +692,7 @@ export async function sendSmartNotification(
   // 6. Send the email
   await resend.emails.send({
     from:    'GoZipMarket <noreply@gozipmarket.com>',
-    replyTo: 'support@gozipmarket.com',
+    replyTo: 'zipmarket333@gmail.com',
     to:      receiverRow.email,
     subject,
     html,

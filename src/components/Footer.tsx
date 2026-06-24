@@ -12,19 +12,19 @@ export const Footer = () => {
       <Text style={styles.title}>Need Help?</Text>
       
       <TouchableOpacity 
-        onPress={() => openEmail('support@gozipmarket.com', 'Support Request')}
+        onPress={() => openEmail('zipmarket333@gmail.com', 'Support Request')}
         style={styles.linkContainer}
       >
         <Text style={styles.icon}>📧</Text>
-        <Text style={styles.link}>support@gozipmarket.com</Text>
+        <Text style={styles.link}>zipmarket333@gmail.com</Text>
       </TouchableOpacity>
 
       <TouchableOpacity 
-        onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry')}
+        onPress={() => openEmail('zipmarket333@gmail.com', 'Business Inquiry')}
         style={styles.linkContainer}
       >
         <Text style={styles.icon}>💼</Text>
-        <Text style={styles.link}>business@gozipmarket.com</Text>
+        <Text style={styles.link}>zipmarket333@gmail.com</Text>
       </TouchableOpacity>
 
       <Text style={styles.copyright}>© 2025 GoZipMarket - Zip Market LLC</Text>

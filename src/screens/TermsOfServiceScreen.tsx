@@ -18,7 +18,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <Text style={styles.title}>Terms of Service for GoZipMarket</Text>
         
         <Text style={styles.date}>Effective Date: December 14, 2024</Text>
-        <Text style={styles.date}>Last Updated: December 14, 2024</Text>
+        <Text style={styles.date}>Last Updated: June 22, 2026</Text>
 
         <Text style={styles.sectionTitle}>1. Agreement to Terms</Text>
         <Text style={styles.paragraph}>
@@ -30,7 +30,7 @@ const TermsOfServiceScreen: React.FC = () => {
           • Business Name: GoZipMarket{'\n'}
           • Legal Entity: Zip Market LLC{'\n'}
           • Address: 30 N Gould St Ste N, Sheridan, WY 82801{'\n'}
-          • Email: support@gozipmarket.com
+          • Email: zipmarket333@gmail.com
         </Text>
 
         <Text style={styles.warning}>
@@ -214,7 +214,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <Text style={styles.paragraph}>
           You may terminate your account at any time by:{'\n\n'}
           • Using the account deletion feature in the app{'\n'}
-          • Contacting us at support@gozipmarket.com
+          • Contacting us at zipmarket333@gmail.com
         </Text>
 
         <Text style={styles.subSectionTitle}>9.2 Termination by Us</Text>
@@ -269,7 +269,7 @@ const TermsOfServiceScreen: React.FC = () => {
           Operating as: GoZipMarket{'\n'}
           30 N Gould St Ste N{'\n'}
           Sheridan, WY 82801{'\n'}
-          Email: support@gozipmarket.com
+          Email: zipmarket333@gmail.com
         </Text>
 
         <Text style={styles.sectionTitle}>13. Acknowledgment</Text>
@@ -284,7 +284,7 @@ const TermsOfServiceScreen: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Zip Market LLC</Text>
           <Text style={styles.footerText}>Operating as: GoZipMarket</Text>
-          <Text style={styles.footerText}>Last Updated: December 14, 2024</Text>
+          <Text style={styles.footerText}>Last Updated: June 22, 2026</Text>
           <Text style={styles.footerText}>These Terms of Service are effective as of the date stated above and apply to all users of the Service.</Text>
         </View>
       </View>
