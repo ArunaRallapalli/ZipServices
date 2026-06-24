@@ -1427,11 +1427,11 @@ if (mimeType === 'image/heic' || mimeType === 'image/heif') {
 try {
   const originalSize = fileBuffer.length;
   fileBuffer = await sharp(fileBuffer)
-    .resize(1200, 1200, {
+    .resize(800, 800, {
       fit: 'inside',           // preserves aspect ratio
       withoutEnlargement: true // don't upscale small images
     })
-    .jpeg({ quality: 80 })     // normalize everything to JPEG
+    .jpeg({ quality: 70 })     // normalize everything to JPEG
     .toBuffer();
   
   mimeType = 'image/jpeg';
