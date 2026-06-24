@@ -46,7 +46,7 @@ export async function sendBookingNotification({
   const emailResult = await resend.emails.send({
 // To:
 from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← USE THIS
-replyTo: 'support@gozipmarket.com',
+replyTo: 'zipmarket333@gmail.com',
   to: providerEmail,
   subject: '📅 New Booking Request',
       html: `
@@ -667,7 +667,7 @@ export async function sendOrderStatusEmails({
   await Promise.all(recipients.map(({ email, label, role }) =>
     resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      email,
       subject,
       html: buildOrderStatusHtml({
@@ -1126,7 +1126,7 @@ export async function sendOrderPlacementEmails({
   const jobs: Promise<void>[] = [
     resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      providerEmail,
       subject: `New Order Request #${displayId} — GoZipMarket`,
       html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
@@ -1135,7 +1135,7 @@ export async function sendOrderPlacementEmails({
 
     resend.emails.send({
       from:    'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to:      customerEmail,
       subject: `Order Placed #${displayId} — GoZipMarket`,
       html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
@@ -1145,7 +1145,7 @@ export async function sendOrderPlacementEmails({
     ...adminEmails.map(email =>
       resend.emails.send({
         from:    'GoZipMarket <noreply@gozipmarket.com>',
-        replyTo: 'support@gozipmarket.com',
+        replyTo: 'zipmarket333@gmail.com',
         to:      email,
         subject: `New Order #${displayId} — Admin Notification`,
         html:    buildAdminPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone }),
@@ -1187,7 +1187,7 @@ export async function sendCategoryRequestNotification({
     const emailResult = await resend.emails.send({
   // To:
 from: 'GoZipMarket <noreply@gozipmarket.com>',  // ← USE THIS
-replyTo: 'support@gozipmarket.com',
+replyTo: 'zipmarket333@gmail.com',
   to: adminEmail,
 subject: `New Category Request: ${categoryName} - Admin Review Needed`,
       html: `
@@ -1321,7 +1321,7 @@ export async function sendNewPostNotification({
 
     await resend.emails.send({
       from: 'GoZipMarket <noreply@gozipmarket.com>',
-      replyTo: 'support@gozipmarket.com',
+      replyTo: 'zipmarket333@gmail.com',
       to: adminEmail,
       subject: `New Post: ${postTitle} — ${postCategory}`,
       html: `

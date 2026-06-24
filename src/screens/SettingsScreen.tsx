@@ -176,22 +176,22 @@ export default function SettingsScreen() {
           <SettingItem
             icon="mail"
             label="Contact Support"
-            onPress={() => openEmail('support@gozipmarket.com', 'Support Request - GoZipMarket')}
+            onPress={() => openEmail('zipmarket333@gmail.com', 'Support Request - GoZipMarket')}
           />
           <SettingItem
             icon="briefcase"
             label="Business Inquiries"
-            onPress={() => openEmail('business@gozipmarket.com', 'Business Inquiry - GoZipMarket')}
+            onPress={() => openEmail('zipmarket333@gmail.com', 'Business Inquiry - GoZipMarket')}
           />
           <SettingItem
             icon="information-circle-outline"
             label="General Information"
-            onPress={() => openEmail('info@gozipmarket.com', 'Information Request - GoZipMarket')}
+            onPress={() => openEmail('zipmarket333@gmail.com', 'Information Request - GoZipMarket')}
           />
           <SettingItem
             icon="bug-outline"
             label="Report a Bug"
-            onPress={() => openEmail('support@gozipmarket.com', 'Bug Report - GoZipMarket')}
+            onPress={() => openEmail('zipmarket333@gmail.com', 'Bug Report - GoZipMarket')}
           />
           <SettingItem
             icon="help-circle-outline"
