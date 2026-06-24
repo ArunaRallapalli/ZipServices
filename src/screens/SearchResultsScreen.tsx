@@ -254,7 +254,7 @@ const SearchResultsScreen: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     const refreshTasks: Promise<any>[] = [
-      fetchRecentPosts().then(setRecentPosts).catch(() => {}),
+      fetchRecentPosts(20).then(setRecentPosts).catch(() => {}),
     ];
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
       refreshTasks.push(performSearch(true));
@@ -405,7 +405,7 @@ const SearchResultsScreen: React.FC = () => {
       const loadRecentSection = async () => {
         setLoadingRecentSection(true);
         try {
-          const posts = await fetchRecentPosts();
+          const posts = await fetchRecentPosts(20);
           setRecentPosts(posts);
         } catch (error) {
           console.error('Error loading recent section:', error);
@@ -511,7 +511,7 @@ const SearchResultsScreen: React.FC = () => {
           isAuthenticated={auth.isAuthenticated}
           paymentCategories={paymentCategories}
           onReviewSubmitted={() => {
-            fetchRecentPosts().then(setRecentPosts).catch(() => {});
+            fetchRecentPosts(20).then(setRecentPosts).catch(() => {});
           }}
         />
 
