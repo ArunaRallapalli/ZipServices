@@ -44,34 +44,45 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { Platform } from "react-native";
 import { WebAlert } from "../components/WebAlert"
 import { setWebAlertHandler } from "../Utils/Alert";
-import CalendarScreen from '../screens/CalendarScreen';
-import AdminCategoryRequestsScreen from '../screens/AdminCategoryRequestsScreen'
-
-// Screen imports - All navigable screens in the app
-import ListingsScreen from "../screens/ListingsScreen";
+// Screen imports — critical screens in the initial bundle
+import TabWrapperScreen from "../screens/TabWrapperScreen";
 import SignUpFormBusinessOwners from "../screens/auth/SignUpFormBusinessOwners";
 import SigninBusinessOwners from "../screens/auth/SigninBusinessOwners";
-import ChatScreen from "../screens/ChatScreen";
 import BusinessOwnerHomeScreen from "../screens/auth/BusinessOwnerHomeScreen";
-import BusinessOwnerChatScreen from "../screens/BusinessOwnerChatScreen";
-import BusinessOwnerProfileScreen from "../screens/Profile/BusinessOwnerProfileScreen";
-import PostServiceScreen from "../screens/PostServiceScreen";
-import TabWrapperScreen from "../screens/TabWrapperScreen";
 import SignInPlaceholderScreen from "../screens/auth/SignInPlaceholderScreen";
-import EditListing from "../screens/EditListing";
-import RequestServiceCategoryScreen from "../screens/Requestservicecategoryscreen";
-// Add to imports section
-import TermsOfServiceScreen from "../screens/TermsOfServiceScreen";
-import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
-import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import VerifyEmailScreen from '../screens/VerifyEmailScreen';
-import CartScreen from '../screens/cart/CartScreen';
-import BoutiqueCheckoutScreen from '../screens/cart/BoutiqueCheckoutScreen';
-import ServiceAddressScreen from '../screens/cart/ServiceAddressScreen';
-import BoutiquePaymentScreen from '../screens/cart/BoutiquePaymentScreen';
-import OrdersScreen from '../screens/cart/OrdersScreen';
-import OrderReportScreen from '../screens/cart/OrderReportScreen';
-import ThriftingRequestsScreen from '../screens/ThriftingRequestsScreen';
+
+// All other screens are lazy-loaded — excluded from the initial bundle,
+// downloaded only when the user first navigates to them.
+const lazyScreen = (factory: () => Promise<{ default: React.ComponentType<any> }>) => {
+  const LazyComponent = React.lazy(factory);
+  const Wrapper = (props: any) => (
+    <React.Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#4A90E2" /></View>}>
+      <LazyComponent {...props} />
+    </React.Suspense>
+  );
+  return Wrapper;
+};
+
+const CalendarScreen            = lazyScreen(() => import('../screens/CalendarScreen'));
+const AdminCategoryRequestsScreen = lazyScreen(() => import('../screens/AdminCategoryRequestsScreen'));
+const ListingsScreen            = lazyScreen(() => import('../screens/ListingsScreen'));
+const ChatScreen                = lazyScreen(() => import('../screens/ChatScreen'));
+const BusinessOwnerChatScreen   = lazyScreen(() => import('../screens/BusinessOwnerChatScreen'));
+const BusinessOwnerProfileScreen = lazyScreen(() => import('../screens/Profile/BusinessOwnerProfileScreen'));
+const PostServiceScreen         = lazyScreen(() => import('../screens/PostServiceScreen'));
+const EditListing               = lazyScreen(() => import('../screens/EditListing'));
+const RequestServiceCategoryScreen = lazyScreen(() => import('../screens/Requestservicecategoryscreen'));
+const TermsOfServiceScreen      = lazyScreen(() => import('../screens/TermsOfServiceScreen'));
+const PrivacyPolicyScreen       = lazyScreen(() => import('../screens/PrivacyPolicyScreen'));
+const ResetPasswordScreen       = lazyScreen(() => import('../screens/ResetPasswordScreen'));
+const VerifyEmailScreen         = lazyScreen(() => import('../screens/VerifyEmailScreen'));
+const CartScreen                = lazyScreen(() => import('../screens/cart/CartScreen'));
+const BoutiqueCheckoutScreen    = lazyScreen(() => import('../screens/cart/BoutiqueCheckoutScreen'));
+const ServiceAddressScreen      = lazyScreen(() => import('../screens/cart/ServiceAddressScreen'));
+const BoutiquePaymentScreen     = lazyScreen(() => import('../screens/cart/BoutiquePaymentScreen'));
+const OrdersScreen              = lazyScreen(() => import('../screens/cart/OrdersScreen'));
+const OrderReportScreen         = lazyScreen(() => import('../screens/cart/OrderReportScreen'));
+const ThriftingRequestsScreen   = lazyScreen(() => import('../screens/ThriftingRequestsScreen'));
 
 
 /**
