@@ -669,6 +669,9 @@ const MiniServiceCard: React.FC<{
   const [modalVisible, setModalVisible] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const firstPhoto = (item.photos ?? []).filter((uri: string) => !!uri)[0] ?? null;
+  const thumbPhoto = firstPhoto?.includes('/storage/v1/object/public/')
+    ? firstPhoto.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + '?width=200&quality=70&resize=cover'
+    : firstPhoto;
 
   return (
     <>
@@ -687,7 +690,7 @@ const MiniServiceCard: React.FC<{
         {firstPhoto ? (
           <View style={miniStyles.photoWrapper}>
             <Image
-              source={{ uri: firstPhoto }}
+              source={{ uri: thumbPhoto }}
               style={miniStyles.photoImage}
               resizeMode="cover"
             />
