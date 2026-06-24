@@ -1276,9 +1276,12 @@ async function convertHeicToJpeg(buffer: Buffer): Promise<Buffer> {
     // Convert Buffer to Uint8Array, then get its ArrayBuffer
     const inputArray = new Uint8Array(buffer);
     
-    // heicConvert expects ArrayBuffer
+    // COMPRESSION STEP 1 (iPhone photos only):
+    // heic-convert converts HEIC → JPEG at 90% quality.
+    // Must run before sharp because sharp cannot natively decode HEIC.
+    // The result is then passed to the sharp pipeline below (Step 2).
     const outputBuffer = await heicConvert({
-      buffer: inputArray.buffer,  // ← FIX: Use .buffer property
+      buffer: inputArray.buffer,
       format: 'JPEG',
       quality: 0.9,
     });
@@ -1379,7 +1382,12 @@ router.post(
       if (req.body.photo && typeof req.body.photo === 'string') {
         console.log('📦 Processing Base64 upload from web');
         
-        fileBuffer = Buffer.from(req.body.photo, 'base64');
+        // Strip data URL prefix if present (e.g. "data:image/jpeg;base64,...")
+        // Without this, the prefix gets decoded as base64 producing a corrupted buffer
+        const base64Data = req.body.photo.includes(',')
+          ? req.body.photo.split(',')[1]
+          : req.body.photo;
+        fileBuffer = Buffer.from(base64Data, 'base64');
         fileName = req.body.filename || `photo_${Date.now()}.jpg`;
         mimeType = req.body.mimetype || 'image/jpeg';
         
@@ -1422,26 +1430,45 @@ if (mimeType === 'image/heic' || mimeType === 'image/heif') {
 }
 
 // ============================================================
-// COMPRESS & RESIZE ALL IMAGES
+// COMPRESSION STEP 2 — sharp resize + quality reduction (ALL photos)
+// Runs for every upload: JPEG, PNG, WebP, and HEIC (after Step 1 converts it).
+// - .rotate()         : reads EXIF orientation and bakes it in (fixes sideways photos on desktop web)
+// - .resize(800,800)  : shrinks to max 800px on longest side, preserves aspect ratio, never upscales
+// - .jpeg({quality70}): re-encodes as JPEG at 70% — strips all EXIF metadata, ~3-10x smaller file
+// Original implementation was 1200px/80%; reduced here to cut Supabase storage costs.
 // ============================================================
 try {
   const originalSize = fileBuffer.length;
-  fileBuffer = await sharp(fileBuffer)
-    .rotate()                  // auto-correct EXIF orientation before resizing
-    .resize(800, 800, {
-      fit: 'inside',           // preserves aspect ratio
-      withoutEnlargement: true // don't upscale small images
-    })
-    .jpeg({ quality: 70 })     // normalize everything to JPEG, strips EXIF metadata
-    .toBuffer();
-  
-  mimeType = 'image/jpeg';
-  fileName = fileName.replace(/\.(png|webp|heic|heif)$/i, '.jpg');
-  
-  console.log(`✅ Image compressed: ${Math.round(originalSize / 1024)}KB → ${Math.round(fileBuffer.length / 1024)}KB`);
-} catch (compressionError) {
-  console.error('⚠️ Compression failed, using original:', compressionError);
-  // Non-blocking - continue with original if sharp fails
+  let compressed: Buffer | null = null;
+
+  // Attempt 1: with .rotate() to fix EXIF orientation
+  try {
+    compressed = await sharp(fileBuffer)
+      .rotate()
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+  } catch {
+    // Attempt 2: without .rotate() — some images cause "bad seek" during EXIF read
+    try {
+      compressed = await sharp(fileBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+      console.warn('⚠️ Compressed without EXIF rotation (rotate() failed)');
+    } catch (fallbackError) {
+      console.error('⚠️ Compression failed entirely, using original:', fallbackError);
+    }
+  }
+
+  if (compressed) {
+    fileBuffer = compressed;
+    mimeType = 'image/jpeg';
+    fileName = fileName.replace(/\.(png|webp|heic|heif)$/i, '.jpg');
+    console.log(`✅ Image compressed: ${Math.round(originalSize / 1024)}KB → ${Math.round(fileBuffer.length / 1024)}KB`);
+  }
+} catch (outerError) {
+  console.error('⚠️ Compression setup failed, using original:', outerError);
 }
 
       // ============================================================
