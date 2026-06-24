@@ -185,10 +185,10 @@ const MiniServiceCard: React.FC<{
   const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
   const [stockChecking, setStockChecking] = useState(false);
   const [selectedPayMethod, setSelectedPayMethod] = useState<string | null>(null);
-  const firstPhoto = item.photos?.[0] ?? null;
   const { icon, color } = getCategoryMeta(item.service_category);
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const photos = item.photos ?? [];
+  const photos = (item.photos ?? []).filter((uri: string) => !!uri);
+  const firstPhoto = photos[0] ?? null;
 
   const openZoom = (index: number) => { setSelectedPhotoIndex(index); setZoomVisible(true); };
   const goNext = () => { if (selectedPhotoIndex < photos.length - 1) setSelectedPhotoIndex(i => i + 1); };
@@ -876,66 +876,56 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
     </View>
   );
 
-  const renderContent = () => {
-    if (!hasResults) {
-      return (
-        <View style={styles.noResultsContainer}>
-          <Ionicons name="search" size={80} color="#ccc" />
-          <Text style={styles.noResultsText}>No services found</Text>
-          <Text style={styles.noResultsSubtext}>
-            No services found within 25 miles of {zipCode}.{"\n"}
-            Try searching in a nearby city or check back later.
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <>
-        <View style={styles.resultsInfoContainer}>
-          <Ionicons name="location" size={20} color="#4CAF50" />
-          <View style={styles.resultsInfoTextContainer}>
-            <Text style={styles.resultsInfoText}>
-              Found {allResults.length} service{allResults.length !== 1 ? "s" : ""} near {zipCode}
-            </Text>
-            {closestDistance !== undefined && farthestDistance !== undefined && (
-              <Text style={styles.resultsDistanceText}>
-                {closestDistance === farthestDistance
-                  ? `${closestDistance} miles away`
-                  : `${closestDistance} - ${farthestDistance} miles away`}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        <Text style={styles.tapHint}>Tap a card to view full details & contact</Text>
-
-        <View style={styles.gridContainer}>
-          {allResults.map((item) => (
-            <View key={item.post_id} style={styles.gridItem}>
-              {/* ADDED (feature/stripe-connect-payments): pass cart props to each card */}
-              <MiniServiceCard
-                item={item}
-                isOwnPost={isOwnPost(item.user_id)}
-                onChatPress={onChatPress}
-                onAddToCart={onAddToCart}
-                isAuthenticated={isAuthenticated}
-                paymentCategories={paymentCategories}
-              />
-            </View>
-          ))}
-        </View>
-      </>
-    );
-  };
-
   return (
     <View style={styles.container}>
       {renderHeader()}
       <FlatList
-        data={[{ key: "content" }]}
-        renderItem={renderContent}
-        keyExtractor={(item) => item.key}
+        data={allResults}
+        numColumns={2}
+        keyExtractor={(item) => String(item.post_id)}
+        columnWrapperStyle={{ marginHorizontal: -5 }}
+        ListHeaderComponent={hasResults ? (
+          <>
+            <View style={styles.resultsInfoContainer}>
+              <Ionicons name="location" size={20} color="#4CAF50" />
+              <View style={styles.resultsInfoTextContainer}>
+                <Text style={styles.resultsInfoText}>
+                  Found {allResults.length} service{allResults.length !== 1 ? "s" : ""} near {zipCode}
+                </Text>
+                {closestDistance !== undefined && farthestDistance !== undefined && (
+                  <Text style={styles.resultsDistanceText}>
+                    {closestDistance === farthestDistance
+                      ? `${closestDistance} miles away`
+                      : `${closestDistance} - ${farthestDistance} miles away`}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Text style={styles.tapHint}>Tap a card to view full details & contact</Text>
+          </>
+        ) : null}
+        ListEmptyComponent={(
+          <View style={styles.noResultsContainer}>
+            <Ionicons name="search" size={80} color="#ccc" />
+            <Text style={styles.noResultsText}>No services found</Text>
+            <Text style={styles.noResultsSubtext}>
+              No services found within 25 miles of {zipCode}.{"\n"}
+              Try searching in a nearby city or check back later.
+            </Text>
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <View style={styles.gridItem}>
+            <MiniServiceCard
+              item={item}
+              isOwnPost={isOwnPost(item.user_id)}
+              onChatPress={onChatPress}
+              onAddToCart={onAddToCart}
+              isAuthenticated={isAuthenticated}
+              paymentCategories={paymentCategories}
+            />
+          </View>
+        )}
         contentContainerStyle={styles.resultsScrollContainer}
       />
     </View>
