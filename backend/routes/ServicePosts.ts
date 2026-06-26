@@ -1414,6 +1414,19 @@ router.post(
       }
 
       // ============================================================
+// DETECT REAL FILE TYPE FROM MAGIC BYTES
+// iOS Safari sometimes reports image/jpeg for HEIC files — detect from
+// the actual buffer content so the HEIC conversion step isn't skipped.
+// HEIC files use an ISO Base Media File Format container: bytes 4-7 = "ftyp"
+// ============================================================
+const ftypSignature = Buffer.from('ftyp');
+const isActuallyHeic = fileBuffer.length > 12 && fileBuffer.indexOf(ftypSignature, 4) === 4;
+if (isActuallyHeic && mimeType === 'image/jpeg') {
+  console.warn('⚠️ Browser reported image/jpeg but magic bytes indicate HEIC — correcting mimeType');
+  mimeType = 'image/heic';
+}
+
+      // ============================================================
 // CONVERT HEIC TO JPEG IF NEEDED
 // ============================================================
 if (mimeType === 'image/heic' || mimeType === 'image/heif') {
@@ -1424,7 +1437,7 @@ if (mimeType === 'image/heic' || mimeType === 'image/heif') {
     console.log('✅ HEIC converted to JPEG');
   } catch (conversionError) {
     console.error('❌ HEIC conversion failed:', conversionError);
-    res.status(500).json({ error: 'Failed to convert HEIC image' });
+    res.status(500).json({ error: 'Please convert your photo to JPEG or PNG before uploading. HEIC format is not supported.' });
     return;
   }
 }
