@@ -233,9 +233,10 @@ let userInfo: {
             {
               text: 'Get Started',
               onPress: async () => {
-                const showPrompt = await AsyncStorage.getItem('post_prompt_pending');
+                await AsyncStorage.removeItem('post_prompt_pending');
+                const showPrompt = await AsyncStorage.getItem(`post_prompt_pending_${email.toLowerCase().trim()}`);
                 if (showPrompt) {
-                  await AsyncStorage.removeItem('post_prompt_pending');
+                  await AsyncStorage.removeItem(`post_prompt_pending_${email.toLowerCase().trim()}`);
                   Alert.alert(
                     'Welcome to GoZipMarket! 🎉',
                     'What would you like to do first?',

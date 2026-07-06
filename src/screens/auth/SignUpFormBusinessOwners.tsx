@@ -163,7 +163,7 @@ const handleCancel = () => {
       console.log("📥 Registration response:", data);
       console.log("✅ Registration successful!");
 
-      await AsyncStorage.setItem('post_prompt_pending', 'true');
+      await AsyncStorage.setItem(`post_prompt_pending_${formData.email.toLowerCase().trim()}`, 'true');
       Alert.alert(
         "Account Created! 📧",
         "Please check your email to verify your account. You must verify your email before you can sign in.",
