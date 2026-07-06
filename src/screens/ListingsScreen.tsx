@@ -41,7 +41,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
 import { useAuth } from "../contexts/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BackButton } from '../components/BackButton';
 import api from '../api'; // ADDED: January 5, 2026
 
 // Navigation type definition for type safety
@@ -552,11 +551,13 @@ const ListingsScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       {/* Header with title, listing count, and Calendar button */}
       <View style={styles.header}>
-        <BackButton 
-          iconColor="#fff"
-          textColor="#fff"
-          backgroundColor="transparent"
-        />
+        <TouchableOpacity
+          style={styles.browseButton}
+          onPress={() => navigation.navigate('TabWrapperScreen', { screen: 'Home' })}
+        >
+          <Ionicons name="home-outline" size={16} color="#fff" />
+          <Text style={styles.browseButtonText}>Browse Services</Text>
+        </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>My Listings</Text>
           <Text style={styles.headerSubtitle}>
@@ -753,6 +754,21 @@ const styles = createResponsiveStyles({
     textAlign: "center",
     marginTop: 20,
     fontStyle: "italic",
+  },
+  browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  browseButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
   },
   calendarIconButton: {
     padding: 8,

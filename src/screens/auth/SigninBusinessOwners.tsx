@@ -233,29 +233,42 @@ let userInfo: {
             {
               text: 'Get Started',
               onPress: async () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'TabWrapperScreen' }],
-                });
                 const showPrompt = await AsyncStorage.getItem('post_prompt_pending');
                 if (showPrompt) {
                   await AsyncStorage.removeItem('post_prompt_pending');
-                  setTimeout(() => {
-                    Alert.alert(
-                      'Welcome to GoZipMarket! 🎉',
-                      'What would you like to do first?',
-                      [
-                        {
-                          text: 'Browse Local Services',
-                          style: 'cancel',
+                  Alert.alert(
+                    'Welcome to GoZipMarket! 🎉',
+                    'What would you like to do first?',
+                    [
+                      {
+                        text: 'Browse Local Services',
+                        style: 'cancel',
+                        onPress: () => {
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'TabWrapperScreen' }],
+                          });
                         },
-                        {
-                          text: 'Post My First Service',
-                          onPress: () => navigation.navigate('PostServiceScreen'),
+                      },
+                      {
+                        text: 'Post My First Service',
+                        onPress: () => {
+                          navigation.reset({
+                            index: 0,
+                            routes: [
+                              { name: 'TabWrapperScreen' },
+                              { name: 'PostServiceScreen' },
+                            ],
+                          });
                         },
-                      ]
-                    );
-                  }, 600);
+                      },
+                    ]
+                  );
+                } else {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'TabWrapperScreen' }],
+                  });
                 }
               }
             }
