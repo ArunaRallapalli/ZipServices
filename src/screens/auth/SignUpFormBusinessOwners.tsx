@@ -58,6 +58,7 @@ const SignUpFormBusinessOwners = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isLoadingZipData, setIsLoadingZipData] = useState(false);
+  const [zipNotFound, setZipNotFound] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const handleChange = (field: string, value: string) =>
@@ -76,6 +77,7 @@ const SignUpFormBusinessOwners = () => {
       console.log("📍 ZIP validation result:", result);
 
       if (result.valid && result.city && result.stateAbbr) {
+        setZipNotFound(false);
         setFormData(prev => ({
           ...prev,
           city: result.city || '',
@@ -83,7 +85,8 @@ const SignUpFormBusinessOwners = () => {
         }));
         console.log("✅ Auto-populated city:", result.city, "state:", result.stateAbbr);
       } else {
-        console.log("❌ ZIP code validation failed:", result.error);
+        console.log("❌ ZIP code not found, showing manual entry");
+        setZipNotFound(true);
         setFormData(prev => ({ ...prev, city: '', state: '' }));
       }
     } catch (error) {
@@ -290,6 +293,7 @@ const handleCancel = () => {
             value={formData.zipCode}
             onChangeText={(text) => {
               handleChange("zipCode", text);
+              setZipNotFound(false);
               if (text.length === 5) {
                 fetchCityStateFromZip(text);
               }
@@ -306,20 +310,39 @@ const handleCancel = () => {
           )}
         </View>
 
-        {/* City - Auto-populated */}
-        {formData.city && (
-          <View style={styles.autoFilledContainer}>
-            <Text style={styles.autoFilledLabel}>City (auto-filled):</Text>
-            <Text style={styles.autoFilledValue}>{formData.city}</Text>
+        {/* City & State — auto-filled when ZIP is known, manual when not */}
+        {zipNotFound ? (
+          <View>
+            <TextInput
+              placeholder="City *"
+              style={styles.input}
+              value={formData.city}
+              onChangeText={(text) => handleChange("city", text)}
+            />
+            <TextInput
+              placeholder="State (e.g. TX) *"
+              style={styles.input}
+              value={formData.state}
+              onChangeText={(text) => handleChange("state", text.toUpperCase())}
+              maxLength={2}
+              autoCapitalize="characters"
+            />
           </View>
-        )}
-
-        {/* State - Auto-populated */}
-        {formData.state && (
-          <View style={styles.autoFilledContainer}>
-            <Text style={styles.autoFilledLabel}>State (auto-filled):</Text>
-            <Text style={styles.autoFilledValue}>{formData.state}</Text>
-          </View>
+        ) : (
+          <>
+            {formData.city && (
+              <View style={styles.autoFilledContainer}>
+                <Text style={styles.autoFilledLabel}>City (auto-filled):</Text>
+                <Text style={styles.autoFilledValue}>{formData.city}</Text>
+              </View>
+            )}
+            {formData.state && (
+              <View style={styles.autoFilledContainer}>
+                <Text style={styles.autoFilledLabel}>State (auto-filled):</Text>
+                <Text style={styles.autoFilledValue}>{formData.state}</Text>
+              </View>
+            )}
+          </>
         )}
 
         {/* Submit */}
@@ -456,6 +479,7 @@ const styles = createResponsiveStyles({
     right: 12,
     top: 12,
   },
+
 
   inputError: {
     borderColor: '#ef4444',
