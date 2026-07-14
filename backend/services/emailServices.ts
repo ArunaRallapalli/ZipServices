@@ -1288,7 +1288,7 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
 // ============================================================================
 // [2026-07-14] ADMIN ALERT — fires when a critical server-side failure occurs
 // (photo upload failed, post silently deleted, client-reported error, etc.)
-// Destination: ADMIN_EMAIL env var, defaults to arunarallapalli12@gmail.com
+// Destination: fetched from users table (is_admin=true), falls back to ADMIN_EMAIL env var
 // ============================================================================
 export async function sendAdminAlert(subject: string, body: string): Promise<void> {
   const { data: adminUsers } = await supabase

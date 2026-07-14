@@ -567,6 +567,20 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
       }
     }
 
+    // [2026-07-14] Fallback: if ZIP lookup failed (e.g. ZIP not in zippopotam.us database),
+    // use city/state from the seller's registration profile. This handles cases like ZIP 75036
+    // (Frisco TX) where the seller manually entered city/state during signup.
+    if (!city || !state) {
+      const { data: bizData } = await supabase
+        .from('business_owners')
+        .select('city, state')
+        .eq('user_id', user_id)
+        .single();
+      if (bizData?.city) city = bizData.city;
+      if (bizData?.state) state = bizData.state;
+      if (city) console.log(`   📍 Location from profile: ${city}, ${state}`);
+    }
+
     const { data: newPost, error } = await supabase
       .from('service_posts')
       .insert([{
@@ -884,6 +898,19 @@ router.put('/api/service-posts/:postId', authenticateToken, async (req: AuthRequ
       } catch (zipError) {
         console.warn('   ⚠️ Could not fetch location data for zip code:', zip_code);
       }
+    }
+
+    // [2026-07-14] Fallback: if ZIP lookup failed, use city/state from seller's profile.
+    // Same logic as post creation — handles ZIPs not in zippopotam.us.
+    if (!city || !state) {
+      const { data: bizData } = await supabase
+        .from('business_owners')
+        .select('city, state')
+        .eq('user_id', req.user?.user_id)
+        .single();
+      if (bizData?.city) city = bizData.city;
+      if (bizData?.state) state = bizData.state;
+      if (city) console.log(`   📍 Location from profile: ${city}, ${state}`);
     }
 
     const { data: updatedPost, error } = await supabase
