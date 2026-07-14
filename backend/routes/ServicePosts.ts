@@ -42,7 +42,7 @@ import {
 import { SUPABASE_ERROR } from '../Constants/supabase';
 import { getZipCoordinates, getZipLocation } from '../services/zipCodeService';
 import { authenticateToken, authorizeUser, AuthRequest } from '../middleware/auth';
-import { sendCategoryRequestNotification, sendNewPostNotification } from '../services/emailServices';
+import { sendCategoryRequestNotification, sendNewPostNotification, sendAdminAlert } from '../services/emailServices';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import heicConvert from 'heic-convert';
@@ -1390,8 +1390,9 @@ router.post(
         fileBuffer = Buffer.from(base64Data, 'base64');
         fileName = req.body.filename || `photo_${Date.now()}.jpg`;
         mimeType = req.body.mimetype || 'image/jpeg';
-        
-        console.log('✅ Base64 decoded:', Math.round(fileBuffer.length / 1024), 'KB');
+
+        // [2026-07-14] Added filename to log so Render logs show which photo index/retry reached the server
+        console.log('✅ Base64 decoded:', Math.round(fileBuffer.length / 1024), 'KB', '| file:', fileName);
       }
       // ============================================================
       // HANDLE FORMDATA UPLOAD (MOBILE)
@@ -1500,6 +1501,11 @@ try {
 
       if (uploadError) {
         console.error('❌ Supabase upload error:', uploadError);
+        // [2026-07-14] Alert admin when server-side photo upload fails
+        sendAdminAlert(
+          `Photo upload failed — post ${req.params.postId}`,
+          `File: ${fileName}\nUser: ${userId}\nPost: ${req.params.postId}\nError: ${uploadError.message}\nTime: ${new Date().toISOString()}`
+        ).catch(() => {});
         res.status(500).json({ error: 'Failed to upload photo to storage' });
         return;
       }

@@ -270,15 +270,8 @@ const EditListing: React.FC = () => {
         const uri = photo.uri;
         let mimeType = 'image/jpeg';
         let fileExtension = 'jpg';
-        let blob: Blob | null = null;
 
-        if (Platform.OS === 'web') {
-          const response = await fetch(uri);
-          const rawBlob = await response.blob();
-          blob = await compressImage(rawBlob); // compress before upload
-          mimeType = 'image/jpeg';
-          fileExtension = 'jpg';
-        } else {
+        if (Platform.OS !== 'web') {
           fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
           if (fileExtension === 'png') mimeType = 'image/png';
           else if (fileExtension === 'webp') mimeType = 'image/webp';
@@ -287,15 +280,50 @@ const EditListing: React.FC = () => {
 
         console.log(`📤 Uploading photo ${uploadedCount + 1}/${selectedPhotos.length}`);
 
+        // [2026-07-14] Fix: same Samsung Internet canvas.toBlob() issue as PostServiceScreen.
+        // Extract raw base64 first (all browsers), then try canvas compression as optimization.
+        // If canvas fails, raw base64 is used and server Sharp handles final compression.
         if (Platform.OS === 'web') {
-          if (!blob) throw new Error('Blob not available for web upload');
+          // Step 1: get raw base64 without canvas — works on all browsers including Samsung Internet
+          let rawBase64: string;
+          if (uri.startsWith('data:')) {
+            const mimeMatch = uri.match(/^data:([^;]+);base64,/);
+            mimeType = mimeMatch?.[1] ?? 'image/jpeg';
+            rawBase64 = uri.split(',')[1];
+          } else {
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            mimeType = blob.type || 'image/jpeg';
+            rawBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
 
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
+          // Step 2: try canvas compression — falls back to rawBase64 if canvas fails
+          let base64 = rawBase64;
+          try {
+            const rawBlob = await fetch(uri).then(r => r.blob());
+            const compressed = await compressImage(rawBlob);
+            base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(compressed);
+            });
+            mimeType = 'image/jpeg';
+            console.log('✅ Canvas compression succeeded');
+          } catch {
+            console.warn('⚠️ Canvas compression failed, uploading original (server will compress)');
+          }
+
+          const extensionMap: { [key: string]: string } = {
+            'image/jpeg': 'jpg', 'image/png': 'png',
+            'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heic',
+          };
+          fileExtension = extensionMap[mimeType] || 'jpg';
 
           const uploadResponse = await fetch(`${API_URL}/api/service-posts/${postId}/upload-photo`, {
             method: 'POST',

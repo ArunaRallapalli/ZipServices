@@ -31,6 +31,7 @@ import emailVerificationRoutes from './routes/EmailVerification';
 import ordersRouter from './routes/orders';
 import thriftRequestsRouter from './routes/thriftRequests';
 import { sendSmartNotification } from './routes/messages';
+import { sendAdminAlert } from './services/emailServices';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -82,8 +83,6 @@ app.use(performanceMonitor(1000)); // Warn if requests take > 1 second
 // Health check
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
-    console.log('Health check starting...');
-    
     const result = await pool.query('SELECT 1 as health');
     
     res.json({ 
@@ -101,6 +100,23 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     });
   }
 })
+// [2026-07-14] Client-side error reporting — frontend POSTs here when critical operations fail
+// (e.g. photo upload produces zero saved photos). Sends admin alert email via Resend.
+app.post('/api/client-error', express.json(), async (req: Request, res: Response) => {
+  const { screen, error, userId, details } = req.body || {};
+  const subject = `Client error — ${screen || 'unknown screen'}`;
+  const body = [
+    `Screen:  ${screen || 'unknown'}`,
+    `User ID: ${userId || 'anonymous'}`,
+    `Error:   ${error || 'no message'}`,
+    details ? `Details: ${details}` : '',
+    `Time:    ${new Date().toISOString()}`,
+  ].filter(Boolean).join('\n');
+  console.warn(`⚠️ Client error reported — ${screen}: ${error}`);
+  sendAdminAlert(subject, body).catch(() => {});
+  res.json({ ok: true });
+});
+
 // ✅ NEW ROUTES WITH /api PREFIX
 app.use("/api/service-categories", serviceCategoriesRouter);
 app.use("/api/users", usersRouter);
@@ -498,3 +514,4 @@ server.on('error', (error: any) => {
   });
   process.exit(1);
 });
+

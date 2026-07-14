@@ -1285,6 +1285,26 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
 }
 
 // ============================================================================
+// [2026-07-14] ADMIN ALERT — fires when a critical server-side failure occurs
+// (photo upload failed, post silently deleted, client-reported error, etc.)
+// Destination: ADMIN_EMAIL env var, defaults to arunarallapalli12@gmail.com
+// ============================================================================
+export async function sendAdminAlert(subject: string, body: string): Promise<void> {
+  const to = process.env.ADMIN_EMAIL || 'arunarallapalli12@gmail.com';
+  try {
+    await resend.emails.send({
+      from: 'GoZipMarket <noreply@gozipmarket.com>',
+      to,
+      subject: `⚠️ GoZipMarket Alert: ${subject}`,
+      html: `<pre style="font-family:monospace;font-size:13px;white-space:pre-wrap">${body}</pre>`,
+    });
+    console.log(`📧 Admin alert sent: ${subject}`);
+  } catch (err) {
+    console.error('❌ Failed to send admin alert:', err);
+  }
+}
+
+// ============================================================================
 // NEW SERVICE POST NOTIFICATION
 // ============================================================================
 

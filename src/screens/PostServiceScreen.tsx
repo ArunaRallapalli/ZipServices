@@ -193,7 +193,8 @@ const PostServiceScreen: React.FC = () => {
     let uploadedCount = 0;
     let failedCount = 0;
 
-    for (const photo of selectedPhotos) {
+    // [2026-07-14] Changed to entries() to track photoIndex for diagnostic filename logging
+    for (const [photoIndex, photo] of selectedPhotos.entries()) {
       try {
         const token = await AsyncStorage.getItem('access_token');
         if (!token) throw new Error('No authentication token');
@@ -201,22 +202,8 @@ const PostServiceScreen: React.FC = () => {
         const uri = photo.asset.uri;
         let mimeType = 'image/jpeg';
         let fileExtension = 'jpg';
-        let blob: Blob | null = null;
 
-        if (Platform.OS === 'web') {
-          const response = await fetch(uri);
-          const rawBlob = await response.blob();
-          blob = await compressImage(rawBlob); // compress before upload
-          mimeType = 'image/jpeg';
-          const extensionMap: { [key: string]: string } = {
-            'image/jpeg': 'jpg',
-            'image/png': 'png',
-            'image/webp': 'webp',
-            'image/heic': 'heic',
-            'image/heif': 'heic',
-          };
-          fileExtension = extensionMap[mimeType] || 'jpg';
-        } else {
+        if (Platform.OS !== 'web') {
           fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
           if (fileExtension === 'png') mimeType = 'image/png';
           else if (fileExtension === 'webp') mimeType = 'image/webp';
@@ -228,18 +215,62 @@ const PostServiceScreen: React.FC = () => {
         let uploadSuccess = false;
 
         // ── WEB: Base64 upload ──
+        // [2026-07-14] Fix: Samsung Internet (default browser on Samsung Android phones) causes
+        // canvas.toBlob() to return null for large photos, making all retries fail and the post
+        // to be silently deleted. Root cause confirmed from Render logs (zero upload requests
+        // reached server; posts deleted 5-6s after creation).
+        // Fix: extract raw base64 first (guaranteed to work on all browsers), then attempt canvas
+        // compression as an optimization (smaller upload payload). If canvas fails, raw base64 is
+        // the fallback. Server-side Sharp compression handles final quality in both cases.
         if (Platform.OS === 'web') {
           console.log('🌐 Web: Using Base64 upload method');
-          if (!blob) throw new Error('Blob not available for web upload');
 
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob!);
-          });
+          // Step 1: get raw base64 without canvas — works on all browsers including Samsung Internet
+          let rawBase64: string;
+          if (uri.startsWith('data:')) {
+            // Expo ImagePicker on web returns a data URL — extract base64 directly, no fetch needed
+            const mimeMatch = uri.match(/^data:([^;]+);base64,/);
+            mimeType = mimeMatch?.[1] ?? 'image/jpeg';
+            rawBase64 = uri.split(',')[1];
+          } else {
+            // Blob URL — fetch and convert
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            mimeType = blob.type || 'image/jpeg';
+            rawBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
 
-          console.log('📦 Converted to Base64, size:', Math.round(base64.length / 1024), 'KB');
+          // Step 2: try canvas compression for smaller upload payload (desktop Chrome, iOS Safari)
+          // Falls back to rawBase64 if canvas.toBlob() returns null (Samsung Internet)
+          let base64 = rawBase64;
+          try {
+            const rawBlob = await fetch(uri).then(r => r.blob());
+            const compressed = await compressImage(rawBlob);
+            base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(compressed);
+            });
+            mimeType = 'image/jpeg';
+            console.log('✅ Canvas compression succeeded');
+          } catch {
+            // Canvas failed (Samsung Internet or low-memory device) — rawBase64 fallback used
+            console.warn('⚠️ Canvas compression failed, uploading original (server will compress)');
+          }
+
+          const extensionMap: { [key: string]: string } = {
+            'image/jpeg': 'jpg', 'image/png': 'png',
+            'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heic',
+          };
+          fileExtension = extensionMap[mimeType] || 'jpg';
+
+          console.log('📦 Base64 ready, size:', Math.round(base64.length / 1024), 'KB');
 
           const uploadResponse = await fetch(
             `${API_URL}/api/service-posts/${postId}/upload-photo`,
@@ -251,7 +282,7 @@ const PostServiceScreen: React.FC = () => {
               },
               body: JSON.stringify({
                 photo: base64,
-                filename: `photo_${Date.now()}.${fileExtension}`,
+                filename: `photo_${photoIndex}_${Date.now()}.${fileExtension}`, // [2026-07-14] photoIndex in filename helps identify which photo failed in Render logs
                 mimetype: mimeType,
                 description: photo.description.trim(),
                 price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
@@ -336,7 +367,7 @@ const PostServiceScreen: React.FC = () => {
               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 photo: base64,
-                filename: `photo_${Date.now()}.jpg`,
+                filename: `photo_${photoIndex}_retry${attempt}_${Date.now()}.jpg`, // [2026-07-14] retry attempt number in filename for Render log diagnosis
                 mimetype: 'image/jpeg',
                 description: photo.description.trim(),
                 price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
@@ -649,11 +680,28 @@ const PostServiceScreen: React.FC = () => {
         const expectedCount = selectedPhotos.length;
         uploadedCount = actualSaved;
 
+        // [2026-07-14] Removed post deletion on zero photos — silently deleting caused sellers to
+        // lose their work when canvas compression failed on Samsung Internet. Post is kept so the
+        // seller can retry uploading photos via Edit Listing (which has the same canvas fix applied).
         if (actualSaved === 0) {
-          await api.delete(`/api/service-posts/${data.post.id}`).catch(() => {});
+          // [2026-07-14] Notify admin so we know when sellers hit upload failures in prod
+          fetch(`${API_URL}/api/client-error`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              screen: 'PostServiceScreen',
+              error: 'Zero photos saved after upload',
+              userId: userId,
+              details: `Post ID: ${data.post.id}, Photos attempted: ${selectedPhotos.length}`,
+            }),
+          }).catch(() => {});
           Alert.alert(
-            'Upload Failed',
-            'Your photos could not be uploaded. Please check your connection and try again. Your post was not saved.',
+            'Photos Not Uploaded',
+            'Your listing was saved but photos could not be uploaded. Please try again via My Listings → Edit.',
+            [
+              { text: 'View My Listings', onPress: () => navigation.navigate('ListingsScreen' as never) },
+              { text: 'OK' },
+            ],
           );
           return;
         }
