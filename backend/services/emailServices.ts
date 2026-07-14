@@ -7,6 +7,7 @@
 
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
+import { supabase } from '../config/Supabase';
 
 dotenv.config();
 
@@ -1290,7 +1291,10 @@ subject: `New Category Request: ${categoryName} - Admin Review Needed`,
 // Destination: ADMIN_EMAIL env var, defaults to arunarallapalli12@gmail.com
 // ============================================================================
 export async function sendAdminAlert(subject: string, body: string): Promise<void> {
-  const to = process.env.ADMIN_EMAIL || 'arunarallapalli12@gmail.com';
+  const { data: adminUsers } = await supabase
+    .from('users').select('email').eq('is_admin', true).limit(1);
+  const to = adminUsers?.[0]?.email || process.env.ADMIN_EMAIL;
+  if (!to) { console.error('❌ No admin email found for alert:', subject); return; }
   try {
     await resend.emails.send({
       from: 'GoZipMarket <noreply@gozipmarket.com>',
