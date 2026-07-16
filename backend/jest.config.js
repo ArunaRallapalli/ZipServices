@@ -4,6 +4,8 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],
   testTimeout: 30000,
+  verbose: true,
+  silent: true,
   setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.ts'],
   transform: {
     '^.+\\.ts$': ['ts-jest', {

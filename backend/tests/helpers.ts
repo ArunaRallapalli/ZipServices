@@ -6,7 +6,8 @@ export const TEST_PASSWORD = 'Test@1234!';
 
 let _emailSeq = 0;
 export function makeTestEmail(): string {
-  return `autotest.${Date.now()}.${++_emailSeq}@test.gozipmarket.com`;
+  // process.pid makes emails unique across Jest workers even when they start within the same millisecond
+  return `autotest.${Date.now()}.${process.pid}.${++_emailSeq}@test.gozipmarket.com`;
 }
 
 export async function registerUser(email: string, password: string = TEST_PASSWORD) {
