@@ -302,6 +302,21 @@ for (let i = 1; i < rows.length; i++) {
   updated++;
 }
 
+// Write CSV
 fs.writeFileSync(CSV_PATH, stringifyCSV(rows), 'utf8');
-console.log(`✅ Updated ${updated} rows → ${CSV_PATH}`);
-console.log('   New columns: Automation Coverage, Automated Steps, Manual Steps Required, Test Status, Failure Reason, Last Run Date');
+
+// Also write master xlsx (reference doc — not modified by test runs)
+const XLSX = require('xlsx');
+const xlsxPath = CSV_PATH.replace('.csv', '.xlsx');
+const ws = XLSX.utils.aoa_to_sheet(rows);
+ws['!cols'] = rows[0].map((_, ci) => ({
+  wch: Math.min(60, Math.max(10, ...rows.map(r => String(r[ci] || '').length)))
+}));
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, 'Regression Scenarios');
+XLSX.writeFile(wb, xlsxPath);
+
+console.log(`✅ Updated ${updated} rows`);
+console.log(`   CSV  → ${CSV_PATH}`);
+console.log(`   XLSX → ${xlsxPath}`);
+console.log('   New columns: Automation Coverage, Automated Steps, Manual Steps Required, Test Status, Failure Reason, Last Run');
