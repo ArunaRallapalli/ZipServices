@@ -4,8 +4,9 @@ import { supabase } from '../config/Supabase';
 
 export const TEST_PASSWORD = 'Test@1234!';
 
+let _emailSeq = 0;
 export function makeTestEmail(): string {
-  return `autotest.${Date.now()}@test.gozipmarket.com`;
+  return `autotest.${Date.now()}.${++_emailSeq}@test.gozipmarket.com`;
 }
 
 export async function registerUser(email: string, password: string = TEST_PASSWORD) {
