@@ -218,6 +218,9 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+export default app;
+
+if (process.env.NODE_ENV !== 'test') {
 // Start server
 console.log("🔄 Attempting to start server on port 5000...");
 
@@ -514,4 +517,6 @@ server.on('error', (error: any) => {
   });
   process.exit(1);
 });
+
+} // end: if (process.env.NODE_ENV !== 'test')
 
