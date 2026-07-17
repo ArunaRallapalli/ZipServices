@@ -31,7 +31,7 @@ const SearchHeader: React.FC<SearchHeaderProps> = ({
 
       {/* Compact subtitle */}
       <Text style={styles.subtitle}>
-       <Text style={styles.subtitleLink}>Welcome to Gozipmarket.com</Text>
+       <Text style={styles.subtitleLink}>Welcome to gozipmarket.com</Text>
         {' '}— your local services marketplace.
       </Text>
 
