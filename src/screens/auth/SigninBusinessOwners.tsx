@@ -257,8 +257,7 @@ let userInfo: {
                           navigation.reset({
                             index: 0,
                             routes: [
-                              { name: 'TabWrapperScreen' },
-                              { name: 'PostServiceScreen' },
+                              { name: 'TabWrapperScreen', params: { screen: 'Post' } },
                             ],
                           });
                         },

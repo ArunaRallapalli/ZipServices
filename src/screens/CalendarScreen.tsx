@@ -319,11 +319,12 @@ const CalendarScreen: React.FC = () => {
       // ================================================================
       // AVAILABLE OR BLOCKED DATE - Allow blocking/unblocking
       // ================================================================
-      const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { 
+      const [year, month, dayNum] = dateStr.split('-').map(Number);
+      const formattedDate = new Date(year, month - 1, dayNum).toLocaleDateString('en-US', {
         weekday: 'long',
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
       });
 
       const isCurrentlyBlocked = markedDates[dateStr]?.dotColor === '#FF6B6B';
@@ -393,7 +394,8 @@ const CalendarScreen: React.FC = () => {
   // ========================================================================
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const [year, month, dayNum] = dateString.split('T')[0].split('-').map(Number);
+    return new Date(year, month - 1, dayNum).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',

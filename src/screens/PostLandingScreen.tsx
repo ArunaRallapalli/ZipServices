@@ -78,7 +78,7 @@ const PostLandingScreen: React.FC = () => {
         >
           <View style={[styles.descriptionBox, styles.secondaryBox]}>
             <Ionicons name="add-circle" size={40} color="#4CAF50" />
-            <Text style={styles.descriptionTitle}>Request a Service</Text>
+            <Text style={styles.descriptionTitle}>Request new Category</Text>
             <Text style={styles.descriptionText}>
               Don't see your category? Request a new one
             </Text>
