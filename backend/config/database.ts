@@ -30,7 +30,9 @@ pool.on('connect', () => {
   console.log('✅ Database connected');
 });
 
+// Supabase's pooler periodically closes idle connections (e.g. ECONNABORTED) —
+// this is routine, not fatal. pg already drops the broken client from the pool;
+// exiting the process here was killing the whole server over a normal event.
 pool.on('error', (err) => {
-  console.error('❌ Unexpected database error:', err);
-  process.exit(1);
+  console.error('⚠️ Database pool error (client removed):', err.message);
 });
