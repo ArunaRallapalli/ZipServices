@@ -28,6 +28,7 @@ import {
   Image,
 } from 'react-native';
 import { Alert } from "../Utils/Alert";
+import { isProductCategory } from "../Utils/productCategories";
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Picker } from '@react-native-picker/picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -508,13 +509,12 @@ const PostServiceScreen: React.FC = () => {
     if (!contactEmail.trim()) { Alert.alert('Validation Error', 'Please enter a contact email'); return false; }
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
-    const isJewelryCategory = serviceCategory?.toLowerCase().trim() === 'jewelry';
+    const isProductSaleCategory = isProductCategory(serviceCategory);
     if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
-    if (isBoutiqueCategory || isJewelryCategory) {
+    if (isProductSaleCategory) {
       if (postPaymentMethods.length === 0) {
         Alert.alert('Validation Error', 'Please select at least one payment method.');
         return false;
@@ -556,17 +556,16 @@ const PostServiceScreen: React.FC = () => {
         }
       }
     }
-    if ((isThrifting || isBoutiqueCategory || isJewelryCategory) && selectedPhotos.length === 0) {
+    if ((isThrifting || isProductSaleCategory) && selectedPhotos.length === 0) {
       Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       return false;
     }
     return true;
   };
 
-  const BOUTIQUE_CATEGORY = 'boutique';
-  const isBoutique = serviceCategory?.toLowerCase().trim() === BOUTIQUE_CATEGORY;
-  const isJewelry = serviceCategory?.toLowerCase().trim() === 'jewelry';
-  const isBoutiqueOrJewelry = isBoutique || isJewelry;
+  // 2026-07-31: replaced inline 'boutique'/'jewelry' checks with shared isProductCategory()
+  // so Indian Groceries (and any future product category) gets the same posting flow.
+  const isBoutiqueOrJewelry = isProductCategory(serviceCategory);
 
   const PAYMENT_OPTIONS = [
     { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
@@ -898,7 +897,7 @@ const PostServiceScreen: React.FC = () => {
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' || serviceCategory?.toLowerCase().trim() === 'jewelry')
+                Photos {(isBoutiqueOrJewelry || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
                   ? <Text style={{ color: '#E53935' }}> *</Text>
                   : <Text style={styles.optionalLabel}> (Optional)</Text>}
               </Text>
@@ -908,7 +907,7 @@ const PostServiceScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.addPhotoButton,
-                (isBoutique || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' || serviceCategory?.toLowerCase().trim() === 'jewelry') && selectedPhotos.length === 0
+                (isBoutiqueOrJewelry || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && selectedPhotos.length === 0
                   ? { borderColor: '#E53935' } : {},
               ]}
               onPress={pickPhotos}

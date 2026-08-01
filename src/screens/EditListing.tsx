@@ -46,6 +46,9 @@ import {
 } from "react-native";
 import { createResponsiveStyles } from '../Utils/globalStyles';
 import { Alert } from "../Utils/Alert";
+// 2026-07-31: shared with PostServiceScreen.tsx so 'boutique'/'jewelry'/'indian groceries'
+// (product-selling categories) stay in sync in one place instead of separate inline checks.
+import { isProductCategory } from "../Utils/productCategories";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -559,11 +562,10 @@ const EditListing: React.FC = () => {
     // Price is required and must be > 0 for payment-accepting non-thrifting categories
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    const isBoutiqueCategory = serviceCategory?.toLowerCase().trim() === 'boutique';
-    const isJewelryCategory = serviceCategory?.toLowerCase().trim() === 'jewelry';
+    const isProductSaleCategory = isProductCategory(serviceCategory);
 
-    // Photo is mandatory for boutique, thrifting, and jewelry
-    if ((isBoutiqueCategory || isThrifting || isJewelryCategory) && existingPhotos.length === 0 && selectedPhotos.length === 0) {
+    // Photo is mandatory for boutique, thrifting, jewelry, indian groceries, etc.
+    if ((isProductSaleCategory || isThrifting) && existingPhotos.length === 0 && selectedPhotos.length === 0) {
       Alert.alert('Photo Required', 'Please add at least one photo for this listing.');
       setErrors(newErrors);
       return false;
@@ -576,8 +578,8 @@ const EditListing: React.FC = () => {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return false;
 
-    // Payment method format validation for boutique and jewelry
-    if (isBoutiqueCategory || isJewelryCategory) {
+    // Payment method format validation for product-sale categories (boutique, jewelry, indian groceries, ...)
+    if (isProductSaleCategory) {
       if (postPaymentMethods.length === 0) {
         Alert.alert('Validation Error', 'Please select at least one payment method.');
         return false;
@@ -636,10 +638,9 @@ const EditListing: React.FC = () => {
 
     // Warn if photo count and quantity don't match (informational only)
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    const isBoutiqueEdit = serviceCategory?.toLowerCase().trim() === 'boutique';
+    const isProductSaleEdit = isProductCategory(serviceCategory);
     const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    const isJewelryEdit = serviceCategory?.toLowerCase().trim() === 'jewelry';
-    if ((isBoutiqueEdit || isThriftingEdit || isJewelryEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
+    if ((isProductSaleEdit || isThriftingEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
@@ -658,8 +659,8 @@ const EditListing: React.FC = () => {
       console.log("Saving post with ID:", postId);
 
       const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
-      const isBoutique = serviceCategory.toLowerCase().trim() === 'boutique';
-      const isBoutiqueOrJewelry = isBoutique || serviceCategory.toLowerCase().trim() === 'jewelry';
+      // 2026-07-31: now backed by the shared PRODUCT_SALE_CATEGORIES list (see productCategories.ts)
+      const isBoutiqueOrJewelry = isProductCategory(serviceCategory);
 
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
@@ -1062,7 +1063,7 @@ const EditListing: React.FC = () => {
           )}
 
           {/* Boutique/Jewelry: Shipping Charge */}
-          {(serviceCategory.toLowerCase().trim() === 'boutique' || serviceCategory.toLowerCase().trim() === 'jewelry') && (
+          {isProductCategory(serviceCategory) && (
             <View style={styles.section}>
               <Text style={styles.label}>Shipping Charge ($)</Text>
               <View style={styles.priceInputRow}>
@@ -1087,7 +1088,7 @@ const EditListing: React.FC = () => {
           )}
 
           {/* Boutique/Jewelry: Payment Methods (multi-select checkboxes) */}
-          {(serviceCategory.toLowerCase().trim() === 'boutique' || serviceCategory.toLowerCase().trim() === 'jewelry') && (() => {
+          {isProductCategory(serviceCategory) && (() => {
             const PAYMENT_OPTIONS = [
               { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
               { value: 'venmo',   label: 'Venmo',    handleLabel: 'Venmo username' },
@@ -1155,7 +1156,7 @@ const EditListing: React.FC = () => {
             {/* Header row: label + total count */}
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(['boutique', 'preloved & thrifting', 'jewelry'].includes(serviceCategory?.toLowerCase().trim()))
+                Photos {(isProductCategory(serviceCategory) || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
                   ? <Text style={styles.required}> *</Text>
                   : <Text style={{ color: '#888', fontSize: 13 }}> (Optional)</Text>}
               </Text>
