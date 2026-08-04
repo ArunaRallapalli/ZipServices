@@ -44,6 +44,9 @@ interface PhotoWithDesc {
   asset: ImagePicker.ImagePickerAsset;
   description: string;
   price: string;   // price in dollars, optional — empty string means no price
+  // [2026-08-03] [feature/per-photo-inventory] each photo is its own product with its
+  // own stock, independent of every other photo on the post.
+  quantity: string;
 }
 
 // ============================================================================
@@ -132,8 +135,8 @@ const PostServiceScreen: React.FC = () => {
             `Only ${trimmed.length} photo(s) added. Maximum is ${maxPhotos} per post.`,
           );
         }
-        // Wrap each asset with an empty description
-        const withDesc: PhotoWithDesc[] = trimmed.map(asset => ({ asset, description: '', price: '' }));
+        // Wrap each asset with an empty description/price/quantity
+        const withDesc: PhotoWithDesc[] = trimmed.map(asset => ({ asset, description: '', price: '', quantity: '1' }));
         setSelectedPhotos([...selectedPhotos, ...withDesc]);
         console.log(`📸 Selected ${trimmed.length} photos`);
       }
@@ -185,7 +188,7 @@ const PostServiceScreen: React.FC = () => {
     });
   };
 
-  const uploadPhotos = async (postId: string, postPrice?: string): Promise<{ uploaded: number; failed: number }> => {
+  const uploadPhotos = async (postId: string): Promise<{ uploaded: number; failed: number }> => {
     if (selectedPhotos.length === 0) return { uploaded: 0, failed: 0 };
 
     setUploadingPhotos(true);
@@ -285,8 +288,13 @@ const PostServiceScreen: React.FC = () => {
                 photo: base64,
                 filename: `photo_${photoIndex}_${Date.now()}.${fileExtension}`, // [2026-07-14] photoIndex in filename helps identify which photo failed in Render logs
                 mimetype: mimeType,
+                // [2026-08-03] [feature/per-photo-inventory] Was stamping every photo
+                // with the same overall listing price (postPrice), ignoring what the
+                // seller entered per-photo above — now sends each photo's own values.
+                name: photo.description.trim(),
                 description: photo.description.trim(),
-                price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
+                price: parseFloat(photo.price) || 0,
+                quantity: parseInt(photo.quantity, 10) || 1,
               }),
             },
           );
@@ -311,8 +319,12 @@ const PostServiceScreen: React.FC = () => {
             type: mimeType,
             name: `photo.${fileExtension}`,
           } as any);
+          // [2026-08-03] [feature/per-photo-inventory] each photo's own price/quantity,
+          // not the shared postPrice.
+          formData.append('name', photo.description.trim());
           formData.append('description', photo.description.trim());
-          formData.append('price', String(parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0));
+          formData.append('price', String(parseFloat(photo.price) || 0));
+          formData.append('quantity', String(parseInt(photo.quantity, 10) || 1));
 
           uploadSuccess = await new Promise<boolean>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -370,8 +382,10 @@ const PostServiceScreen: React.FC = () => {
                 photo: base64,
                 filename: `photo_${photoIndex}_retry${attempt}_${Date.now()}.jpg`, // [2026-07-14] retry attempt number in filename for Render log diagnosis
                 mimetype: 'image/jpeg',
+                name: photo.description.trim(),
                 description: photo.description.trim(),
-                price: parseFloat(String(postPrice || '').match(/[\d.]+/)?.[0] ?? '') || 0,
+                price: parseFloat(photo.price) || 0,
+                quantity: parseInt(photo.quantity, 10) || 1,
               }),
             });
             if (retryResponse.ok) { retrySuccess = true; uploadedCount++; break; }
@@ -606,9 +620,13 @@ const PostServiceScreen: React.FC = () => {
 
     if (!validateForm()) return;
 
-    // Warn if photo count and quantity don't match (informational only)
+    // [2026-08-03] [feature/per-photo-inventory] Boutique/Jewelry/Indian Groceries now
+    // track quantity per photo (see PhotoWithDesc.quantity), so the old "overall qty
+    // must equal photo count" warning no longer applies to them — each photo carries
+    // its own quantity, entered below, independent of photo count. Thrifting still uses
+    // the single-quantity model (each photo is a 1-of-1 item), so it keeps the warning.
     const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if ((isBoutiqueOrJewelry || isThriftingCategory) && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
+    if (isThriftingCategory && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
@@ -648,7 +666,12 @@ const PostServiceScreen: React.FC = () => {
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
-        in_stock: parseInt(inStock) || 1,
+        // [2026-08-03] [feature/per-photo-inventory] For Boutique/Jewelry/Indian
+        // Groceries, in_stock is now a display/back-compat aggregate — the sum of each
+        // photo's own quantity — rather than a separately seller-entered number.
+        in_stock: isBoutiqueOrJewelry
+          ? selectedPhotos.reduce((sum, p) => sum + (parseInt(p.quantity, 10) || 1), 0) || 1
+          : parseInt(inStock) || 1,
         shipping_charge_cents: isBoutiqueOrJewelry ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
         post_payment_method: isBoutiqueOrJewelry && postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
         post_payment_info: isBoutiqueOrJewelry && Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
@@ -671,7 +694,7 @@ const PostServiceScreen: React.FC = () => {
       let uploadedCount = 0;
       if (selectedPhotos.length > 0) {
         console.log('📸 Uploading photos...');
-        await uploadPhotos(data.post.id, priceRange);
+        await uploadPhotos(data.post.id);
 
         // Verify actual saved count by re-fetching the post from server
         const verifyData = await api.get(`/api/service-posts/${data.post.id}`).catch(() => null);
@@ -945,6 +968,59 @@ const PostServiceScreen: React.FC = () => {
                       <Text style={styles.photoIndexLabel}>Photo {index + 1}</Text>
                     </View>
 
+                    {/* [2026-08-03] [feature/per-photo-inventory] Per-photo Name/Price/
+                        Quantity — each photo is its own product, independently priced
+                        and stocked. These inputs existed as unused styles before this
+                        change; the price field was being silently overwritten with the
+                        overall listing price at upload time. */}
+                    {isBoutiqueOrJewelry && (
+                      <View style={styles.photoProductFields}>
+                        <TextInput
+                          style={styles.photoDescInput}
+                          value={photo.description}
+                          onChangeText={(t) => {
+                            const updated = [...selectedPhotos];
+                            updated[index] = { ...updated[index], description: t };
+                            setSelectedPhotos(updated);
+                          }}
+                          placeholder="Product name"
+                          maxLength={60}
+                        />
+                        <View style={styles.photoProductRow}>
+                          <View style={styles.photoProductCol}>
+                            <Text style={styles.photoFieldLabel}>Price ($)</Text>
+                            <TextInput
+                              style={styles.photoPriceInput}
+                              value={photo.price}
+                              onChangeText={(t) => {
+                                const clean = t.replace(/[^0-9.]/g, '');
+                                const updated = [...selectedPhotos];
+                                updated[index] = { ...updated[index], price: clean };
+                                setSelectedPhotos(updated);
+                              }}
+                              placeholder="0.00"
+                              keyboardType="decimal-pad"
+                            />
+                          </View>
+                          <View style={styles.photoProductCol}>
+                            <Text style={styles.photoFieldLabel}>Quantity</Text>
+                            <TextInput
+                              style={styles.photoPriceInput}
+                              value={photo.quantity}
+                              onChangeText={(t) => {
+                                const clean = t.replace(/[^0-9]/g, '');
+                                const updated = [...selectedPhotos];
+                                updated[index] = { ...updated[index], quantity: clean };
+                                setSelectedPhotos(updated);
+                              }}
+                              placeholder="1"
+                              keyboardType="numeric"
+                              maxLength={5}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    )}
                   </View>
                 ))}
               </View>
@@ -1089,8 +1165,10 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* In Stock — payment-enabled categories + Thrifting */}
-          {(serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ||
+          {/* In Stock — payment-enabled categories + Thrifting.
+              [2026-08-03] [feature/per-photo-inventory] Hidden for Boutique/Jewelry/
+              Indian Groceries — quantity is now entered per photo below instead. */}
+          {!isBoutiqueOrJewelry && (serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ||
             serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Quantity Available</Text>
@@ -1430,6 +1508,23 @@ const styles = createResponsiveStyles({
     color: '#333',
     backgroundColor: '#F0F7FF',
     marginTop: 6,
+  },
+  // [2026-08-03] [feature/per-photo-inventory] wrapper for per-photo Name/Price/Qty
+  photoProductFields: {
+    marginTop: 8,
+  },
+  photoProductRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  photoProductCol: {
+    flex: 1,
+  },
+  photoFieldLabel: {
+    fontSize: 11,
+    color: '#888',
+    fontWeight: '600',
   },
 
   photoHint: {

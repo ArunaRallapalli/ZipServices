@@ -133,6 +133,13 @@ const EditListing: React.FC = () => {
   const [selectedPhotos, setSelectedPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
+  // [2026-08-03] [feature/per-photo-inventory] Per-photo Name/Price/Quantity — parallel
+  // to existingPhotos/selectedPhotos by index. existingPhotoMeta is loaded from the post
+  // and saved via the new PATCH photo endpoint; newPhotoMeta covers photos picked in this
+  // session, uploaded together with the photo itself.
+  const [existingPhotoMeta, setExistingPhotoMeta] = useState<{ name: string; price: string; quantity: string }[]>([]);
+  const [newPhotoMeta, setNewPhotoMeta] = useState<{ name: string; price: string; quantity: string }[]>([]);
+
   // State: Validation errors object - stores error messages for each field
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -192,6 +199,8 @@ const EditListing: React.FC = () => {
     Alert.alert('Limit Reached', `Only ${trimmed.length} photo(s) added. Maximum is ${maxPhotos} per post.`);
   }
   setSelectedPhotos([...selectedPhotos, ...trimmed]);
+  // [2026-08-03] [feature/per-photo-inventory] default meta for each newly picked photo
+  setNewPhotoMeta([...newPhotoMeta, ...trimmed.map(() => ({ name: '', price: '', quantity: '1' }))]);
   console.log(`📸 Selected ${trimmed.length} new photos`);
 }
     } catch (error) {
@@ -205,6 +214,7 @@ const EditListing: React.FC = () => {
    */
   const removeNewPhoto = (index: number) => {
     setSelectedPhotos(selectedPhotos.filter((_, i) => i !== index));
+    setNewPhotoMeta(newPhotoMeta.filter((_, i) => i !== index));
   };
 
   /**
@@ -216,6 +226,7 @@ const EditListing: React.FC = () => {
       console.log(`🗑️ Deleting existing photo at index ${index} from post ${postId}`);
       await api.delete(`/api/service-posts/${postId}/photos/${index}`);
       setExistingPhotos(existingPhotos.filter((_, i) => i !== index));
+      setExistingPhotoMeta(existingPhotoMeta.filter((_, i) => i !== index));
       console.log('✅ Existing photo deleted');
     } catch (error) {
       console.error('Error deleting photo:', error);
@@ -265,7 +276,9 @@ const EditListing: React.FC = () => {
     let uploadedCount = 0;
     let failedCount = 0;
 
-    for (const photo of selectedPhotos) {
+    for (const [photoIdx, photo] of selectedPhotos.entries()) {
+      // [2026-08-03] [feature/per-photo-inventory] this photo's own name/price/quantity
+      const meta = newPhotoMeta[photoIdx] || { name: '', price: '', quantity: '1' };
       try {
         const token = await AsyncStorage.getItem('access_token');
         if (!token) throw new Error('No authentication token');
@@ -338,6 +351,12 @@ const EditListing: React.FC = () => {
               photo: base64,
               filename: `photo_${Date.now()}.${fileExtension}`,
               mimetype: mimeType,
+              // [2026-08-03] [feature/per-photo-inventory] previously sent neither price
+              // nor description at all — new photos silently got price = 0 server-side.
+              name: meta.name.trim(),
+              description: meta.name.trim(),
+              price: parseFloat(meta.price) || 0,
+              quantity: parseInt(meta.quantity, 10) || 1,
             }),
           });
 
@@ -354,6 +373,11 @@ const EditListing: React.FC = () => {
             type: mimeType,
             name: `photo.${fileExtension}`,
           } as any);
+          // [2026-08-03] [feature/per-photo-inventory] same fix as the web branch above
+          formData.append('name', meta.name.trim());
+          formData.append('description', meta.name.trim());
+          formData.append('price', String(parseFloat(meta.price) || 0));
+          formData.append('quantity', String(parseInt(meta.quantity, 10) || 1));
 
           await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -503,6 +527,18 @@ const EditListing: React.FC = () => {
         // ADDED: February 19, 2026 - Load existing photos from the post data
         if (Array.isArray(post.photos) && post.photos.length > 0) {
           setExistingPhotos(post.photos);
+          // [2026-08-03] [feature/per-photo-inventory] Load each photo's own name/price/
+          // quantity. Photos that predate this feature have no entry in photo_names/
+          // photo_quantities — default price/quantity to what was already visible
+          // (photo_prices, or qty 1) so editing an old listing doesn't wipe anything.
+          const names = (post as any).photo_names || [];
+          const prices = (post as any).photo_prices || [];
+          const quantities = (post as any).photo_quantities || [];
+          setExistingPhotoMeta(post.photos.map((_: string, i: number) => ({
+            name: names[i] || '',
+            price: prices[i] != null ? String(prices[i]) : '',
+            quantity: quantities[i] != null ? String(quantities[i]) : '1',
+          })));
           console.log(`✅ Loaded ${post.photos.length} existing photos`);
         }
 
@@ -636,11 +672,13 @@ const EditListing: React.FC = () => {
     // Validate form before saving
     if (!validateForm()) return;
 
-    // Warn if photo count and quantity don't match (informational only)
+    // Warn if photo count and quantity don't match (informational only).
+    // [2026-08-03] [feature/per-photo-inventory] No longer applies to product-sale
+    // categories — quantity is per-photo now (see existingPhotoMeta/newPhotoMeta),
+    // independent of photo count. Thrifting is unchanged (each photo is a 1-of-1 item).
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    const isProductSaleEdit = isProductCategory(serviceCategory);
     const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if ((isProductSaleEdit || isThriftingEdit) && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
+    if (isThriftingEdit && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
       const proceed = await new Promise<boolean>(resolve =>
         Alert.alert(
           'Quantity Mismatch',
@@ -673,7 +711,15 @@ const EditListing: React.FC = () => {
         contact_email: contactEmail.trim(),
         zip_code: zipCode.trim() || null,
         post_type: postType,
-        ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
+        // [2026-08-03] [feature/per-photo-inventory] For Boutique/Jewelry/Indian
+        // Groceries, in_stock is now a display/back-compat aggregate — the sum of each
+        // photo's own quantity (existing photos are re-priced/re-stocked via the PATCH
+        // photo endpoint below, not this field).
+        ...(acceptsPayment ? {
+          in_stock: isBoutiqueOrJewelry
+            ? ([...existingPhotoMeta, ...newPhotoMeta].reduce((sum, m) => sum + (parseInt(m.quantity, 10) || 1), 0) || 1)
+            : (parseInt(inStock) || 1),
+        } : {}),
         ...(isBoutiqueOrJewelry ? {
           // [2026-08-03] [feature/per-photo-inventory] Was `Math.round(...) || 1000` — 0 is
           // falsy in JS, so an explicit $0.00 shipping charge got silently replaced with
@@ -701,6 +747,21 @@ const EditListing: React.FC = () => {
             payment_method: JSON.stringify(mergedMethods),
             payment_info: Object.keys(mergedInfos).length > 0 ? JSON.stringify(mergedInfos) : null,
           }).catch((err: any) => console.warn('⚠️ Could not save payment defaults to profile:', err));
+        }
+
+        // [2026-08-03] [feature/per-photo-inventory] Save any Name/Price/Quantity edits
+        // to photos that were already uploaded — previously impossible (existing photos
+        // could only be removed, never re-priced or re-stocked).
+        if (isBoutiqueOrJewelry && existingPhotoMeta.length > 0) {
+          await Promise.all(
+            existingPhotoMeta.map((meta, index) =>
+              api.patch(`/api/service-posts/${postId}/photos/${index}`, {
+                name: meta.name.trim(),
+                price: parseFloat(meta.price) || 0,
+                quantity: parseInt(meta.quantity, 10) || 1,
+              }).catch((err: any) => console.warn(`⚠️ Could not save photo ${index} edits:`, err))
+            )
+          );
         }
 
         // Upload any new photos before navigating back
@@ -1046,8 +1107,10 @@ const EditListing: React.FC = () => {
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
           </View>
 
-          {/* Quantity — only for payment-enabled categories */}
-          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+          {/* Quantity — only for payment-enabled categories.
+              [2026-08-03] [feature/per-photo-inventory] Hidden for Boutique/Jewelry/
+              Indian Groceries — quantity is entered per photo in the Photos section below. */}
+          {!isProductCategory(serviceCategory) && serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
             <View style={styles.section}>
               <Text style={styles.label}>Quantity Available</Text>
               <TextInput
@@ -1168,40 +1231,166 @@ const EditListing: React.FC = () => {
               </Text>
             </View>
 
-            {/* Existing photos already saved on the post */}
-            {existingPhotos.length > 0 && (
-              <View style={styles.photoGrid}>
-                {existingPhotos.map((uri, index) => (
-                  <View key={`existing-${index}`} style={styles.photoPreview}>
-                    <Image source={{ uri }} style={styles.photoImage} />
-                    <TouchableOpacity
-                      style={styles.removePhotoButton}
-                      onPress={() => removeExistingPhoto(index)}
-                      disabled={saving}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#fff" />
-                    </TouchableOpacity>
+            {/* [2026-08-03] [feature/per-photo-inventory] Boutique/Jewelry/Indian
+                Groceries: each photo is its own product, so it gets a card with
+                Name/Price/Quantity inputs instead of the plain thumbnail grid. */}
+            {isProductCategory(serviceCategory) ? (
+              <>
+                {existingPhotos.map((uri, index) => {
+                  const meta = existingPhotoMeta[index] || { name: '', price: '', quantity: '1' };
+                  const setMeta = (patch: Partial<typeof meta>) => {
+                    const updated = [...existingPhotoMeta];
+                    updated[index] = { ...meta, ...patch };
+                    setExistingPhotoMeta(updated);
+                  };
+                  return (
+                    <View key={`existing-${index}`} style={styles.photoProductCard}>
+                      <View style={styles.photoPreviewRow}>
+                        <View style={styles.photoPreview}>
+                          <Image source={{ uri }} style={styles.photoImage} />
+                          <TouchableOpacity
+                            style={styles.removePhotoButton}
+                            onPress={() => removeExistingPhoto(index)}
+                            disabled={saving}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.photoIndexLabel}>Photo {index + 1}</Text>
+                      </View>
+                      <TextInput
+                        style={styles.photoDescInput}
+                        value={meta.name}
+                        onChangeText={(t) => setMeta({ name: t })}
+                        placeholder="Product name"
+                        maxLength={60}
+                        editable={!saving}
+                      />
+                      <View style={styles.photoProductRow}>
+                        <View style={styles.photoProductCol}>
+                          <Text style={styles.photoFieldLabel}>Price ($)</Text>
+                          <TextInput
+                            style={styles.photoPriceInput}
+                            value={meta.price}
+                            onChangeText={(t) => setMeta({ price: t.replace(/[^0-9.]/g, '') })}
+                            placeholder="0.00"
+                            keyboardType="decimal-pad"
+                            editable={!saving}
+                          />
+                        </View>
+                        <View style={styles.photoProductCol}>
+                          <Text style={styles.photoFieldLabel}>Quantity</Text>
+                          <TextInput
+                            style={styles.photoPriceInput}
+                            value={meta.quantity}
+                            onChangeText={(t) => setMeta({ quantity: t.replace(/[^0-9]/g, '') })}
+                            placeholder="1"
+                            keyboardType="numeric"
+                            maxLength={5}
+                            editable={!saving}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+                {selectedPhotos.map((photo, index) => {
+                  const meta = newPhotoMeta[index] || { name: '', price: '', quantity: '1' };
+                  const setMeta = (patch: Partial<typeof meta>) => {
+                    const updated = [...newPhotoMeta];
+                    updated[index] = { ...meta, ...patch };
+                    setNewPhotoMeta(updated);
+                  };
+                  return (
+                    <View key={`new-${index}`} style={styles.photoProductCard}>
+                      <View style={styles.photoPreviewRow}>
+                        <View style={styles.photoPreview}>
+                          <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                          <TouchableOpacity
+                            style={styles.removePhotoButton}
+                            onPress={() => removeNewPhoto(index)}
+                            disabled={saving}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.photoIndexLabel}>New photo {existingPhotos.length + index + 1}</Text>
+                      </View>
+                      <TextInput
+                        style={styles.photoDescInput}
+                        value={meta.name}
+                        onChangeText={(t) => setMeta({ name: t })}
+                        placeholder="Product name"
+                        maxLength={60}
+                        editable={!saving}
+                      />
+                      <View style={styles.photoProductRow}>
+                        <View style={styles.photoProductCol}>
+                          <Text style={styles.photoFieldLabel}>Price ($)</Text>
+                          <TextInput
+                            style={styles.photoPriceInput}
+                            value={meta.price}
+                            onChangeText={(t) => setMeta({ price: t.replace(/[^0-9.]/g, '') })}
+                            placeholder="0.00"
+                            keyboardType="decimal-pad"
+                            editable={!saving}
+                          />
+                        </View>
+                        <View style={styles.photoProductCol}>
+                          <Text style={styles.photoFieldLabel}>Quantity</Text>
+                          <TextInput
+                            style={styles.photoPriceInput}
+                            value={meta.quantity}
+                            onChangeText={(t) => setMeta({ quantity: t.replace(/[^0-9]/g, '') })}
+                            placeholder="1"
+                            keyboardType="numeric"
+                            maxLength={5}
+                            editable={!saving}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                {/* Existing photos already saved on the post */}
+                {existingPhotos.length > 0 && (
+                  <View style={styles.photoGrid}>
+                    {existingPhotos.map((uri, index) => (
+                      <View key={`existing-${index}`} style={styles.photoPreview}>
+                        <Image source={{ uri }} style={styles.photoImage} />
+                        <TouchableOpacity
+                          style={styles.removePhotoButton}
+                          onPress={() => removeExistingPhoto(index)}
+                          disabled={saving}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            )}
+                )}
 
-            {/* Newly selected photos (not yet uploaded) */}
-            {selectedPhotos.length > 0 && (
-              <View style={styles.photoGrid}>
-                {selectedPhotos.map((photo, index) => (
-                  <View key={`new-${index}`} style={styles.photoPreview}>
-                    <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-                    <TouchableOpacity
-                      style={styles.removePhotoButton}
-                      onPress={() => removeNewPhoto(index)}
-                      disabled={saving}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#fff" />
-                    </TouchableOpacity>
+                {/* Newly selected photos (not yet uploaded) */}
+                {selectedPhotos.length > 0 && (
+                  <View style={styles.photoGrid}>
+                    {selectedPhotos.map((photo, index) => (
+                      <View key={`new-${index}`} style={styles.photoPreview}>
+                        <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                        <TouchableOpacity
+                          style={styles.removePhotoButton}
+                          onPress={() => removeNewPhoto(index)}
+                          disabled={saving}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                )}
+              </>
             )}
 
             {/* Add Photos button - disabled at limit or while saving */}
@@ -1518,6 +1707,60 @@ const styles = createResponsiveStyles({
     right: 2,
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 12,
+  },
+  // [2026-08-03] [feature/per-photo-inventory] per-photo product card (Name/Price/Qty)
+  photoProductCard: {
+    backgroundColor: '#f9f9f9',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  photoPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  photoIndexLabel: {
+    marginLeft: 12,
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+  photoDescInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#333',
+    marginTop: 8,
+  },
+  photoProductRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  photoProductCol: {
+    flex: 1,
+  },
+  photoFieldLabel: {
+    fontSize: 11,
+    color: '#888',
+    fontWeight: '600',
+  },
+  photoPriceInput: {
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: '#333',
+    backgroundColor: '#F0F7FF',
+    marginTop: 2,
   },
   addPhotoButton: {
     flexDirection: "row",
