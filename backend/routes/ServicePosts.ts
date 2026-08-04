@@ -771,27 +771,26 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
     ];
 
     const soldPhotoIndexes: number[] = [];
-    // [2026-08-03] [feature/per-photo-inventory] Sum of quantity purchased so far per
-    // photo index, across the same completed/pending order set used for
-    // soldPhotoIndexes above — feeds photo_remaining_qty below so a photo with e.g. qty
-    // 100 doesn't go "sold" after being bought once. sold_photo_indexes (boolean) is
-    // left untouched for callers that still rely on it (e.g. thrifting, where each
-    // photo is a 1-of-1 item).
-    const purchasedQtyByIndex = new Map<number, number>();
     for (const order of activeOrders || []) {
       for (const orderItem of (order.items || [])) {
         if (Number(orderItem.post_id) === Number(postId) && orderItem.photo_index != null) {
-          const idx = Number(orderItem.photo_index);
-          soldPhotoIndexes.push(idx);
-          const qty = Number(orderItem.quantity ?? 1);
-          purchasedQtyByIndex.set(idx, (purchasedQtyByIndex.get(idx) ?? 0) + qty);
+          soldPhotoIndexes.push(Number(orderItem.photo_index));
         }
       }
     }
+
+    // [2026-08-03] [feature/per-photo-inventory] photo_quantities is a live counter —
+    // decremented/reverted directly by orders.ts on placement/cancel, exactly like the
+    // post-level in_stock column already was. So "remaining" for a photo is just its
+    // current photo_quantities value, no order-summing needed here. Photos uploaded
+    // before this feature shipped have no entry in photo_quantities at all (not even a
+    // 1) — for those we fall back to the pre-existing boolean sold_photo_indexes
+    // behavior (available unless it's been bought once), so old listings keep working
+    // exactly as they did before this change.
     const photoRemainingQty: number[] = (data.photos || []).map((_: any, idx: number) => {
-      const totalQty = Number((data.photo_quantities ?? [])[idx] ?? 1);
-      const purchased = purchasedQtyByIndex.get(idx) ?? 0;
-      return Math.max(totalQty - purchased, 0);
+      const explicitQty = (data.photo_quantities ?? [])[idx];
+      if (explicitQty != null) return Math.max(Number(explicitQty), 0);
+      return soldPhotoIndexes.includes(idx) ? 0 : 1;
     });
 
     // For thrifting posts, fetch which photo_indexes have at least one active request
@@ -823,6 +822,9 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       sold_photo_indexes: mergedSoldIndexes,
       // Photos with at least one active thrift request (for badge display)
       thrift_pending_indexes: thriftPendingIndexes,
+      // [2026-08-03] [feature/per-photo-inventory] remaining stock per photo — see
+      // photoRemainingQty comment above for the live-counter / legacy-fallback rules.
+      photo_remaining_qty: photoRemainingQty,
     };
 
     console.log('✅ Found service post:', post.id, '| sold:', post.sold_photo_indexes, '| pending:', post.thrift_pending_indexes);

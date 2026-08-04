@@ -17,13 +17,20 @@
  *
  *  PATCH  /api/orders/:id/status
  *    • Provider-only. Accepts { status: 'completed' | 'cancelled' }.
- *    • On 'completed':
- *        1. Updates the payment row status.
- *        2. Decrements `service_posts.in_stock` for each purchased item
- *           (floors at 0 — never goes negative).
- *        3. Fires status-update emails to buyer, provider, and all admins.
- *    • On 'cancelled': updates status only — stock is NOT decremented since
- *      no inventory was consumed.
+ *    • Fires status-update emails to buyer, provider, and all admins.
+ *    • On 'cancelled': reverts (increments) `service_posts.in_stock` and, for photos
+ *      with an explicit per-photo quantity, `photo_quantities[photo_index]` too — see
+ *      note below. On 'completed': status only, no further stock change.
+ *
+ * [2026-08-03] [feature/per-photo-inventory] Stock is actually decremented at
+ * PLACEMENT time (POST /api/orders, immediately after insert), not on completion —
+ * this comment previously said otherwise. `in_stock` (post-level aggregate) is
+ * decremented/reverted for every order regardless of category. For photos that carry
+ * an explicit quantity in `photo_quantities` (set via the per-photo Name/Price/Qty
+ * fields at posting/editing time), that specific index is ALSO decremented/reverted
+ * in lockstep, so one photo selling out doesn't affect its siblings on the same post.
+ * Photos without an explicit quantity (listings created before this feature) keep the
+ * old behavior: sold once via the post-level in_stock/lockedSlots checks below.
  *
  * ── Email notifications (via Resend + emailServices.ts) ────────────────────
  *  • Order placed  → buyer, provider, admins receive order-confirmation email.
@@ -306,7 +313,7 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
     const postIds = [...new Set((items as any[]).map((i: any) => Number(i.post_id)).filter(Boolean))];
     if (postIds.length > 0) {
       const [{ data: posts }, { data: activePendingOrders }] = await Promise.all([
-        supabase.from('service_posts').select('id, title, in_stock').in('id', postIds),
+        supabase.from('service_posts').select('id, title, in_stock, photo_quantities').in('id', postIds),
         // Active pending = expires_at in future, OR expires_at NULL but < 1h old
         (async () => {
           const _now12hAgo = new Date(Date.now() - BOUTIQUE_EXPIRY_MS).toISOString();
@@ -330,6 +337,23 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
 
       for (const item of items as any[]) {
         const post = (posts || []).find((p: any) => Number(p.id) === Number(item.post_id));
+        const explicitQty = post?.photo_quantities?.[item.photo_index];
+
+        // [2026-08-03] [feature/per-photo-inventory] This photo has its own quantity —
+        // check it directly and skip the legacy post-level/slot checks below, so buying
+        // one unit of a qty-100 photo doesn't lock out the other 99 for other buyers.
+        if (explicitQty != null) {
+          if (Number(item.quantity ?? 1) > Number(explicitQty)) {
+            res.status(409).json({
+              error: `Only ${explicitQty} left of "#P${item.post_id}-${(item.photo_index ?? 0) + 1}".`,
+              out_of_stock: true, post_id: item.post_id,
+            });
+            return;
+          }
+          continue;
+        }
+
+        // Legacy path — post predates per-photo quantities, unchanged behavior.
         if (post && post.in_stock != null && Number(post.in_stock) <= 0) {
           res.status(409).json({
             error: `"${post.title || 'Item'}" is out of stock. Please remove it from your cart.`,
@@ -380,20 +404,41 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
     (async () => {
       try {
         const stockDecrements = new Map<number, number>();
+        // [2026-08-03] [feature/per-photo-inventory] Same aggregation, keyed per photo
+        // slot instead of per post — mirrors onto photo_quantities[photo_index] below.
+        const photoDecrements = new Map<string, { postId: number; photoIndex: number; qty: number }>();
         for (const item of items as any[]) {
           const postId = Number(item.post_id);
           const qty    = Number(item.quantity ?? 1);
           if (postId) stockDecrements.set(postId, (stockDecrements.get(postId) ?? 0) + qty);
+          if (postId && item.photo_index != null) {
+            const key = `${postId}_${item.photo_index}`;
+            photoDecrements.set(key, {
+              postId, photoIndex: Number(item.photo_index),
+              qty: (photoDecrements.get(key)?.qty ?? 0) + qty,
+            });
+          }
         }
-        await Promise.all(
-          Array.from(stockDecrements.entries()).map(async ([postId, qty]) => {
+        await Promise.all([
+          ...Array.from(stockDecrements.entries()).map(async ([postId, qty]) => {
             const { data: post } = await supabase
               .from('service_posts').select('in_stock').eq('id', postId).single();
             const newStock = Math.max(Number(post?.in_stock ?? 0) - qty, 0);
             await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
             console.log(`✅ in_stock decremented on order placement: post #${postId} -${qty} → ${newStock}`);
           }),
-        );
+          ...Array.from(photoDecrements.values()).map(async ({ postId, photoIndex, qty }) => {
+            const { data: post } = await supabase
+              .from('service_posts').select('photo_quantities').eq('id', postId).single();
+            const quantities = post?.photo_quantities;
+            // Legacy photo (predates this feature) — nothing explicit to decrement.
+            if (!Array.isArray(quantities) || quantities[photoIndex] == null) return;
+            const updated = [...quantities];
+            updated[photoIndex] = Math.max(Number(updated[photoIndex]) - qty, 0);
+            await supabase.from('service_posts').update({ photo_quantities: updated }).eq('id', postId);
+            console.log(`✅ photo_quantities decremented: post #${postId} photo ${photoIndex} -${qty} → ${updated[photoIndex]}`);
+          }),
+        ]);
       } catch (stockErr) {
         console.error(`❌ Stock decrement error on placement for order #${data.id}:`, stockErr);
       }
@@ -547,20 +592,40 @@ router.patch('/api/orders/:id/status', async (req: Request, res: Response): Prom
       (async () => {
         try {
           const stockIncrements = new Map<number, number>();
+          // [2026-08-03] [feature/per-photo-inventory] Mirrors the decrement-on-placement
+          // aggregation — reverts the specific photo's own quantity too.
+          const photoIncrements = new Map<string, { postId: number; photoIndex: number; qty: number }>();
           for (const item of existingOrder.items) {
             const postId = Number(item.post_id);
             const qty    = Number(item.quantity ?? 1);
             if (postId) stockIncrements.set(postId, (stockIncrements.get(postId) ?? 0) + qty);
+            if (postId && item.photo_index != null) {
+              const key = `${postId}_${item.photo_index}`;
+              photoIncrements.set(key, {
+                postId, photoIndex: Number(item.photo_index),
+                qty: (photoIncrements.get(key)?.qty ?? 0) + qty,
+              });
+            }
           }
-          await Promise.all(
-            Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
+          await Promise.all([
+            ...Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
               const { data: post } = await supabase
                 .from('service_posts').select('in_stock').eq('id', postId).single();
               const newStock = Number(post?.in_stock ?? 0) + qty;
               await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
               console.log(`✅ in_stock reverted on cancel: post #${postId} +${qty} → ${newStock}`);
             }),
-          );
+            ...Array.from(photoIncrements.values()).map(async ({ postId, photoIndex, qty }) => {
+              const { data: post } = await supabase
+                .from('service_posts').select('photo_quantities').eq('id', postId).single();
+              const quantities = post?.photo_quantities;
+              if (!Array.isArray(quantities) || quantities[photoIndex] == null) return;
+              const updated = [...quantities];
+              updated[photoIndex] = Number(updated[photoIndex]) + qty;
+              await supabase.from('service_posts').update({ photo_quantities: updated }).eq('id', postId);
+              console.log(`✅ photo_quantities reverted: post #${postId} photo ${photoIndex} +${qty} → ${updated[photoIndex]}`);
+            }),
+          ]);
         } catch (stockErr) {
           console.error(`❌ Stock revert error for order #${orderId}:`, stockErr);
         }
