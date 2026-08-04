@@ -71,7 +71,11 @@ const BoutiqueCheckoutScreen: React.FC = () => {
       if (!stored) return;
       try {
         const addr = JSON.parse(stored);
-        if (addr.street && addr.city && addr.state && addr.zipCode) {
+        // [2026-08-03] Require phone too — addresses saved before phone became mandatory
+        // (or from other stale sessions) would otherwise auto-apply here and let checkout
+        // proceed without ever routing the buyer back through ServiceAddressScreen's
+        // phone requirement.
+        if (addr.street && addr.city && addr.state && addr.zipCode && addr.phone) {
           dispatch(setShippingAddress(addr));
         }
       } catch {}
@@ -120,7 +124,10 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     return sum + Math.round(u * 100) * (item.quantity ?? 1);
   }, 0);
   const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? shippingFeeCents : 0);
-  const canPlaceOrder = fulfillmentMethod === 'pickup' || !!shippingAddress;
+  // [2026-08-03] Also require phone — `checkout.shippingAddress` is redux-persisted, so a
+  // stale address saved before phone became mandatory (or restored via AsyncStorage above)
+  // could otherwise let checkout proceed without ever collecting a phone number.
+  const canPlaceOrder = fulfillmentMethod === 'pickup' || !!(shippingAddress && shippingAddress.phone);
 
   const PAYMENT_LABELS: Record<string, string> = {
     zelle: 'Zelle', venmo: 'Venmo', paypal: 'PayPal', cashapp: 'Cash App', cash: 'Cash', check: 'Check',
@@ -226,6 +233,11 @@ const BoutiqueCheckoutScreen: React.FC = () => {
             {shippingAddress ? (
               <View>
                 {shippingAddress.fullName ? <Text style={styles.addressText}>{shippingAddress.fullName}</Text> : null}
+                {shippingAddress.phone ? (
+                  <Text style={styles.addressText}>{shippingAddress.phone}</Text>
+                ) : (
+                  <Text style={[styles.addressText, { color: '#E53935' }]}>Phone required — tap Change Address to add it</Text>
+                )}
                 <Text style={styles.addressText}>{shippingAddress.street}</Text>
                 <Text style={styles.addressText}>{shippingAddress.city}, {shippingAddress.state} {shippingAddress.zipCode}</Text>
                 {shippingAddress.notes ? <Text style={styles.addressNotes}>Note: {shippingAddress.notes}</Text> : null}
