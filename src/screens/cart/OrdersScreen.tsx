@@ -17,7 +17,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl, Image,
+  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl, Image, Linking,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,6 +148,19 @@ const OrdersScreen: React.FC = () => {
           </View>
         ) : null}
 
+        {/* Call Buyer button — [2026-08-03] added so sellers can reach the buyer directly
+            for delivery coordination; scoped to /api/orders/provider so a seller only ever
+            sees the phone number for an order they're actually fulfilling. */}
+        {item.shipping_address?.phone ? (
+          <TouchableOpacity
+            style={styles.callBtn}
+            onPress={() => Linking.openURL(`tel:${item.shipping_address.phone}`)}
+          >
+            <Ionicons name="call-outline" size={16} color="#4A90E2" />
+            <Text style={styles.callBtnText}>Call Buyer</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Mark completed button */}
         {item.status === 'pending' && (
           <TouchableOpacity
@@ -228,6 +241,8 @@ const styles = StyleSheet.create({
   addressText: { fontSize: 12, color: '#555', flex: 1 },
   completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#2E7D32', borderRadius: 8, paddingVertical: 10, marginTop: 10 },
   completeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  callBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#4A90E2', borderRadius: 8, paddingVertical: 10, marginTop: 10 },
+  callBtnText: { color: '#4A90E2', fontWeight: '700', fontSize: 14 },
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 16, color: '#aaa', marginTop: 12 },
   itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },

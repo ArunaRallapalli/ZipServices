@@ -88,7 +88,9 @@ const ServiceAddressScreen: React.FC = () => {
   };
 
   const handleConfirm = async () => {
-    if (!street.trim() || !zipCode.trim() || !city.trim() || !state.trim()) return;
+    // [2026-08-03] Phone is now required — sellers had no way to reach the buyer for
+    // delivery coordination since it was previously optional and often left blank.
+    if (!phone.trim() || !street.trim() || !zipCode.trim() || !city.trim() || !state.trim()) return;
     const address = { fullName, phone, street, zipCode, city, state, notes };
     dispatch(setShippingAddress(address));
     if (saveAddress) {
@@ -99,7 +101,8 @@ const ServiceAddressScreen: React.FC = () => {
     navigation.goBack();
   };
 
-  const isValid = !!street.trim() && !!zipCode.trim() && !!city.trim() && !!state.trim();
+  // [2026-08-03] phone added to required fields — see handleConfirm note above.
+  const isValid = !!phone.trim() && !!street.trim() && !!zipCode.trim() && !!city.trim() && !!state.trim();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -131,7 +134,7 @@ const ServiceAddressScreen: React.FC = () => {
 
           {/* Phone */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>Phone Number *</Text>
             <TextInput
               style={styles.input}
               value={phone}

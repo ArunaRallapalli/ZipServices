@@ -98,6 +98,7 @@ function buildOrderReportHtml(order: {
     ? `<div style="margin-top:16px;padding:12px;background:#f9f9f9;border-radius:6px">
         <strong>Deliver To:</strong><br/>
         ${shippingAddress.fullName ? `${shippingAddress.fullName}<br/>` : ''}
+        ${shippingAddress.phone ? `Phone: ${shippingAddress.phone}<br/>` : ''}
         ${shippingAddress.street}<br/>
         ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}
         ${shippingAddress.notes ? `<br/><em>${shippingAddress.notes}</em>` : ''}

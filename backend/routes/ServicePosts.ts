@@ -600,7 +600,10 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         status: POST_STATUS.ACTIVE,
         request_status: post_type === 'request' ? 'pending' : null,
         in_stock: in_stock !== undefined ? in_stock : 1,
-        shipping_charge_cents: shipping_charge_cents || null,
+        // [2026-08-03] Was `|| null` — 0 is falsy in JS, so an explicit $0.00 shipping
+        // charge got nulled out at creation, which downstream `?? 1000` fallbacks then
+        // treated as "not set" and defaulted to $10.00. Switched to `??` to preserve 0.
+        shipping_charge_cents: shipping_charge_cents ?? null,
         post_payment_method: post_payment_method || null,
         post_payment_info: post_payment_info || null,
       }])
