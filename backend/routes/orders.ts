@@ -94,6 +94,8 @@ function buildOrderReportHtml(order: {
       </tr>`;
   }).join('');
 
+  // [2026-08-03] [feature/per-photo-inventory] Show buyer phone so the seller has a way
+  // to reach them for delivery coordination — previously collected but never surfaced here.
   const addressBlock = shippingAddress
     ? `<div style="margin-top:16px;padding:12px;background:#f9f9f9;border-radius:6px">
         <strong>Deliver To:</strong><br/>

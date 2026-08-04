@@ -465,6 +465,10 @@ router.get('/api/service-posts/user/:userId', authenticateToken, authorizeUser, 
       is_active: post.status === POST_STATUS.ACTIVE,
       in_stock: post.in_stock,
       photos: Array.isArray(post.photos) ? post.photos : [],
+      photo_prices: Array.isArray(post.photo_prices) ? post.photo_prices : [],
+      photo_quantities: Array.isArray(post.photo_quantities) ? post.photo_quantities : [],
+      photo_names: Array.isArray(post.photo_names) ? post.photo_names : [],
+      shipping_charge_cents: post.shipping_charge_cents,
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
       poster_name: post.users?.business_owners?.business_name || post.users?.email,
       business_name: post.users?.business_owners?.business_name,
@@ -600,9 +604,10 @@ router.post('/api/service-posts', authenticateToken, async (req: AuthRequest, re
         status: POST_STATUS.ACTIVE,
         request_status: post_type === 'request' ? 'pending' : null,
         in_stock: in_stock !== undefined ? in_stock : 1,
-        // [2026-08-03] Was `|| null` — 0 is falsy in JS, so an explicit $0.00 shipping
-        // charge got nulled out at creation, which downstream `?? 1000` fallbacks then
-        // treated as "not set" and defaulted to $10.00. Switched to `??` to preserve 0.
+        // [2026-08-03] [feature/per-photo-inventory] Was `|| null` — 0 is falsy in JS, so
+        // an explicit $0.00 shipping charge got nulled out at creation, which downstream
+        // `?? 1000` fallbacks then treated as "not set" and defaulted to $10.00. Switched
+        // to `??` to preserve 0.
         shipping_charge_cents: shipping_charge_cents ?? null,
         post_payment_method: post_payment_method || null,
         post_payment_info: post_payment_info || null,
@@ -766,13 +771,28 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
     ];
 
     const soldPhotoIndexes: number[] = [];
+    // [2026-08-03] [feature/per-photo-inventory] Sum of quantity purchased so far per
+    // photo index, across the same completed/pending order set used for
+    // soldPhotoIndexes above — feeds photo_remaining_qty below so a photo with e.g. qty
+    // 100 doesn't go "sold" after being bought once. sold_photo_indexes (boolean) is
+    // left untouched for callers that still rely on it (e.g. thrifting, where each
+    // photo is a 1-of-1 item).
+    const purchasedQtyByIndex = new Map<number, number>();
     for (const order of activeOrders || []) {
       for (const orderItem of (order.items || [])) {
         if (Number(orderItem.post_id) === Number(postId) && orderItem.photo_index != null) {
-          soldPhotoIndexes.push(Number(orderItem.photo_index));
+          const idx = Number(orderItem.photo_index);
+          soldPhotoIndexes.push(idx);
+          const qty = Number(orderItem.quantity ?? 1);
+          purchasedQtyByIndex.set(idx, (purchasedQtyByIndex.get(idx) ?? 0) + qty);
         }
       }
     }
+    const photoRemainingQty: number[] = (data.photos || []).map((_: any, idx: number) => {
+      const totalQty = Number((data.photo_quantities ?? [])[idx] ?? 1);
+      const purchased = purchasedQtyByIndex.get(idx) ?? 0;
+      return Math.max(totalQty - purchased, 0);
+    });
 
     // For thrifting posts, fetch which photo_indexes have at least one active request
     // so the buyer modal can show Available / Pending Request / Unavailable badges
@@ -1379,7 +1399,7 @@ router.post(
       // Verify post ownership
       const { data: post, error: postError } = await supabase
         .from('service_posts')
-        .select('user_id, photos, photo_prices')
+        .select('user_id, photos, photo_prices, photo_quantities, photo_names')
         .eq('id', postId)
         .single();
 
@@ -1552,15 +1572,24 @@ try {
       // UPDATE DATABASE
       // ============================================================
       const price = parseFloat(req.body.price) || 0;
+      // [2026-08-03] [feature/per-photo-inventory] Per-photo quantity/name — each photo
+      // is its own product with its own stock, independent of the post-level in_stock
+      // and every other photo.
+      const quantity = parseInt(req.body.quantity, 10) || 1;
+      const name = (req.body.name || req.body.description || '').toString().trim();
 
       const updatedPhotos = [...currentPhotos, photoUrl];
       const updatedPrices = [...(post.photo_prices || []), price];
+      const updatedQuantities = [...(post.photo_quantities || []), quantity];
+      const updatedNames = [...(post.photo_names || []), name];
 
       const { error: updateError } = await supabase
         .from('service_posts')
         .update({
           photos: updatedPhotos,
           photo_prices: updatedPrices,
+          photo_quantities: updatedQuantities,
+          photo_names: updatedNames,
         })
         .eq('id', postId);
 
@@ -1605,7 +1634,7 @@ router.delete(
 
       const { data: post, error: fetchError } = await supabase
         .from('service_posts')
-        .select('user_id, photos, photo_prices')
+        .select('user_id, photos, photo_prices, photo_quantities, photo_names')
         .eq('id', postId)
         .single();
 
@@ -1664,12 +1693,16 @@ router.delete(
 
       const updatedPhotos = post.photos.filter((_: any, i: number) => i !== index);
       const updatedPrices = (post.photo_prices || []).filter((_: any, i: number) => i !== index);
+      const updatedQuantities = (post.photo_quantities || []).filter((_: any, i: number) => i !== index);
+      const updatedNames = (post.photo_names || []).filter((_: any, i: number) => i !== index);
 
       const { error: updateError } = await supabase
         .from('service_posts')
         .update({
           photos: updatedPhotos.length > 0 ? updatedPhotos : null,
           photo_prices: updatedPrices,
+          photo_quantities: updatedQuantities,
+          photo_names: updatedNames,
         })
         .eq('id', postId);
 
@@ -1699,4 +1732,80 @@ router.delete(
     }
   }
 );
+
+// ============================================================================
+// ENDPOINT 13: EDIT AN ALREADY-UPLOADED PHOTO'S PRICE/QUANTITY/NAME (PROTECTED)
+// [2026-08-03] [feature/per-photo-inventory] Previously impossible — sellers could only
+// add/remove photos, never re-price or re-stock one already on the post.
+// ============================================================================
+router.patch(
+  '/api/service-posts/:postId/photos/:photoIndex',
+  authenticateToken,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { postId, photoIndex } = req.params;
+      const index = parseInt(photoIndex);
+      const { price, quantity, name } = req.body;
+
+      const { data: post, error: fetchError } = await supabase
+        .from('service_posts')
+        .select('user_id, photos, photo_prices, photo_quantities, photo_names')
+        .eq('id', postId)
+        .single();
+
+      if (fetchError || !post) {
+        res.status(404).json({ success: false, error: 'Service post not found' });
+        return;
+      }
+
+      if (String(post.user_id) !== String(req.user?.user_id)) {
+        res.status(403).json({ success: false, error: 'You can only edit photos on your own posts' });
+        return;
+      }
+
+      if (!post.photos || index < 0 || index >= post.photos.length) {
+        res.status(400).json({ success: false, error: 'Invalid photo index' });
+        return;
+      }
+
+      const updatedPrices = [...(post.photo_prices || [])];
+      const updatedQuantities = [...(post.photo_quantities || [])];
+      const updatedNames = [...(post.photo_names || [])];
+      // Pad arrays that predate photo_quantities/photo_names so the index write below is safe.
+      while (updatedPrices.length < post.photos.length) updatedPrices.push(0);
+      while (updatedQuantities.length < post.photos.length) updatedQuantities.push(1);
+      while (updatedNames.length < post.photos.length) updatedNames.push('');
+
+      if (price !== undefined) updatedPrices[index] = parseFloat(price) || 0;
+      if (quantity !== undefined) updatedQuantities[index] = parseInt(quantity, 10) || 1;
+      if (name !== undefined) updatedNames[index] = String(name).trim();
+
+      const { error: updateError } = await supabase
+        .from('service_posts')
+        .update({
+          photo_prices: updatedPrices,
+          photo_quantities: updatedQuantities,
+          photo_names: updatedNames,
+        })
+        .eq('id', postId);
+
+      if (updateError) {
+        console.error('❌ Database update error:', updateError);
+        res.status(500).json({ success: false, error: 'Failed to update photo' });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        price: updatedPrices[index],
+        quantity: updatedQuantities[index],
+        name: updatedNames[index],
+      });
+    } catch (error: unknown) {
+      console.error('❌ Photo edit error:', error);
+      res.status(500).json({ success: false, error: 'Failed to edit photo' });
+    }
+  }
+);
+
 export default router;

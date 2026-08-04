@@ -71,10 +71,10 @@ const BoutiqueCheckoutScreen: React.FC = () => {
       if (!stored) return;
       try {
         const addr = JSON.parse(stored);
-        // [2026-08-03] Require phone too — addresses saved before phone became mandatory
-        // (or from other stale sessions) would otherwise auto-apply here and let checkout
-        // proceed without ever routing the buyer back through ServiceAddressScreen's
-        // phone requirement.
+        // [2026-08-03] [feature/per-photo-inventory] Require phone too — addresses saved
+        // before phone became mandatory (or from other stale sessions) would otherwise
+        // auto-apply here and let checkout proceed without ever routing the buyer back
+        // through ServiceAddressScreen's phone requirement.
         if (addr.street && addr.city && addr.state && addr.zipCode && addr.phone) {
           dispatch(setShippingAddress(addr));
         }
@@ -124,9 +124,10 @@ const BoutiqueCheckoutScreen: React.FC = () => {
     return sum + Math.round(u * 100) * (item.quantity ?? 1);
   }, 0);
   const totalCents = subtotalCents + (fulfillmentMethod === 'ship' ? shippingFeeCents : 0);
-  // [2026-08-03] Also require phone — `checkout.shippingAddress` is redux-persisted, so a
-  // stale address saved before phone became mandatory (or restored via AsyncStorage above)
-  // could otherwise let checkout proceed without ever collecting a phone number.
+  // [2026-08-03] [feature/per-photo-inventory] Also require phone —
+  // `checkout.shippingAddress` is redux-persisted, so a stale address saved before phone
+  // became mandatory (or restored via AsyncStorage above) could otherwise let checkout
+  // proceed without ever collecting a phone number.
   const canPlaceOrder = fulfillmentMethod === 'pickup' || !!(shippingAddress && shippingAddress.phone);
 
   const PAYMENT_LABELS: Record<string, string> = {

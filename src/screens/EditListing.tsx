@@ -675,8 +675,9 @@ const EditListing: React.FC = () => {
         post_type: postType,
         ...(acceptsPayment ? { in_stock: parseInt(inStock) || 1 } : {}),
         ...(isBoutiqueOrJewelry ? {
-          // [2026-08-03] Was `Math.round(...) || 1000` — 0 is falsy in JS, so an explicit
-          // $0.00 shipping charge got silently replaced with $10.00. Dropped the fallback.
+          // [2026-08-03] [feature/per-photo-inventory] Was `Math.round(...) || 1000` — 0 is
+          // falsy in JS, so an explicit $0.00 shipping charge got silently replaced with
+          // $10.00. Dropped the fallback.
           shipping_charge_cents: Math.round(parseFloat(shippingCharge || '0') * 100),
           post_payment_method: postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
           post_payment_info: Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,

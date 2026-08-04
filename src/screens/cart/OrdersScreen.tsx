@@ -148,9 +148,10 @@ const OrdersScreen: React.FC = () => {
           </View>
         ) : null}
 
-        {/* Call Buyer button — [2026-08-03] added so sellers can reach the buyer directly
-            for delivery coordination; scoped to /api/orders/provider so a seller only ever
-            sees the phone number for an order they're actually fulfilling. */}
+        {/* Call Buyer button — [2026-08-03] [feature/per-photo-inventory] added so sellers
+            can reach the buyer directly for delivery coordination; scoped to
+            /api/orders/provider so a seller only ever sees the phone number for an order
+            they're actually fulfilling. */}
         {item.shipping_address?.phone ? (
           <TouchableOpacity
             style={styles.callBtn}

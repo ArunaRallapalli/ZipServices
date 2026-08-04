@@ -88,8 +88,9 @@ const ServiceAddressScreen: React.FC = () => {
   };
 
   const handleConfirm = async () => {
-    // [2026-08-03] Phone is now required — sellers had no way to reach the buyer for
-    // delivery coordination since it was previously optional and often left blank.
+    // [2026-08-03] [feature/per-photo-inventory] Phone is now required — sellers had no
+    // way to reach the buyer for delivery coordination since it was previously optional
+    // and often left blank.
     if (!phone.trim() || !street.trim() || !zipCode.trim() || !city.trim() || !state.trim()) return;
     const address = { fullName, phone, street, zipCode, city, state, notes };
     dispatch(setShippingAddress(address));
@@ -101,7 +102,8 @@ const ServiceAddressScreen: React.FC = () => {
     navigation.goBack();
   };
 
-  // [2026-08-03] phone added to required fields — see handleConfirm note above.
+  // [2026-08-03] [feature/per-photo-inventory] phone added to required fields — see
+  // handleConfirm note above.
   const isValid = !!phone.trim() && !!street.trim() && !!zipCode.trim() && !!city.trim() && !!state.trim();
 
   return (
