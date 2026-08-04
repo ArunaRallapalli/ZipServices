@@ -90,6 +90,10 @@ type AddToCartFn = (
   photoUrl: string,
   photoPrice?: number,
   selectedPayMethod?: string,
+  // [2026-08-03] [feature/per-photo-inventory] this specific photo's remaining
+  // quantity (live-fetched), used as the cart quantity-stepper cap instead of the
+  // listing-level item.in_stock.
+  photoStockOverride?: number,
 ) => boolean | void;
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -181,6 +185,9 @@ const MiniServiceCard: React.FC<{
   );
   const [liveInStock, setLiveInStock] = useState<number | null | undefined>(item.in_stock);
   const [soldPhotoIndexes, setSoldPhotoIndexes] = useState<number[]>([]);
+  // [2026-08-03] [feature/per-photo-inventory] remaining qty per photo index — see
+  // ServicePosts.ts GET /:postId (photo_remaining_qty). Undefined until fetched.
+  const [photoRemainingQty, setPhotoRemainingQty] = useState<number[] | undefined>(undefined);
   const [thriftPendingIndexes, setThriftPendingIndexes] = useState<number[]>([]);
   const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
   const [stockChecking, setStockChecking] = useState(false);
@@ -215,6 +222,7 @@ const MiniServiceCard: React.FC<{
           if (post?.in_stock != null) setLiveInStock(post.in_stock);
           if (Array.isArray(post?.sold_photo_indexes)) setSoldPhotoIndexes(post.sold_photo_indexes);
           if (Array.isArray(post?.thrift_pending_indexes)) setThriftPendingIndexes(post.thrift_pending_indexes);
+          if (Array.isArray(post?.photo_remaining_qty)) setPhotoRemainingQty(post.photo_remaining_qty);
           if (isThriftingFree) {
             if (post?.in_stock != null && post.in_stock <= 0) setRequestStatus('unavailable');
             else setRequestStatus(prev => prev === 'unavailable' ? 'idle' : prev);
@@ -322,6 +330,7 @@ const MiniServiceCard: React.FC<{
       return;
     }
     // Live stock guard — re-check DB right before adding to prevent race conditions
+    let photoStock: number | undefined;
     if (item.post_id) {
       try {
         const res: any = await api.get(`/api/service-posts/${item.post_id}`);
@@ -329,9 +338,18 @@ const MiniServiceCard: React.FC<{
         if (post?.in_stock != null) setLiveInStock(post.in_stock);
         if (Array.isArray(post?.sold_photo_indexes)) {
           setSoldPhotoIndexes(post.sold_photo_indexes);
-          if (post.sold_photo_indexes.includes(selectedPhotoIndex)) return; // this photo is sold
         }
-        // Only block on in_stock for single-photo posts; multi-photo posts use sold_photo_indexes
+        // [2026-08-03] [feature/per-photo-inventory] photo_remaining_qty is
+        // quantity-aware; falls back to the boolean sold_photo_indexes check for
+        // photos with no explicit quantity (listings created before this feature).
+        if (Array.isArray(post?.photo_remaining_qty)) {
+          setPhotoRemainingQty(post.photo_remaining_qty);
+          photoStock = post.photo_remaining_qty[selectedPhotoIndex];
+          if (photoStock != null && photoStock <= 0) return;
+        } else if (Array.isArray(post?.sold_photo_indexes) && post.sold_photo_indexes.includes(selectedPhotoIndex)) {
+          return; // this photo is sold
+        }
+        // Only block on in_stock for single-photo posts; multi-photo posts use per-photo checks above
         const isMultiPhoto = (item.photos?.length ?? 0) > 1;
         if (!isMultiPhoto && post?.in_stock != null && post.in_stock <= 0) return;
       } catch { /* proceed if check fails */ }
@@ -341,7 +359,7 @@ const MiniServiceCard: React.FC<{
       return;
     }
     const firstPhotoUrl = item.photos?.[selectedPhotoIndex] ?? item.photos?.[0] ?? '';
-    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex], selectedPayMethod ?? undefined);
+    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex], selectedPayMethod ?? undefined, photoStock);
     if (added === false) return;
     setAddedToCart(true);
     Alert.alert(
@@ -517,14 +535,20 @@ const MiniServiceCard: React.FC<{
               </View>
             )}
 
-            {/* 6. Available count — total photos minus sold photos */}
+            {/* 6. Available count — total photos minus sold-out photos.
+                [2026-08-03] [feature/per-photo-inventory] Uses photo_remaining_qty
+                (per-photo quantity) once loaded instead of a boolean sold-once count,
+                so a photo with qty > 1 isn't counted as unavailable after one sale. */}
             {paymentCategories?.has(item.service_category) && !isThriftingFree && (item.photos ?? []).length > 0 && (
               (() => {
-                const available = (item.photos?.length ?? 0) - soldPhotoIndexes.length;
+                const total = item.photos?.length ?? 0;
+                const available = photoRemainingQty
+                  ? photoRemainingQty.filter(q => q > 0).length
+                  : total - soldPhotoIndexes.length;
                 return available > 0 ? (
                   <View style={modalStyles.deliveryRow}>
                     <Ionicons name="cube-outline" size={14} color="#555" />
-                    <Text style={modalStyles.deliveryText}> Available: {available} of {item.photos!.length}</Text>
+                    <Text style={modalStyles.deliveryText}> Available: {available} of {total}</Text>
                   </View>
                 ) : null;
               })()
@@ -621,9 +645,23 @@ const MiniServiceCard: React.FC<{
                     })()}
                   </>
                 ) : (
-                  /* ── Paid categories: Payment method selector + Add to Cart ── */
+                  /* ── Paid categories: Payment method selector + Add to Cart ──
+                     [2026-08-03] [feature/per-photo-inventory] Once photo_remaining_qty
+                     has loaded, availability is based on each photo's own remaining
+                     quantity instead of a boolean "sold once" flag — a photo with qty
+                     100 doesn't go unavailable after a single sale, and siblings on the
+                     same post aren't affected by one photo selling out. Falls back to
+                     the old sold-once behavior for photos with no explicit quantity
+                     (listings created before this feature) or while still loading. */
                   paymentCategories?.has(item.service_category) && (
-                    soldPhotoIndexes.includes(selectedPhotoIndex) || ((item.photos ?? []).length > 0 && soldPhotoIndexes.length >= (item.photos ?? []).length) ? (
+                    (photoRemainingQty
+                      ? photoRemainingQty[selectedPhotoIndex] <= 0
+                      : soldPhotoIndexes.includes(selectedPhotoIndex)) ||
+                    ((item.photos ?? []).length > 0 && (
+                      photoRemainingQty
+                        ? photoRemainingQty.every(q => q <= 0)
+                        : soldPhotoIndexes.length >= (item.photos ?? []).length
+                    )) ? (
                       <View style={modalStyles.unavailableBox}>
                         <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
                         <TouchableOpacity onPress={() => setModalVisible(false)} style={modalStyles.keepBrowsingBtn}>

@@ -153,6 +153,10 @@ const SearchResultsScreen: React.FC = () => {
     photoUrl: string,
     photoPrice?: number,
     selectedPayMethod?: string,
+    // [2026-08-03] [feature/per-photo-inventory] this specific photo's live remaining
+    // quantity — takes priority over the listing-level item.in_stock below, since
+    // in_stock is shared across all photos and no longer reflects one product's stock.
+    photoStockOverride?: number,
   ): boolean => {
     if (cartItems.length > 0) {
     }
@@ -168,7 +172,7 @@ const SearchResultsScreen: React.FC = () => {
       provider_name: item.business_name ?? item.poster_name ?? '',
       saved_for_later: false,
       quantity: 1,
-      in_stock: item.in_stock,
+      in_stock: photoStockOverride ?? item.in_stock,
       shipping_charge_cents: item.shipping_charge_cents || undefined,
       post_payment_method: item.post_payment_method || undefined,
       post_payment_info: item.post_payment_info || undefined,

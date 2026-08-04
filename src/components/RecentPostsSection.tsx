@@ -54,6 +54,10 @@ type AddToCartFn = (
   photoUrl: string,
   photoPrice?: number,
   selectedPayMethod?: string,
+  // [2026-08-03] [feature/per-photo-inventory] this specific photo's remaining
+  // quantity (live-fetched), used as the cart quantity-stepper cap instead of the
+  // listing-level item.in_stock.
+  photoStockOverride?: number,
 ) => boolean | void;
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -143,6 +147,9 @@ const DetailModal: React.FC<{
   );
   const [liveInStock, setLiveInStock] = useState<number | null | undefined>(item.in_stock);
   const [soldPhotoIndexes, setSoldPhotoIndexes] = useState<number[]>([]);
+  // [2026-08-03] [feature/per-photo-inventory] remaining qty per photo index — see
+  // ServicePosts.ts GET /:postId (photo_remaining_qty). Undefined until fetched.
+  const [photoRemainingQty, setPhotoRemainingQty] = useState<number[] | undefined>(undefined);
   const [thriftPendingIndexes, setThriftPendingIndexes] = useState<number[]>([]);
   const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
   const [stockChecking, setStockChecking] = useState(false);
@@ -171,6 +178,7 @@ const DetailModal: React.FC<{
           if (post?.in_stock != null) setLiveInStock(post.in_stock);
           if (Array.isArray(post?.sold_photo_indexes)) setSoldPhotoIndexes(post.sold_photo_indexes);
           if (Array.isArray(post?.thrift_pending_indexes)) setThriftPendingIndexes(post.thrift_pending_indexes);
+          if (Array.isArray(post?.photo_remaining_qty)) setPhotoRemainingQty(post.photo_remaining_qty);
           if (isThriftingFree) {
             if (post?.in_stock != null && post.in_stock <= 0) setRequestStatus('unavailable');
             else setRequestStatus(prev => prev === 'unavailable' ? 'idle' : prev);
@@ -279,6 +287,7 @@ const DetailModal: React.FC<{
       return;
     }
     // Live stock guard — re-check DB right before adding to prevent race conditions
+    let photoStock: number | undefined;
     if (item.post_id) {
       try {
         const res: any = await api.get(`/api/service-posts/${item.post_id}`);
@@ -286,9 +295,17 @@ const DetailModal: React.FC<{
         if (post?.in_stock != null) setLiveInStock(post.in_stock);
         if (Array.isArray(post?.sold_photo_indexes)) {
           setSoldPhotoIndexes(post.sold_photo_indexes);
-          if (post.sold_photo_indexes.includes(selectedPhotoIndex)) return;
         }
-        // Only block on in_stock for single-photo posts; multi-photo posts use sold_photo_indexes
+        // [2026-08-03] [feature/per-photo-inventory] see SearchResultsList.tsx for the
+        // same change / rationale.
+        if (Array.isArray(post?.photo_remaining_qty)) {
+          setPhotoRemainingQty(post.photo_remaining_qty);
+          photoStock = post.photo_remaining_qty[selectedPhotoIndex];
+          if (photoStock != null && photoStock <= 0) return;
+        } else if (Array.isArray(post?.sold_photo_indexes) && post.sold_photo_indexes.includes(selectedPhotoIndex)) {
+          return;
+        }
+        // Only block on in_stock for single-photo posts; multi-photo posts use per-photo checks above
         const isMultiPhoto = photos.length > 1;
         if (!isMultiPhoto && post?.in_stock != null && post.in_stock <= 0) return;
       } catch { /* proceed if check fails */ }
@@ -298,7 +315,7 @@ const DetailModal: React.FC<{
       return;
     }
     const firstPhotoUrl = photos[selectedPhotoIndex] ?? photos[0] ?? '';
-    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex] || undefined, selectedPayMethod ?? undefined);
+    const added = onAddToCart?.(item, selectedPhotoIndex, firstPhotoUrl, item.photo_prices?.[selectedPhotoIndex] || undefined, selectedPayMethod ?? undefined, photoStock);
     if (added === false) return;
     setAddedToCart(true);
     Alert.alert(
@@ -413,10 +430,14 @@ const DetailModal: React.FC<{
             </View>
           )}
 
-          {/* 6. In Stock — only for payment-enabled non-thrifting categories */}
+          {/* 6. In Stock — only for payment-enabled non-thrifting categories.
+              [2026-08-03] [feature/per-photo-inventory] see SearchResultsList.tsx for
+              the same change / rationale. */}
           {paymentCategories?.has(item.service_category) && !isThriftingFree && photos.length > 0 && (
             (() => {
-              const available = photos.length - soldPhotoIndexes.length;
+              const available = photoRemainingQty
+                ? photoRemainingQty.filter(q => q > 0).length
+                : photos.length - soldPhotoIndexes.length;
               return available > 0 ? (
                 <View style={modalStyles.deliveryRow}>
                   <Ionicons name="cube-outline" size={14} color="#555" />
@@ -514,9 +535,18 @@ const DetailModal: React.FC<{
                   })()}
                 </>
               ) : (
-                /* ── Paid categories: Payment method selector + Add to Cart ── */
+                /* ── Paid categories: Payment method selector + Add to Cart ──
+                   [2026-08-03] [feature/per-photo-inventory] see SearchResultsList.tsx
+                   for the same change / rationale. */
                 paymentCategories?.has(item.service_category) && (
-                  soldPhotoIndexes.includes(selectedPhotoIndex) || (photos.length > 0 && soldPhotoIndexes.length >= photos.length) ? (
+                  (photoRemainingQty
+                    ? photoRemainingQty[selectedPhotoIndex] <= 0
+                    : soldPhotoIndexes.includes(selectedPhotoIndex)) ||
+                  (photos.length > 0 && (
+                    photoRemainingQty
+                      ? photoRemainingQty.every(q => q <= 0)
+                      : soldPhotoIndexes.length >= photos.length
+                  )) ? (
                     <View style={modalStyles.unavailableBox}>
                       <Text style={modalStyles.unavailableText}>Sorry, not available</Text>
                       <TouchableOpacity onPress={onClose} style={modalStyles.keepBrowsingBtn}>
