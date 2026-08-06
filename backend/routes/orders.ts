@@ -482,6 +482,7 @@ router.post('/api/orders', async (req: Request, res: Response): Promise<void> =>
           buyerTimezone:  buyer_timezone || undefined,
           paymentMethods: payment_methods || [],
           paymentInfos:   payment_infos || {},
+          shippingAddress: shipping_address || null,
         });
       } catch (emailErr) {
         console.error(`❌ Order placement email error for #${data.id}:`, emailErr);

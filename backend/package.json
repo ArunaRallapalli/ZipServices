@@ -4,6 +4,7 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
+    "predev": "node scripts/free-port.js",
     "dev": "nodemon --watch . --ext ts --exec ts-node server.ts",
     "build": "tsc --project tsconfig.backend.json",
     "test": "cross-env NODE_ENV=test NODE_TLS_REJECT_UNAUTHORIZED=0 jest",

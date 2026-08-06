@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from '../../Utils/Alert';
 import { setAgreedAmount } from '../../store/cartSlice';
 import { setShippingAddress } from '../../store/checkoutSlice';
 import type { RootState } from '../../store/store';
@@ -309,14 +310,22 @@ const BoutiqueCheckoutScreen: React.FC = () => {
         <View style={styles.placeOrderRow}>
           <TouchableOpacity
             style={[styles.placeOrderBtn, !canPlaceOrder && styles.disabledBtn]}
-            disabled={!canPlaceOrder}
-            onPress={() => navigation.navigate('BoutiquePaymentScreen', {
-              totalCents,
-              items: activeItems,
-              providerPaymentMethods,
-              providerPaymentInfos,
-              fulfillmentMethod,
-            })}
+            onPress={() => {
+              if (!canPlaceOrder) {
+                Alert.alert(
+                  'Address Required',
+                  'Please enter your shipping address and phone number before placing your order.'
+                );
+                return;
+              }
+              navigation.navigate('BoutiquePaymentScreen', {
+                totalCents,
+                items: activeItems,
+                providerPaymentMethods,
+                providerPaymentInfos,
+                fulfillmentMethod,
+              });
+            }}
           >
             <Text style={styles.placeOrderBtnText}>Place Order</Text>
           </TouchableOpacity>

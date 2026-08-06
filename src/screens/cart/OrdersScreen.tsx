@@ -17,12 +17,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl, Image, Linking,
+  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Alert } from '../../Utils/Alert';
 import api from '../../api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_COLOR: Record<string, string> = {
   pending:   '#F59E0B',
@@ -33,6 +34,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 const OrdersScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { userId } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,6 +78,16 @@ const OrdersScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  const messageBuyer = (order: any, firstItem: any) => {
+    navigation.navigate('ChatScreen', {
+      currentUserId: userId,
+      otherUserId: order.buyer_user_id,
+      otherUserName: order.buyer_name || 'Customer',
+      postId: firstItem?.post_id || undefined,
+      postTitle: firstItem?.title || undefined,
+    });
   };
 
   const renderOrder = ({ item }: { item: any }) => {
@@ -148,18 +160,21 @@ const OrdersScreen: React.FC = () => {
           </View>
         ) : null}
 
-        {/* Call Buyer button — [2026-08-03] [feature/per-photo-inventory] added so sellers
-            can reach the buyer directly for delivery coordination; scoped to
-            /api/orders/provider so a seller only ever sees the phone number for an order
-            they're actually fulfilling. */}
+        {/* Message Buyer button — lets sellers reach the buyer directly for delivery
+            coordination via in-app chat. Phone number (when the buyer provided one on
+            their shipping address) is shown as plain text below so the seller can dial
+            it themselves — a tel: link doesn't work well from a desktop browser. */}
+        <TouchableOpacity
+          style={styles.callBtn}
+          onPress={() => messageBuyer(item, itemList[0])}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={16} color="#4A90E2" />
+          <Text style={styles.callBtnText}>Message Buyer</Text>
+        </TouchableOpacity>
         {item.shipping_address?.phone ? (
-          <TouchableOpacity
-            style={styles.callBtn}
-            onPress={() => Linking.openURL(`tel:${item.shipping_address.phone}`)}
-          >
-            <Ionicons name="call-outline" size={16} color="#4A90E2" />
-            <Text style={styles.callBtnText}>Call Buyer</Text>
-          </TouchableOpacity>
+          <Text style={styles.phoneText}>
+            Or contact via phone: {item.shipping_address.phone}
+          </Text>
         ) : null}
 
         {/* Mark completed button */}
@@ -244,6 +259,7 @@ const styles = StyleSheet.create({
   completeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   callBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#4A90E2', borderRadius: 8, paddingVertical: 10, marginTop: 10 },
   callBtnText: { color: '#4A90E2', fontWeight: '700', fontSize: 14 },
+  phoneText: { fontSize: 15, fontWeight: '700', color: '#333', textAlign: 'center', marginTop: 6 },
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 16, color: '#aaa', marginTop: 12 },
   itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },

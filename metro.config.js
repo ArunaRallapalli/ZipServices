@@ -4,7 +4,10 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-config.resolver.blockList = [/backend\/.*/, /\.env$/, /\.env\..*/];
+// [\\/] instead of a literal / — on Windows Metro's paths use backslashes, so
+// /backend\/.*/  never matched anything there and this blockList was silently
+// a no-op until the module graph got walked fresh (e.g. after `-c`).
+config.resolver.blockList = [/backend[\\/].*/, /\.env$/, /\.env\..*/];
 config.resolver.sourceExts = ['jsx', 'js', 'ts', 'tsx', 'json'];
 config.resolver.assetExts.push('json');
 config.resolver.unstable_enablePackageExports = false; // ADDED: suppress invalid package.json exports warnings

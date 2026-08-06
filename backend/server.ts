@@ -220,6 +220,78 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 export default app;
 
+// Finds pending orders whose expires_at has passed, marks them as 'expired', and
+// reverts in_stock for each item so the product becomes available again. Declared
+// at module scope (rather than inside the NODE_ENV guard below, where it's actually
+// invoked on a timer) so tests can import and call it directly instead of waiting
+// on the real 30-minute interval.
+export async function sweepExpiredOrders(): Promise<void> {
+  try {
+    console.log('⏰ Order expiry sweep: checking for expired pending orders...');
+
+    const now = new Date().toISOString();
+    const fallbackCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Query 1: orders with expires_at explicitly in the past
+    const { data: expiredByDate, error: err1 } = await supabase
+      .from('payments')
+      .select('id, items')
+      .eq('status', 'pending')
+      .lt('expires_at', now);
+
+    // Query 2: orders where expires_at is NULL (placed before column existed) and older than 12h
+    const { data: expiredByAge, error: err2 } = await supabase
+      .from('payments')
+      .select('id, items')
+      .eq('status', 'pending')
+      .is('expires_at', null)
+      .lt('created_at', fallbackCutoff);
+
+    if (err1) console.error('⚠️ Sweep query 1 error:', err1.message);
+    if (err2) console.error('⚠️ Sweep query 2 error:', err2.message);
+
+    const expiredOrders = [
+      ...(expiredByDate || []),
+      ...(expiredByAge  || []),
+    ];
+
+    if (expiredOrders.length === 0) {
+      console.log('⏰ Sweep complete — no expired orders found');
+      return;
+    }
+
+    console.log(`⏰ Found ${expiredOrders.length} expired order(s) — reverting stock and marking expired`);
+
+    for (const order of expiredOrders) {
+      // Mark as expired
+      await supabase.from('payments').update({ status: 'expired' }).eq('id', order.id);
+      console.log(`✅ Order #${order.id} marked expired`);
+
+      // Revert in_stock for each item
+      if (!order.items) continue;
+      const stockIncrements = new Map<number, number>();
+      for (const item of order.items) {
+        const postId = Number(item.post_id);
+        const qty    = Number(item.quantity ?? 1);
+        if (postId) stockIncrements.set(postId, (stockIncrements.get(postId) ?? 0) + qty);
+      }
+      await Promise.all(
+        Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
+          const { data: post } = await supabase
+            .from('service_posts').select('in_stock').eq('id', postId).single();
+          const newStock = Number(post?.in_stock ?? 0) + qty;
+          await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
+          console.log(`✅ in_stock reverted for post #${postId} +${qty} → ${newStock} (order expired)`);
+        }),
+      );
+    }
+
+    console.log('✅ Order expiry sweep complete');
+  } catch (err) {
+    console.error('❌ Order expiry sweep error:', err);
+  }
+}
+
 if (process.env.NODE_ENV !== 'test') {
 // Start server
 console.log("🔄 Attempting to start server on port 5000...");
@@ -315,75 +387,6 @@ async function sweepUnreadMessages(): Promise<void> {
 setInterval(sweepUnreadMessages, 60 * 60 * 1000);
 
 // ── 24h pending order expiry sweep ──────────────────────────────────────────
-// Finds pending orders whose expires_at has passed, marks them as 'expired',
-// and reverts in_stock for each item so the product becomes available again.
-async function sweepExpiredOrders(): Promise<void> {
-  try {
-    console.log('⏰ Order expiry sweep: checking for expired pending orders...');
-
-    const now = new Date().toISOString();
-    const fallbackCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-    // Query 1: orders with expires_at explicitly in the past
-    const { data: expiredByDate, error: err1 } = await supabase
-      .from('payments')
-      .select('id, items')
-      .eq('status', 'pending')
-      .lt('expires_at', now);
-
-    // Query 2: orders where expires_at is NULL (placed before column existed) and older than 12h
-    const { data: expiredByAge, error: err2 } = await supabase
-      .from('payments')
-      .select('id, items')
-      .eq('status', 'pending')
-      .is('expires_at', null)
-      .lt('created_at', fallbackCutoff);
-
-    if (err1) console.error('⚠️ Sweep query 1 error:', err1.message);
-    if (err2) console.error('⚠️ Sweep query 2 error:', err2.message);
-
-    const expiredOrders = [
-      ...(expiredByDate || []),
-      ...(expiredByAge  || []),
-    ];
-
-    if (expiredOrders.length === 0) {
-      console.log('⏰ Sweep complete — no expired orders found');
-      return;
-    }
-
-    console.log(`⏰ Found ${expiredOrders.length} expired order(s) — reverting stock and marking expired`);
-
-    for (const order of expiredOrders) {
-      // Mark as expired
-      await supabase.from('payments').update({ status: 'expired' }).eq('id', order.id);
-      console.log(`✅ Order #${order.id} marked expired`);
-
-      // Revert in_stock for each item
-      if (!order.items) continue;
-      const stockIncrements = new Map<number, number>();
-      for (const item of order.items) {
-        const postId = Number(item.post_id);
-        const qty    = Number(item.quantity ?? 1);
-        if (postId) stockIncrements.set(postId, (stockIncrements.get(postId) ?? 0) + qty);
-      }
-      await Promise.all(
-        Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
-          const { data: post } = await supabase
-            .from('service_posts').select('in_stock').eq('id', postId).single();
-          const newStock = Number(post?.in_stock ?? 0) + qty;
-          await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
-          console.log(`✅ in_stock reverted for post #${postId} +${qty} → ${newStock} (order expired)`);
-        }),
-      );
-    }
-
-    console.log('✅ Order expiry sweep complete');
-  } catch (err) {
-    console.error('❌ Order expiry sweep error:', err);
-  }
-}
-
 // Run expiry sweep immediately on startup, then every 30 minutes
 sweepExpiredOrders();
 setInterval(sweepExpiredOrders, 30 * 60 * 1000);

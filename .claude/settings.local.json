@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(node \"C:\\\\Users\\\\ralla\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-ralla-NewMobileAppProject-ZipServices\\\\34a89e73-9f44-4284-b114-cd11210f6378\\\\scratchpad\\\\reformat_thrift_row.js\")"
     ]
   }
 }

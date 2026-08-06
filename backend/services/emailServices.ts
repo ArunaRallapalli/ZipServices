@@ -694,6 +694,16 @@ export async function sendOrderStatusEmails({
 // ORDER PLACEMENT EMAILS (to Customer, Provider, and Admin)
 // ============================================================================
 
+interface OrderShippingAddress {
+  fullName?: string;
+  phone?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  notes?: string;
+}
+
 interface OrderPlacementEmailParams {
   orderId: string | number;
   customerEmail: string;
@@ -707,6 +717,21 @@ interface OrderPlacementEmailParams {
   buyerTimezone?: string;
   paymentMethods?: string[];
   paymentInfos?: Record<string, string>;
+  shippingAddress?: OrderShippingAddress | null;
+}
+
+// Renders the buyer's shipping address + phone as an HTML block, or '' when there's
+// none (e.g. pickup orders never collect one).
+function renderShippingAddressBlock(address?: OrderShippingAddress | null): string {
+  if (!address || !address.street) return '';
+  return `
+    <h3 style="margin-top:20px">📦 Shipping Address</h3>
+    <table>
+      ${address.fullName ? `<tr><th>Name</th><td>${address.fullName}</td></tr>` : ''}
+      ${address.phone ? `<tr><th>Phone</th><td>${address.phone}</td></tr>` : ''}
+      <tr><th>Address</th><td>${address.street}, ${address.city || ''}, ${address.state || ''} ${address.zipCode || ''}</td></tr>
+      ${address.notes ? `<tr><th>Notes</th><td>${address.notes}</td></tr>` : ''}
+    </table>`;
 }
 
 function buildProviderPlacementHtml(params: {
@@ -719,8 +744,9 @@ function buildProviderPlacementHtml(params: {
   buyerTimezone?: string;
   paymentMethods?: string[];
   paymentInfos?: Record<string, string>;
+  shippingAddress?: OrderShippingAddress | null;
 }): string {
-  const { providerName, customerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos } = params;
+  const { providerName, customerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos, shippingAddress } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const formattedDate = new Date(orderDate).toLocaleString('en-US', {
     timeZone: buyerTimezone || 'UTC',
@@ -815,6 +841,8 @@ function buildProviderPlacementHtml(params: {
               </tbody>
             </table>
 
+            ${renderShippingAddressBlock(shippingAddress)}
+
             ${totalCents > 0 ? `
             <div class="warning-box">
               <strong>⚠️ Status: Awaiting Payment</strong><br/>
@@ -861,8 +889,9 @@ function buildCustomerPlacementHtml(params: {
   buyerTimezone?: string;
   paymentMethods?: string[];
   paymentInfos?: Record<string, string>;
+  shippingAddress?: OrderShippingAddress | null;
 }): string {
-  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos } = params;
+  const { customerName, providerName, orderId, items, totalCents, orderDate, buyerTimezone, paymentMethods, paymentInfos, shippingAddress } = params;
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const formattedDate = new Date(orderDate).toLocaleString('en-US', {
     timeZone: buyerTimezone || 'UTC',
@@ -956,6 +985,8 @@ function buildCustomerPlacementHtml(params: {
                 </tr>
               </tbody>
             </table>
+
+            ${renderShippingAddressBlock(shippingAddress)}
 
             ${totalCents > 0 ? `
             <div class="next-step-box">
@@ -1120,6 +1151,7 @@ export async function sendOrderPlacementEmails({
   buyerTimezone,
   paymentMethods,
   paymentInfos,
+  shippingAddress,
 }: OrderPlacementEmailParams): Promise<void> {
   const displayId = String(orderId).slice(0, 8).toUpperCase();
   const date = orderDate || new Date().toISOString();
@@ -1130,7 +1162,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'zipmarket333@gmail.com',
       to:      providerEmail,
       subject: `New Order Request #${displayId} — GoZipMarket`,
-      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
+      html:    buildProviderPlacementHtml({ providerName, customerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos, shippingAddress }),
     }).then(() => console.log(`✅ Order placement email sent to provider ${providerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to provider ${providerEmail}:`, err)),
 
@@ -1139,7 +1171,7 @@ export async function sendOrderPlacementEmails({
       replyTo: 'zipmarket333@gmail.com',
       to:      customerEmail,
       subject: `Order Placed #${displayId} — GoZipMarket`,
-      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos }),
+      html:    buildCustomerPlacementHtml({ customerName, providerName, orderId, items, totalCents, orderDate: date, buyerTimezone, paymentMethods, paymentInfos, shippingAddress }),
     }).then(() => console.log(`✅ Order placement email sent to customer ${customerEmail}`))
       .catch(err => console.error(`❌ Failed to send placement email to customer ${customerEmail}:`, err)),
 

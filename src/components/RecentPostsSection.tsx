@@ -441,7 +441,7 @@ const DetailModal: React.FC<{
               return available > 0 ? (
                 <View style={modalStyles.deliveryRow}>
                   <Ionicons name="cube-outline" size={14} color="#555" />
-                  <Text style={modalStyles.deliveryText}> Available: {available} of {photos.length}</Text>
+                  <Text style={modalStyles.deliveryText}> Available: {available} of {photos.length} products</Text>
                 </View>
               ) : null;
             })()

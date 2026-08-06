@@ -559,6 +559,19 @@ async function updateLastSeen(userId: number): Promise<void> {
   if (error) console.error(`❌ updateLastSeen failed for user ${userId}:`, error);
 }
 
+// users.last_seen_at / last_email_sent_at are `timestamp without time zone` columns
+// (see schema.sql). Postgres strips the UTC 'Z' this app writes with `new Date().
+// toISOString()` before storing, so what comes back on read has no timezone marker.
+// JS's Date parser then treats a bare "2026-08-06T16:56:39" as LOCAL time, not UTC —
+// on any server not running in UTC, that silently shifts every comparison by the
+// server's UTC offset (confirmed: produced a -420m/7h skew in this environment,
+// which broke the active-user guard's `msSinceSeen >= 0` check every single time).
+// Appending 'Z' before parsing forces the correct UTC interpretation.
+function parseUtcTimestamp(value: string): Date {
+  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
+}
+
 // ---------------------------------------------------------------------------
 // sendSmartNotification
 //
@@ -616,7 +629,7 @@ export async function sendSmartNotification(
   // 2. Skip if receiver is currently active (last_seen_at within 10 minutes)
   const TEN_MINUTES_MS = 10 * 60 * 1000;
   if (receiverRow.last_seen_at) {
-    const msSinceSeen = Date.now() - new Date(receiverRow.last_seen_at).getTime();
+    const msSinceSeen = Date.now() - parseUtcTimestamp(receiverRow.last_seen_at).getTime();
     if (msSinceSeen >= 0 && msSinceSeen < TEN_MINUTES_MS) {
       logger.info(`chat-email: skipped — receiver ${receiverId} active ${Math.round(msSinceSeen / 1000)}s ago`);
       return;
@@ -640,7 +653,7 @@ export async function sendSmartNotification(
   // 4. Cooldown check for batched follow-up emails (only applies when > 1 unread)
   const ONE_HOUR_MS = 60 * 60 * 1000;
   if (unreadCount > 1 && receiverRow.last_email_sent_at) {
-    const msSinceEmail = Date.now() - new Date(receiverRow.last_email_sent_at).getTime();
+    const msSinceEmail = Date.now() - parseUtcTimestamp(receiverRow.last_email_sent_at).getTime();
     if (msSinceEmail < ONE_HOUR_MS) {
       logger.info(`chat-email: skipped — cooldown active (${unreadCount} unread, ${Math.round(msSinceEmail / 60000)}m since last email)`);
       return;

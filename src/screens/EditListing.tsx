@@ -119,7 +119,8 @@ const EditListing: React.FC = () => {
   const [zipCode, setZipCode] = useState("");
 
   // Boutique-specific fields
-  const [shippingCharge, setShippingCharge] = useState('10.00');
+  // Defaults to free shipping — sellers who want to charge must opt in by typing an amount.
+  const [shippingCharge, setShippingCharge] = useState('0.00');
   const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
   const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
   const [profilePaymentMethods, setProfilePaymentMethods] = useState<string[]>([]);
@@ -607,7 +608,7 @@ const EditListing: React.FC = () => {
       return false;
     }
 
-    if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
+    if (acceptsPayment && !isThrifting && !isProductSaleCategory && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       newErrors.price = "Please enter a price greater than $0.00";
     }
 
@@ -705,7 +706,17 @@ const EditListing: React.FC = () => {
         title: title.trim(),
         description: description.trim() || null,
         service_category: serviceCategory,
-        price: priceRange.trim() || null,
+        // [feature/per-photo-inventory] For Boutique/Jewelry/Indian Groceries, the top-level
+        // price is a display aggregate (lowest per-photo price) — the real price customers
+        // pay comes from each photo's own price, edited in the Photos section below.
+        price: isBoutiqueOrJewelry
+          ? (() => {
+              const photoPrices = [...existingPhotoMeta, ...newPhotoMeta]
+                .map(m => parseFloat(m.price) || 0)
+                .filter(p => p > 0);
+              return photoPrices.length > 0 ? String(Math.min(...photoPrices)) : null;
+            })()
+          : (priceRange.trim() || null),
         delivery_timeline: deliveryTimeline.trim() || null,
         phone_number: phoneNumber.replace(/\D/g, "") || null, // Remove formatting
         contact_email: contactEmail.trim(),
@@ -998,8 +1009,10 @@ const EditListing: React.FC = () => {
             <Text style={styles.charCount}>{description.length}/500</Text>
           </View>
 
-          {/* Price Range / Budget field */}
-          {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
+          {/* Price Range / Budget field — hidden for Boutique/Jewelry/Indian Groceries;
+              price is set per photo in the Photos section below instead. */}
+          {!isProductCategory(serviceCategory) && (
+          serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
             <View style={styles.section}>
               <Text style={styles.label}>
                 Price per Item ($) <Text style={styles.required}>*</Text>
@@ -1035,6 +1048,7 @@ const EditListing: React.FC = () => {
                 editable={!saving}
               />
             </View>
+          )
           )}
 
           {/* Delivery Timeline — only for payment-enabled categories */}

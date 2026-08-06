@@ -4,20 +4,22 @@
   "homepage": "https://gozipmarket.com",
   "main": "index.js",
   "scripts": {
+    "prestart": "node scripts/free-port.js 8081",
     "start": "expo start",
     "ios": "expo start --ios",
+    "preweb": "node scripts/free-port.js 8081",
     "web": "expo start --web",
     "build": "expo export --platform web && node fix-paths.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist --dotfiles",
+    "predev": "node scripts/free-port.js 8081",
     "dev": "expo start",
+    "web:clean": "node scripts/free-port.js 8081 && npx expo start -c",
     "android": "expo run:android",
+    "predev-backend": "node scripts/free-port.js 5000",
     "dev-backend": "nodemon --watch backend --ext ts --exec ts-node backend/server.ts",
-    "start-backend": "ts-node backend/server.ts",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:report": "playwright show-report tests/reports",
-    "test:regression": "node scripts/run-playwright-regression.js"
+    "prestart-backend": "node scripts/free-port.js 5000",
+    "start-backend": "ts-node backend/server.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
@@ -77,7 +79,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@playwright/test": "^1.60.0",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/dotenv": "^6.1.1",

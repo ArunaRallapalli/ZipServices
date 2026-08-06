@@ -68,7 +68,8 @@ const PostServiceScreen: React.FC = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [contactEmail, setContactEmail] = useState(userInfo?.email || '');
   const [inStock, setInStock] = useState('1');
-  const [shippingCharge, setShippingCharge] = useState('10.00');
+  // Defaults to free shipping — sellers who want to charge must opt in by typing an amount.
+  const [shippingCharge, setShippingCharge] = useState('0.00');
   const [postPaymentMethods, setPostPaymentMethods] = useState<string[]>([]);
   const [postPaymentInfos, setPostPaymentInfos] = useState<Record<string, string>>({});
   const [profilePaymentMethods, setProfilePaymentMethods] = useState<string[]>([]);
@@ -524,7 +525,7 @@ const PostServiceScreen: React.FC = () => {
     const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
     const isThrifting = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     const isProductSaleCategory = isProductCategory(serviceCategory);
-    if (acceptsPayment && !isThrifting && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
+    if (acceptsPayment && !isThrifting && !isProductSaleCategory && (priceRange.trim() === '' || parseFloat(priceRange) <= 0)) {
       Alert.alert('Validation Error', 'Please enter a price greater than $0.00.');
       return false;
     }
@@ -661,7 +662,15 @@ const PostServiceScreen: React.FC = () => {
         title: title.trim(),
         description: description.trim(),
         service_category: serviceCategory,
-        price: priceRange.trim() || null,
+        // [feature/per-photo-inventory] For Boutique/Jewelry/Indian Groceries, the top-level
+        // price is a display aggregate (lowest per-photo price) — the real price customers
+        // pay comes from each photo's own price, set above.
+        price: isBoutiqueOrJewelry
+          ? (() => {
+              const photoPrices = selectedPhotos.map(p => parseFloat(p.price) || 0).filter(p => p > 0);
+              return photoPrices.length > 0 ? String(Math.min(...photoPrices)) : null;
+            })()
+          : (priceRange.trim() || null),
         delivery_timeline: deliveryTimeline.trim() || null,
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
@@ -672,7 +681,10 @@ const PostServiceScreen: React.FC = () => {
         in_stock: isBoutiqueOrJewelry
           ? selectedPhotos.reduce((sum, p) => sum + (parseInt(p.quantity, 10) || 1), 0) || 1
           : parseInt(inStock) || 1,
-        shipping_charge_cents: isBoutiqueOrJewelry ? Math.round(parseFloat(shippingCharge || '10') * 100) : null,
+        // [feature/per-photo-inventory] Was `shippingCharge || '10'` — an empty string is
+        // falsy, so leaving the field blank silently charged buyers $10 instead of $0.
+        // Matches the same fix already applied in EditListing.tsx.
+        shipping_charge_cents: isBoutiqueOrJewelry ? Math.round(parseFloat(shippingCharge || '0') * 100) : null,
         post_payment_method: isBoutiqueOrJewelry && postPaymentMethods.length > 0 ? JSON.stringify(postPaymentMethods) : null,
         post_payment_info: isBoutiqueOrJewelry && Object.keys(postPaymentInfos).length > 0 ? JSON.stringify(postPaymentInfos) : null,
       };
@@ -1034,7 +1046,8 @@ const PostServiceScreen: React.FC = () => {
           </View>
           {/* ── END PHOTO SECTION ── */}
 
-          {/* Price */}
+          {/* Price — hidden for Boutique/Jewelry/Indian Groceries; price is set per photo above instead */}
+          {!isBoutiqueOrJewelry && (
           <View style={styles.inputGroup}>
             {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
               serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' ? (
@@ -1108,6 +1121,7 @@ const PostServiceScreen: React.FC = () => {
               </>
             )}
           </View>
+          )}
 
           {/* Delivery Time — only for payment-enabled categories */}
           {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (

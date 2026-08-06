@@ -173,7 +173,9 @@ const SearchResultsScreen: React.FC = () => {
       saved_for_later: false,
       quantity: 1,
       in_stock: photoStockOverride ?? item.in_stock,
-      shipping_charge_cents: item.shipping_charge_cents || undefined,
+      // Was `|| undefined` — 0 is falsy in JS, so a listing with genuine free ($0)
+      // shipping lost that value here and fell back to checkout's $10 default instead.
+      shipping_charge_cents: item.shipping_charge_cents ?? undefined,
       post_payment_method: item.post_payment_method || undefined,
       post_payment_info: item.post_payment_info || undefined,
       selected_payment_method: selectedPayMethod || undefined,
