@@ -30,7 +30,7 @@ import {
 import { Alert } from "../Utils/Alert";
 import { isProductCategory } from "../Utils/productCategories";
 import { createResponsiveStyles } from '../Utils/globalStyles';
-import { Picker } from '@react-native-picker/picker';
+import CategoryPicker from '../components/CategoryPicker'; // [2026-08-30] [feature/category-search-picker] searchable category select on native (was a bare @react-native-picker/picker Picker)
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -905,27 +905,22 @@ const PostServiceScreen: React.FC = () => {
           {/* Category */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Service Category *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={serviceCategory}
-                onValueChange={(val) => {
-                  setServiceCategory(val);
-                  const cat = serviceCategories.find(c => c.category_name === val);
-                  if (cat?.accepts_payment) setPriceRange('0.00');
-                  else setPriceRange('');
-                }}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select a category..." value="" />
-                {serviceCategories.map((category) => (
-                  <Picker.Item
-                    key={category.category_name}
-                    label={category.category_name}
-                    value={category.category_name}
-                  />
-                ))}
-              </Picker>
-            </View>
+            {/* [2026-08-30] [feature/category-search-picker] was a bare <Picker> —
+                fine on web (native <select> has browser type-ahead) but on
+                iOS/Android there's no way to type "la" and jump to "Landscaping"
+                among 100+ categories; CategoryPicker adds a searchable list on native. */}
+            <CategoryPicker
+              categories={serviceCategories}
+              selectedValue={serviceCategory}
+              onValueChange={(val) => {
+                setServiceCategory(val);
+                const cat = serviceCategories.find(c => c.category_name === val);
+                if (cat?.accepts_payment) setPriceRange('0.00');
+                else setPriceRange('');
+              }}
+              containerStyle={styles.pickerContainer}
+              pickerStyle={styles.picker}
+            />
           </View>
 
           {/* ── PHOTO UPLOAD SECTION ── */}
