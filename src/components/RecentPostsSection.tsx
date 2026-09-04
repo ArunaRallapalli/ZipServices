@@ -39,6 +39,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ServicePost } from '../Utils/searchUtils';
 import ReviewsModal from './Reviewsmodal';
+import LinkifiedText from './LinkifiedText'; // [2026-08-30] [feature/link-in-description] renders URLs in the description as tappable links
 import api from '../api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -381,9 +382,16 @@ const DetailModal: React.FC<{
 
           {/* 3. Description */}
           {item.description ? (
-            <Text style={modalStyles.descriptionText}>
-              {item.description.replace(/\s+/g, ' ').trim()}
-            </Text>
+            // [2026-08-30] [feature/link-in-description] was a plain <Text>; URLs
+            // (e.g. a YouTube link) rendered as inert text, not tappable.
+            // [2026-08-30] [feature/link-in-description] the old `.replace(/\s+/g, ' ')`
+            // also matches "\n", so a provider's numbered/multi-line list (one song
+            // link per line) was silently flattened into one run-on line. Now only
+            // repeated spaces/tabs are collapsed, and 3+ blank lines are capped at one.
+            <LinkifiedText
+              text={item.description.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()}
+              style={modalStyles.descriptionText}
+            />
           ) : (
             <Text style={modalStyles.noDescriptionText}>No description provided.</Text>
           )}

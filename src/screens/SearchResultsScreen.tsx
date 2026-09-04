@@ -121,6 +121,14 @@ const SearchResultsScreen: React.FC = () => {
   const [recentPosts, setRecentPosts] = useState<ServicePost[]>([]);
   const [loadingRecentSection, setLoadingRecentSection] = useState(true);
 
+  // [2026-08-30] [feature/link-in-description] Tried filtering this feed down to
+  // just `preselectedCategory` so a deep link's recent-posts list matched the
+  // pre-selected dropdown. Reverted: `preselectedCategory` stays set for the whole
+  // Home visit, so the All/Services/Sale tabs in RecentPostsSection — which filter
+  // further on top of whatever list they're given (RecentPostsSection.tsx ~859) —
+  // had nothing left to show once locked to one category, breaking normal
+  // browsing. The dropdown pre-fill alone is enough; Home should stay browsable.
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(true);

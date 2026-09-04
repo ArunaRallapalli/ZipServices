@@ -153,6 +153,13 @@ export type RootStackParamList = {
  TabWrapperScreen: {
     screen?: keyof TabParamList;
     params?: TabParamList[keyof TabParamList];
+    // [2026-08-30] [feature/link-in-description] a bare external URL (e.g. an
+    // Instagram/Facebook bio link like gozipmarket.com/Home?preselectedCategory=X)
+    // resolves to TabWrapperScreen with its query string as flat top-level params —
+    // it never arrives nested under `params` above. TabWrapperScreen forwards these
+    // into the Home tab itself; see EFFECT 2b in TabWrapperScreen.tsx.
+    preselectedCategory?: string;
+    isGuest?: boolean;
   };
   CartScreen: undefined;
   BoutiqueCheckoutScreen: { fulfillmentMethod?: 'ship' | 'pickup' };

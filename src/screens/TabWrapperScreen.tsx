@@ -149,6 +149,32 @@ const BottomTabs: React.FC = () => {
   }, [route.params?.screen]);
 
   /* ================================================================
+   * EFFECT 2b: [2026-08-30] [feature/link-in-description] Forward a bare
+   * "?preselectedCategory=" query param straight into the Home tab.
+   * A plain external link (Instagram/Facebook bio link, e.g.
+   * gozipmarket.com/Home?preselectedCategory=Devotional+Services) resolves
+   * to TabWrapperScreen with preselectedCategory as a flat top-level param —
+   * EFFECT 2 above only forwards the nested {screen, params} shape used by
+   * in-app navigation, so this value never reached the Home tab and the
+   * category dropdown stayed on its default (blank) state.
+   * ================================================================ */
+  useEffect(() => {
+    const category = route.params?.preselectedCategory;
+    if (category) {
+      requestAnimationFrame(() => {
+        const tabNav = navigation as any;
+        if (tabNav && typeof tabNav.navigate === 'function') {
+          try {
+            tabNav.navigate('Home', { preselectedCategory: category });
+          } catch (error) {
+            console.log('[BottomTabs] preselectedCategory forward error:', error);
+          }
+        }
+      });
+    }
+  }, [route.params?.preselectedCategory]);
+
+  /* ================================================================
    * EFFECT 3: Check for session expiration on mount
    * ================================================================ */
   useEffect(() => {

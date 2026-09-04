@@ -7,6 +7,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Modal, Dim
 import { Ionicons } from "@expo/vector-icons";
 import StarRating from "./StarRating";
 import ReviewsModal from "./Reviewsmodal";
+import LinkifiedText from "./LinkifiedText"; // [2026-08-30] [feature/link-in-description] renders URLs in the description as tappable links
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -125,9 +126,9 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
       </Text>
 
       {item.description && (
-        <Text style={styles.descriptionText} numberOfLines={3}>
-          {item.description}
-        </Text>
+        // [2026-08-30] [feature/link-in-description] was a plain <Text>; URLs
+        // (e.g. "www.kiranabandi.com") rendered as inert text, not tappable.
+        <LinkifiedText text={item.description} style={styles.descriptionText} numberOfLines={3} />
       )}
      
       {/* ========== PHOTO DISPLAY WITH ZOOM ========== */}

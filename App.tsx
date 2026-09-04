@@ -12,7 +12,19 @@ const linking = {
   prefixes: ['http://localhost:8081', 'https://gozipmarket.com'],
   config: {
     screens: {
-      TabWrapperScreen: '',
+      // [2026-08-30] [feature/link-in-description] was just `TabWrapperScreen: ''`,
+      // which only matches the exact root path. A URL like
+      // gozipmarket.com/Home?preselectedCategory=X wasn't declared anywhere, so its
+      // query string never attached to the nested "Home" tab's own route params —
+      // TabWrapperScreen's EFFECT 2b forwarding never saw it either. Declaring the
+      // "Home" path explicitly here lets React Navigation attach the query string
+      // (preselectedCategory, isGuest) directly onto the Home tab's route.params.
+      TabWrapperScreen: {
+        path: '',
+        screens: {
+          Home: 'Home',
+        },
+      },
       ResetPassword: 'reset-password',
       VerifyEmail: 'verify-email',
       SigninBusinessOwners: 'signin',
