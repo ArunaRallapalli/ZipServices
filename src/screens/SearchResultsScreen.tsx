@@ -50,6 +50,7 @@ import {
   fetchPaymentCategories,
   searchServicePosts,
   fetchRecentPosts,
+  RECENT_POSTS_PAGE_SIZE,
   isValidZipCode,
 } from '../Utils/searchUtils';
 
@@ -120,6 +121,15 @@ const SearchResultsScreen: React.FC = () => {
   // recent-posts section state
   const [recentPosts, setRecentPosts] = useState<ServicePost[]>([]);
   const [loadingRecentSection, setLoadingRecentSection] = useState(true);
+  // [2026-09-08] [feature/category-search-picker] pagination for the recent-posts
+  // feed — was one fixed fetch of up to 100 posts rendered all at once (every
+  // image mounting on load regardless of scroll position). Now fetches a page
+  // at a time; recentPostsOffset tracks how many are loaded, hasMoreRecentPosts
+  // drives the "Load More" button, loadingMoreRecentPosts is a separate spinner
+  // from the initial-load one so paging in doesn't re-show the full-section loader.
+  const [recentPostsOffset, setRecentPostsOffset] = useState(0);
+  const [hasMoreRecentPosts, setHasMoreRecentPosts] = useState(false);
+  const [loadingMoreRecentPosts, setLoadingMoreRecentPosts] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -259,8 +269,15 @@ const SearchResultsScreen: React.FC = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    // [2026-09-08] [feature/category-search-picker] fetchRecentPosts now returns
+    // {posts, hasMore, total} instead of a bare array — a pull-to-refresh always
+    // restarts at page 1 (offset 0), replacing recentPosts rather than appending.
     const refreshTasks: Promise<any>[] = [
-      fetchRecentPosts().then(setRecentPosts).catch(() => {}),
+      fetchRecentPosts(RECENT_POSTS_PAGE_SIZE, 0).then(({ posts, hasMore }) => {
+        setRecentPosts(posts);
+        setRecentPostsOffset(posts.length);
+        setHasMoreRecentPosts(hasMore);
+      }).catch(() => {}),
     ];
     if (hasSearched && serviceNeeded && (zipCode || (city && state))) {
       refreshTasks.push(performSearch(true));
@@ -411,8 +428,12 @@ const SearchResultsScreen: React.FC = () => {
       const loadRecentSection = async () => {
         setLoadingRecentSection(true);
         try {
-          const posts = await fetchRecentPosts();
+          // [2026-09-08] [feature/category-search-picker] first page load —
+          // resets pagination state in case this screen re-focuses later.
+          const { posts, hasMore } = await fetchRecentPosts(RECENT_POSTS_PAGE_SIZE, 0);
           setRecentPosts(posts);
+          setRecentPostsOffset(posts.length);
+          setHasMoreRecentPosts(hasMore);
         } catch (error) {
           console.error('Error loading recent section:', error);
         } finally {
@@ -422,6 +443,25 @@ const SearchResultsScreen: React.FC = () => {
       loadRecentSection();
     }, []),
   );
+
+  // [2026-09-08] [feature/category-search-picker] fetches the next page of
+  // recent posts and appends it, instead of replacing — this is what "Load
+  // More" in RecentPostsSection calls. Guards against double-fetching if
+  // there's nothing more or a fetch is already in flight.
+  const loadMoreRecentPosts = useCallback(async () => {
+    if (!hasMoreRecentPosts || loadingMoreRecentPosts) return;
+    setLoadingMoreRecentPosts(true);
+    try {
+      const { posts, hasMore } = await fetchRecentPosts(RECENT_POSTS_PAGE_SIZE, recentPostsOffset);
+      setRecentPosts(prev => [...prev, ...posts]);
+      setRecentPostsOffset(prev => prev + posts.length);
+      setHasMoreRecentPosts(hasMore);
+    } catch (error) {
+      console.error('Error loading more recent posts:', error);
+    } finally {
+      setLoadingMoreRecentPosts(false);
+    }
+  }, [hasMoreRecentPosts, loadingMoreRecentPosts, recentPostsOffset]);
 
   useFocusEffect(
     useCallback(() => {
@@ -517,8 +557,17 @@ const SearchResultsScreen: React.FC = () => {
           isAuthenticated={auth.isAuthenticated}
           paymentCategories={paymentCategories}
           onReviewSubmitted={() => {
-            fetchRecentPosts().then(setRecentPosts).catch(() => {});
+            // [2026-09-08] [feature/category-search-picker] refresh from page 1
+            // so the updated rating is visible without losing pagination state.
+            fetchRecentPosts(RECENT_POSTS_PAGE_SIZE, 0).then(({ posts, hasMore }) => {
+              setRecentPosts(posts);
+              setRecentPostsOffset(posts.length);
+              setHasMoreRecentPosts(hasMore);
+            }).catch(() => {});
           }}
+          onLoadMore={loadMoreRecentPosts}
+          hasMoreRecentPosts={hasMoreRecentPosts}
+          loadingMoreRecentPosts={loadingMoreRecentPosts}
         />
 
         {/* Support line */}

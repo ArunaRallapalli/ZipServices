@@ -73,6 +73,11 @@ interface RecentPostsSectionProps {
   onAddToCart?: AddToCartFn;
   isAuthenticated?: boolean;
   paymentCategories?: Set<string>;
+  // [2026-09-08] [feature/category-search-picker] pagination — was one fixed
+  // fetch rendered all at once; "Load More" now fetches additional pages.
+  onLoadMore?: () => void;
+  hasMoreRecentPosts?: boolean;
+  loadingMoreRecentPosts?: boolean;
 }
 
 // ✅ category icon/color map for placeholder
@@ -823,6 +828,9 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
   onAddToCart,
   isAuthenticated,
   paymentCategories,
+  onLoadMore,
+  hasMoreRecentPosts,
+  loadingMoreRecentPosts,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('all');
 
@@ -927,6 +935,24 @@ const RecentPostsSection: React.FC<RecentPostsSectionProps> = ({
           {row.length === 1 && <View style={{ flex: 1, margin: 5 }} />}
         </View>
       ))}
+
+      {/* [2026-09-08] [feature/category-search-picker] "Load More" — only the
+          current page is fetched/rendered at a time now, instead of every
+          matching post mounting (and every image loading) on first render. */}
+      {hasMoreRecentPosts && (
+        <TouchableOpacity
+          style={sectionStyles.loadMoreButton}
+          onPress={onLoadMore}
+          disabled={loadingMoreRecentPosts}
+          activeOpacity={0.7}
+        >
+          {loadingMoreRecentPosts ? (
+            <ActivityIndicator size="small" color="#4A90E2" />
+          ) : (
+            <Text style={sectionStyles.loadMoreText}>Load More</Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* Bottom nudge */}
       <View style={sectionStyles.nudgeContainer}>
@@ -1477,6 +1503,22 @@ const sectionStyles = StyleSheet.create({
   tabEmptyContainer: { alignItems: 'center', paddingVertical: 32, gap: 8 },
   tabEmptyText: { fontSize: 14, color: '#aaa' },
   row: { flexDirection: 'row', marginBottom: 4 },
+  // [2026-09-08] [feature/category-search-picker] "Load More" button for the
+  // paginated recent-posts feed.
+  loadMoreButton: {
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    marginTop: 8,
+    marginBottom: 4,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  loadMoreText: { fontSize: 14, fontWeight: '600', color: '#4A90E2' },
   nudgeContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
