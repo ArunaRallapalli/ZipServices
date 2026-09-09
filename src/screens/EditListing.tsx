@@ -53,7 +53,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/MainStackNavigator";
-import { Picker } from "@react-native-picker/picker";
+import CategoryPicker from "../components/CategoryPicker"; // [2026-08-30] [feature/category-search-picker] searchable category select on native (was a bare @react-native-picker/picker Picker)
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ADDED: February 19, 2026
@@ -968,24 +968,18 @@ const EditListing: React.FC = () => {
             <Text style={styles.label}>
               Service Category <Text style={styles.required}>*</Text>
             </Text>
-            <View style={[styles.pickerContainer, errors.serviceCategory && styles.inputError]}>
-              <Picker
-                selectedValue={serviceCategory}
-                onValueChange={setServiceCategory}
-                style={styles.picker}
-                enabled={!saving}
-              >
-                <Picker.Item label="Select a category..." value="" />
-                {/* Map through dynamically loaded categories */}
-                {serviceCategories.map((category) => (
-                  <Picker.Item 
-    key={category.category_name} 
-    label={category.category_name} 
-    value={category.category_name} 
-  />
-                ))}
-              </Picker>
-            </View>
+            {/* [2026-08-30] [feature/category-search-picker] was a bare <Picker> —
+                fine on web (native <select> has browser type-ahead) but on
+                iOS/Android there's no way to type "la" and jump to "Landscaping"
+                among 100+ categories; CategoryPicker adds a searchable list on native. */}
+            <CategoryPicker
+              categories={serviceCategories}
+              selectedValue={serviceCategory}
+              onValueChange={setServiceCategory}
+              disabled={saving}
+              containerStyle={[styles.pickerContainer, errors.serviceCategory && styles.inputError]}
+              pickerStyle={styles.picker}
+            />
             {/* Show error message if validation fails */}
             {errors.serviceCategory && (
               <Text style={styles.errorText}>{errors.serviceCategory}</Text>

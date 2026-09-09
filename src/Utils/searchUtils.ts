@@ -440,10 +440,27 @@ export const fetchPaymentCategories = async (): Promise<Set<string>> => {
   }
 };
 
-export const fetchRecentPosts = async (limit: number = 100): Promise<ServicePost[]> => {
-  console.log(`🆕 [searchUtils] Fetching ${limit} most recent posts...`);
+// [2026-09-08] [feature/category-search-picker] Was a single fixed-size fetch
+// (limit=100, offset always 0) rendered all at once via a plain .map() — every
+// post's image mounted and started loading immediately regardless of scroll
+// position. Now supports real pagination: caller passes limit/offset and gets
+// back hasMore/total from the backend (which already supported this), so the
+// Home screen can fetch a page at a time and append via "Load More" instead.
+export interface RecentPostsPage {
+  posts: ServicePost[];
+  hasMore: boolean;
+  total: number;
+}
+
+export const RECENT_POSTS_PAGE_SIZE = 20;
+
+export const fetchRecentPosts = async (
+  limit: number = RECENT_POSTS_PAGE_SIZE,
+  offset: number = 0,
+): Promise<RecentPostsPage> => {
+  console.log(`🆕 [searchUtils] Fetching ${limit} recent posts (offset ${offset})...`);
   try {
-    const data = await api.get(`/api/service-posts/all?limit=${limit}&offset=0`);
+    const data = await api.get(`/api/service-posts/all?limit=${limit}&offset=${offset}`);
 
     if (data.success && Array.isArray(data.posts)) {
       // Normalize post_id (backend returns 'id', frontend expects 'post_id')
@@ -451,12 +468,12 @@ export const fetchRecentPosts = async (limit: number = 100): Promise<ServicePost
         ...post,
         post_id: post.post_id ?? post.id,
       }));
-      console.log(`✅ [searchUtils] fetchRecentPosts: got ${posts.length} posts`);
-      return posts;
+      console.log(`✅ [searchUtils] fetchRecentPosts: got ${posts.length} posts (hasMore=${!!data.hasMore})`);
+      return { posts, hasMore: !!data.hasMore, total: data.total ?? 0 };
     }
-    return [];
+    return { posts: [], hasMore: false, total: 0 };
   } catch (error) {
     console.error('❌ [searchUtils] fetchRecentPosts error:', error);
-    return []; // Non-blocking — return empty so the screen still loads fine
+    return { posts: [], hasMore: false, total: 0 }; // Non-blocking — screen still loads fine
   }
 };

@@ -9,19 +9,22 @@
  * - Fixed: new styles moved into `styles` (not pickerSelectStyles)
  */
 
-import React, { useCallback, memo, useRef } from "react";
+import React, { useCallback, memo } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  Pressable,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import RNPickerSelect from 'react-native-picker-select';
 import { Ionicons } from "@expo/vector-icons";
 import { Alert } from "../Utils/Alert";
+// [2026-09-08] [feature/category-search-picker] was react-native-picker-select
+// (RNPickerSelect) — no way to type "land" and jump to "Landscaping" on
+// mobile, same gap CategoryPicker already fixed for the posting screens.
+// Reusing that component here instead of a second, separate picker.
+import CategoryPicker from './CategoryPicker';
 
 interface SearchFormProps {
   businessName: string;
@@ -59,19 +62,10 @@ const SearchForm: React.FC<SearchFormProps> = ({
   onZipChange,
 }) => {
 
-  const pickerRef = useRef<any>(null);
-
   const handleCategoryChange = useCallback((itemValue: string) => {
     console.log("🔄 [SearchForm] Category changed to:", itemValue);
     setServiceNeeded(itemValue);
   }, [setServiceNeeded]);
-
-  const openPicker = useCallback(() => {
-    console.log('🔽 Opening picker...');
-    if (pickerRef.current?.togglePicker) {
-      pickerRef.current.togglePicker();
-    }
-  }, []);
 
   const handleSearchWithValidation = useCallback(() => {
     if (!zipCode || zipCode.trim() === '') {
@@ -89,11 +83,6 @@ const SearchForm: React.FC<SearchFormProps> = ({
     handleSearch();
   }, [zipCode, isZipValid, serviceNeeded, handleSearch]);
 
-  const pickerItems = categories.map(category => ({
-    label: category,
-    value: category,
-  }));
-
   return (
     <View style={styles.searchSection}>
       <Text style={styles.subtitleText}>
@@ -102,28 +91,22 @@ const SearchForm: React.FC<SearchFormProps> = ({
       {/* ── Single row: Category | ZIP | Search ── */}
       <View style={styles.searchRow}>
 
-        {/* Category Picker */}
-        <View style={styles.searchRowPicker}>
-          {categories.length === 0 ? (
+        {/* Category Picker — [2026-09-08] [feature/category-search-picker]
+            was RNPickerSelect; now reuses CategoryPicker (searchable on native,
+            same as the posting-screen category dropdown) so typing "land"
+            jumps to "Landscaping" here too instead of scrolling a long list. */}
+        {categories.length === 0 ? (
+          <View style={styles.searchRowPicker}>
             <ActivityIndicator size="small" color="#4A90E2" />
-          ) : (
-            <Pressable style={styles.pickerInner} onPress={openPicker}>
-              <RNPickerSelect
-                ref={pickerRef}
-                value={serviceNeeded}
-                onValueChange={handleCategoryChange}
-                items={pickerItems}
-                placeholder={{ label: "Category...", value: null, color: '#999' }}
-                style={pickerSelectStyles}
-                disabled={categories.length === 0}
-                useNativeAndroidPickerStyle={false}
-              />
-              <View style={styles.iconContainer} pointerEvents="none">
-                <Ionicons name="chevron-down" size={16} color="#666" />
-              </View>
-            </Pressable>
-          )}
-        </View>
+          </View>
+        ) : (
+          <CategoryPicker
+            categories={categories.map(category => ({ category_name: category }))}
+            selectedValue={serviceNeeded}
+            onValueChange={handleCategoryChange}
+            containerStyle={styles.searchRowPicker}
+          />
+        )}
 
         {/* ZIP Input */}
         <TextInput
@@ -241,12 +224,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  pickerInner: {
-    flex: 1,
-    justifyContent: "center",
-    position: 'relative',
-  },
-
   zipInputInline: {
     width: 58,                    // fixed — just enough for 5 digits on all platforms
     height: 46,
@@ -277,12 +254,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   // ── End one-row layout ──────────────────────────────────────────────────────
-
-  iconContainer: {
-    position: 'absolute',
-    right: 8,
-    top: 13,
-  },
 
   input: {
     borderWidth: 1,
@@ -372,64 +343,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginLeft: 8,
-  },
-});
-
-// =============================================================================
-// PICKER SELECT STYLES  — only picker-specific overrides here
-// =============================================================================
-const pickerSelectStyles = StyleSheet.create({
-  inputIOS: {
-    fontSize: 15,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    color: '#333',
-    paddingRight: 30,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    height: 46,
-  },
-
-  inputAndroid: {
-    fontSize: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: '#333',
-    paddingRight: 30,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    height: 46,
-  },
-
-  inputWeb: {
-    fontSize: 15,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    color: '#333',
-    paddingRight: 30,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    height: 46,
-    appearance: 'none',
-    WebkitAppearance: 'none',
-    MozAppearance: 'none',
-    cursor: 'pointer',
-  } as any,
-
-  modalViewTop: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  } as any,
-
-  modalViewMiddle: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    maxHeight: '60vh',
-    overflowY: 'auto',
-  } as any,
-
-  placeholder: {
-    color: '#999',
-    fontSize: 15,
   },
 });
 
