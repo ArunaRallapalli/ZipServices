@@ -673,24 +673,22 @@ const EditListing: React.FC = () => {
     // Validate form before saving
     if (!validateForm()) return;
 
-    // Warn if photo count and quantity don't match (informational only).
-    // [2026-08-03] [feature/per-photo-inventory] No longer applies to product-sale
-    // categories — quantity is per-photo now (see existingPhotoMeta/newPhotoMeta),
-    // independent of photo count. Thrifting is unchanged (each photo is a 1-of-1 item).
+    // [2026-08-03] [feature/per-photo-inventory] Photo/quantity matching no longer
+    // applies to product-sale categories — quantity is per-photo now (see
+    // existingPhotoMeta/newPhotoMeta), independent of photo count.
+    // [2026-09-10] Thrifting uses the single-quantity model (each photo is a 1-of-1
+    // item), so quantity MUST equal the photo count. Was a soft warning with a
+    // "Continue anyway" option; now a hard block — a mismatch strands stock that no
+    // buyer can request (see thriftRequests approve flow / sold_photo_indexes).
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
     const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     if (isThriftingEdit && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
-      const proceed = await new Promise<boolean>(resolve =>
-        Alert.alert(
-          'Quantity Mismatch',
-          `You have ${totalPhotos} photo(s) but quantity is set to ${inStock}. Please verify the quantity reflects the actual number of items available for sale.\n\nDo you want to continue?`,
-          [
-            { text: 'Review', onPress: () => resolve(false), style: 'cancel' },
-            { text: 'Continue', onPress: () => resolve(true) },
-          ]
-        )
+      Alert.alert(
+        'Quantity Mismatch',
+        `You have ${totalPhotos} photo(s) but quantity is set to ${inStock}. For Preloved & Thrifting, the quantity must match the number of photos — each item needs its own photo.\n\nPlease review and correct before saving.`,
+        [{ text: 'Review', style: 'cancel' }]
       );
-      if (!proceed) return;
+      return;
     }
 
     try {

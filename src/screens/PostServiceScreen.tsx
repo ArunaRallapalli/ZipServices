@@ -622,23 +622,21 @@ const PostServiceScreen: React.FC = () => {
     if (!validateForm()) return;
 
     // [2026-08-03] [feature/per-photo-inventory] Boutique/Jewelry/Indian Groceries now
-    // track quantity per photo (see PhotoWithDesc.quantity), so the old "overall qty
-    // must equal photo count" warning no longer applies to them — each photo carries
-    // its own quantity, entered below, independent of photo count. Thrifting still uses
-    // the single-quantity model (each photo is a 1-of-1 item), so it keeps the warning.
+    // track quantity per photo (see PhotoWithDesc.quantity), so the "overall qty must
+    // equal photo count" rule no longer applies to them — each photo carries its own
+    // quantity, entered below, independent of photo count.
+    // [2026-09-10] Thrifting uses the single-quantity model (each photo is a 1-of-1
+    // item), so quantity MUST equal the photo count. This was a soft warning with a
+    // "Continue anyway" option; it's now a hard block — a mismatch strands stock that
+    // no buyer can request (see thriftRequests approve flow / sold_photo_indexes).
     const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
     if (isThriftingCategory && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
-      const proceed = await new Promise<boolean>(resolve =>
-        Alert.alert(
-          'Quantity Mismatch',
-          `You have ${selectedPhotos.length} photo(s) but quantity is set to ${inStock}. Please verify the quantity reflects the actual number of items available for sale.\n\nDo you want to continue?`,
-          [
-            { text: 'Review', onPress: () => resolve(false), style: 'cancel' },
-            { text: 'Continue', onPress: () => resolve(true) },
-          ]
-        )
+      Alert.alert(
+        'Quantity Mismatch',
+        `You have ${selectedPhotos.length} photo(s) but quantity is set to ${inStock}. For Preloved & Thrifting, the quantity must match the number of photos — each item needs its own photo.\n\nPlease review and correct before posting.`,
+        [{ text: 'Review', style: 'cancel' }]
       );
-      if (!proceed) return;
+      return;
     }
 
     try {
