@@ -508,7 +508,7 @@ const MiniServiceCard: React.FC<{
                       {usePerPhotoQty ? (
                         leftN! <= 0 ? (
                           <View style={[modalStyles.photoBadge, { backgroundColor: '#E53935' }]}>
-                            <Text style={modalStyles.photoBadgeText}>Sold Out</Text>
+                            <Text style={modalStyles.photoBadgeText}>{isThriftingFree ? 'All Taken' : 'Sold Out'}</Text>
                           </View>
                         ) : isPending ? (
                           <View style={[modalStyles.photoBadge, { backgroundColor: '#F59E0B' }]}>
@@ -517,7 +517,7 @@ const MiniServiceCard: React.FC<{
                         ) : (
                           <View style={[modalStyles.photoBadge, modalStyles.photoBadgeLight]}>
                             <Text style={modalStyles.photoBadgeQty}>
-                              {soldN > 0 && <Text style={modalStyles.qtySoldText}>{soldN} sold </Text>}
+                              {soldN > 0 && <Text style={modalStyles.qtySoldText}>{soldN} {isThriftingFree ? 'taken' : 'sold'} </Text>}
                               {soldN > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
                               <Text style={modalStyles.qtyAvailText}>{leftN} available</Text>
                             </Text>
@@ -630,11 +630,11 @@ const MiniServiceCard: React.FC<{
                     <Ionicons name="pricetag-outline" size={14} color="#555" />
                     <Text style={modalStyles.deliveryText}>
                       {' '}#{item.post_id}-{idx + 1}:{' '}
-                      {s > 0 && <Text style={modalStyles.qtySoldText}>{s} sold </Text>}
+                      {s > 0 && <Text style={modalStyles.qtySoldText}>{s} {isThriftingFree ? 'taken' : 'sold'} </Text>}
                       {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
                       {a > 0
                         ? <Text style={modalStyles.qtyAvailText}>{a} available</Text>
-                        : <Text style={modalStyles.qtySoldText}>sold out</Text>}
+                        : <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>}
                     </Text>
                   </View>
                 );
