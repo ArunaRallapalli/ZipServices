@@ -341,28 +341,91 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       console.log(`   Filter: post_type=${post_type}`);
     }
 
-    let query = supabase
-      .from('service_posts')
-      .select(`
+    const SERVICE_POST_SELECT = `
         *,
         users!service_posts_user_id_fkey(
           email,
+          is_premium,
           business_owners(business_name, average_rating, review_count, accepts_zelle_payment, payment_info, payment_method)
         )
-      `, { count: 'exact' })
-      .eq('status', POST_STATUS.ACTIVE);
+      `;
+    const validPostType = post_type === POST_TYPES.OFFER || post_type === POST_TYPES.REQUEST;
 
-    if (post_type && (post_type === POST_TYPES.OFFER || post_type === POST_TYPES.REQUEST)) {
-      query = query.eq('post_type', post_type);
+    // [2026-09-11] Premium users' posts sort first (newest-first within each tier),
+    // so they land in the top slots of the Recently Posted grid. supabase-js can't
+    // ORDER BY a joined table's column against the TOP-LEVEL resource — verified
+    // empirically that `.order('is_premium', { referencedTable: 'users' })` is a
+    // silent no-op here (no error, but no reorder either), so premium vs. regular
+    // posts are counted and queried separately, then merged in application code:
+    // premium posts fill the page first, regular posts backfill the rest. This stays
+    // stable across pages (a premium post always lands on an earlier page, never
+    // reappears later) without any schema change.
+    const { data: premiumUsers } = await supabase.from('users').select('user_id').eq('is_premium', true);
+    const premiumIds: number[] = (premiumUsers || []).map((u: any) => u.user_id);
+
+    let rows: any[] = [];
+    let premiumTotal = 0;
+    let regularTotal = 0;
+
+    if (premiumIds.length === 0) {
+      // Common case today (no premium users yet) — original single query, same cost.
+      let q = supabase.from('service_posts').select(SERVICE_POST_SELECT, { count: 'exact' })
+        .eq('status', POST_STATUS.ACTIVE);
+      if (validPostType) q = q.eq('post_type', post_type as string);
+      const { data, error, count } = await q
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      rows = data || [];
+      regularTotal = count || 0;
+    } else {
+      const idList = `(${premiumIds.join(',')})`;
+
+      let premCountQ = supabase.from('service_posts').select('id', { count: 'exact', head: true })
+        .eq('status', POST_STATUS.ACTIVE).in('user_id', premiumIds);
+      let regCountQ = supabase.from('service_posts').select('id', { count: 'exact', head: true })
+        .eq('status', POST_STATUS.ACTIVE).not('user_id', 'in', idList);
+      if (validPostType) {
+        premCountQ = premCountQ.eq('post_type', post_type as string);
+        regCountQ = regCountQ.eq('post_type', post_type as string);
+      }
+      const [{ count: pCount }, { count: rCount }] = await Promise.all([premCountQ, regCountQ]);
+      premiumTotal = pCount || 0;
+      regularTotal = rCount || 0;
+
+      if (offset < premiumTotal) {
+        let premQ = supabase.from('service_posts').select(SERVICE_POST_SELECT)
+          .eq('status', POST_STATUS.ACTIVE).in('user_id', premiumIds);
+        if (validPostType) premQ = premQ.eq('post_type', post_type as string);
+        const { data: premRows, error: premErr } = await premQ
+          .order('created_at', { ascending: false })
+          .range(offset, Math.min(offset + limit, premiumTotal) - 1);
+        if (premErr) throw premErr;
+        rows = premRows || [];
+
+        const remaining = limit - rows.length;
+        if (remaining > 0) {
+          let regQ = supabase.from('service_posts').select(SERVICE_POST_SELECT)
+            .eq('status', POST_STATUS.ACTIVE).not('user_id', 'in', idList);
+          if (validPostType) regQ = regQ.eq('post_type', post_type as string);
+          const { data: regRows, error: regErr } = await regQ
+            .order('created_at', { ascending: false })
+            .range(0, remaining - 1);
+          if (regErr) throw regErr;
+          rows = rows.concat(regRows || []);
+        }
+      } else {
+        let regQ = supabase.from('service_posts').select(SERVICE_POST_SELECT)
+          .eq('status', POST_STATUS.ACTIVE).not('user_id', 'in', idList);
+        if (validPostType) regQ = regQ.eq('post_type', post_type as string);
+        const regFrom = offset - premiumTotal;
+        const { data: regRows, error: regErr } = await regQ
+          .order('created_at', { ascending: false })
+          .range(regFrom, regFrom + limit - 1);
+        if (regErr) throw regErr;
+        rows = regRows || [];
+      }
     }
-
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) throw error;
 
     const { data: categoryData } = await supabase
       .from('service_categories')
@@ -372,7 +435,7 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       (categoryData || []).map((c: any) => [c.category_name, c.accepts_payment ?? false])
     );
 
-    const posts = (data || []).map((post: any) => ({
+    const posts = rows.map((post: any) => ({
       ...post,
       post_id: post.id,
       poster_name: post.users?.business_owners?.business_name ||
@@ -380,13 +443,16 @@ router.get('/api/service-posts/all', async (req: Request, res: Response): Promis
       business_name: post.users?.business_owners?.business_name,
       average_rating: post.users?.business_owners?.average_rating || 0,
       review_count: post.users?.business_owners?.review_count || 0,
+      // [2026-09-11] Exposed so the frontend can badge these later if desired —
+      // ordering itself is already handled by the query above.
+      is_premium_post: post.users?.is_premium ?? false,
       accepts_payment: categoryPaymentMap.get(post.service_category) ?? false,
       provider_accepts_zelle: categoryPaymentMap.get(post.service_category) ?? false,
       payment_method: post.users?.business_owners?.payment_method || null,
     }));
-    const total = count || 0;
+    const total = premiumTotal + regularTotal;
 
-    console.log(`✅ Found ${posts.length} posts (${total} total)`);
+    console.log(`✅ Found ${posts.length} posts (${total} total, ${premiumTotal} premium)`);
 
     res.json({
       success: true,
