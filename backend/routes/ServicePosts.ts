@@ -770,11 +770,18 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       ...(pendingNullExpiry || []),
     ];
 
+    // [2026-09-10] photoSoldQtyByIndex sums the ORDERED QUANTITY per photo across
+    // active (completed + not-yet-expired pending) orders — the "N sold / reserved"
+    // count the buyer modal shows. soldPhotoIndexes stays a plain presence list for
+    // the legacy boolean fallback and the thrift path.
     const soldPhotoIndexes: number[] = [];
+    const photoSoldQtyByIndex = new Map<number, number>();
     for (const order of activeOrders || []) {
       for (const orderItem of (order.items || [])) {
         if (Number(orderItem.post_id) === Number(postId) && orderItem.photo_index != null) {
-          soldPhotoIndexes.push(Number(orderItem.photo_index));
+          const idx = Number(orderItem.photo_index);
+          soldPhotoIndexes.push(idx);
+          photoSoldQtyByIndex.set(idx, (photoSoldQtyByIndex.get(idx) ?? 0) + Number(orderItem.quantity ?? 1));
         }
       }
     }
@@ -792,6 +799,13 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       if (explicitQty != null) return Math.max(Number(explicitQty), 0);
       return soldPhotoIndexes.includes(idx) ? 0 : 1;
     });
+
+    // [2026-09-10] Per-photo "sold / reserved" count (completed + active-pending order
+    // quantity). Undefined per index -> 0. Pairs with photo_remaining_qty so the buyer
+    // modal can render "1 sold · 2 left" instead of a binary "Sold" badge.
+    const photoSoldQty: number[] = (data.photos || []).map(
+      (_: any, idx: number) => photoSoldQtyByIndex.get(idx) ?? 0,
+    );
 
     // For thrifting posts, fetch which photo_indexes have at least one active request
     // so the buyer modal can show Available / Pending Request / Unavailable badges
@@ -825,6 +839,8 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       // [2026-08-03] [feature/per-photo-inventory] remaining stock per photo — see
       // photoRemainingQty comment above for the live-counter / legacy-fallback rules.
       photo_remaining_qty: photoRemainingQty,
+      // [2026-09-10] sold/reserved count per photo (see photoSoldQty comment above).
+      photo_sold_qty: photoSoldQty,
     };
 
     console.log('✅ Found service post:', post.id, '| sold:', post.sold_photo_indexes, '| pending:', post.thrift_pending_indexes);

@@ -189,6 +189,9 @@ const MiniServiceCard: React.FC<{
   // [2026-08-03] [feature/per-photo-inventory] remaining qty per photo index — see
   // ServicePosts.ts GET /:postId (photo_remaining_qty). Undefined until fetched.
   const [photoRemainingQty, setPhotoRemainingQty] = useState<number[] | undefined>(undefined);
+  // [2026-09-10] sold/reserved qty per photo index (completed + active-pending
+  // orders) — pairs with photoRemainingQty for the "N sold · M left" badge.
+  const [photoSoldQty, setPhotoSoldQty] = useState<number[] | undefined>(undefined);
   const [thriftPendingIndexes, setThriftPendingIndexes] = useState<number[]>([]);
   const [requestedPhotoIndexes, setRequestedPhotoIndexes] = useState<Set<number>>(new Set());
   const [stockChecking, setStockChecking] = useState(false);
@@ -213,6 +216,15 @@ const MiniServiceCard: React.FC<{
   const isThriftingFree =
     item.service_category?.toLowerCase().trim() === 'preloved & thrifting';
 
+  // [2026-09-10] A photo index is truly unavailable when its own remaining quantity
+  // is 0 (paid categories, once photoRemainingQty has loaded); otherwise fall back to
+  // the binary sold_photo_indexes flag (thrift, and legacy photos with no per-photo
+  // quantity). A boutique photo with qty 3 that's sold 1 is still available.
+  const isIndexUnavailable = React.useCallback((idx: number): boolean => {
+    if (!isThriftingFree && photoRemainingQty?.[idx] != null) return photoRemainingQty[idx] <= 0;
+    return soldPhotoIndexes.includes(idx);
+  }, [isThriftingFree, photoRemainingQty, soldPhotoIndexes]);
+
   // Fetch live in_stock + sold_photo_indexes when modal opens
   React.useEffect(() => {
     if (modalVisible && item.post_id) {
@@ -224,6 +236,7 @@ const MiniServiceCard: React.FC<{
           if (Array.isArray(post?.sold_photo_indexes)) setSoldPhotoIndexes(post.sold_photo_indexes);
           if (Array.isArray(post?.thrift_pending_indexes)) setThriftPendingIndexes(post.thrift_pending_indexes);
           if (Array.isArray(post?.photo_remaining_qty)) setPhotoRemainingQty(post.photo_remaining_qty);
+          if (Array.isArray(post?.photo_sold_qty)) setPhotoSoldQty(post.photo_sold_qty);
           if (isThriftingFree) {
             if (post?.in_stock != null && post.in_stock <= 0) setRequestStatus('unavailable');
             else setRequestStatus(prev => prev === 'unavailable' ? 'idle' : prev);
@@ -244,15 +257,17 @@ const MiniServiceCard: React.FC<{
     }
   }, [modalVisible]);
 
-  // After soldPhotoIndexes loads, if the current selection is sold, auto-advance
-  // to the first available photo so the modal never opens on a "Sorry, not available" state
+  // After inventory loads, if the current selection is unavailable, auto-advance to
+  // the first available photo so the modal never opens on a "Sorry, not available"
+  // state. [2026-09-10] Uses isIndexUnavailable so a boutique photo that still has
+  // stock (sold < quantity) isn't skipped.
   React.useEffect(() => {
-    if (soldPhotoIndexes.length === 0) return;
-    if (soldPhotoIndexes.includes(selectedPhotoIndex)) {
-      const firstAvailable = (item.photos ?? []).findIndex((_, idx) => !soldPhotoIndexes.includes(idx));
+    if (soldPhotoIndexes.length === 0 && photoRemainingQty == null) return;
+    if (isIndexUnavailable(selectedPhotoIndex)) {
+      const firstAvailable = (item.photos ?? []).findIndex((_, idx) => !isIndexUnavailable(idx));
       if (firstAvailable !== -1) setSelectedPhotoIndex(firstAvailable);
     }
-  }, [soldPhotoIndexes]);
+  }, [soldPhotoIndexes, photoRemainingQty]);
 
   // When the user taps a different photo thumbnail, reset item-level state so each
   // photo is evaluated independently.
@@ -343,6 +358,7 @@ const MiniServiceCard: React.FC<{
         // [2026-08-03] [feature/per-photo-inventory] photo_remaining_qty is
         // quantity-aware; falls back to the boolean sold_photo_indexes check for
         // photos with no explicit quantity (listings created before this feature).
+        if (Array.isArray(post?.photo_sold_qty)) setPhotoSoldQty(post.photo_sold_qty);
         if (Array.isArray(post?.photo_remaining_qty)) {
           setPhotoRemainingQty(post.photo_remaining_qty);
           photoStock = post.photo_remaining_qty[selectedPhotoIndex];
@@ -460,8 +476,24 @@ const MiniServiceCard: React.FC<{
                 {item.photos!.map((uri, index) => {
                   const isSold    = soldPhotoIndexes.includes(index);
                   const isPending = !isSold && isThriftingFree && thriftPendingIndexes.includes(index);
-                  const badgeLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
-                  const badgeColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
+                  // [2026-09-10] Paid categories: badge follows the photo's own remaining
+                  // quantity, not the binary sold_photo_indexes flag — a photo with qty 3
+                  // that's sold 1 shows "1 sold · 2 left", not "Sold". Legacy photos with
+                  // no per-photo qty (photoRemainingQty undefined) keep the old behavior.
+                  const soldN = photoSoldQty?.[index] ?? 0;
+                  const leftN = photoRemainingQty?.[index];
+                  const usePerPhotoQty = !isThriftingFree && leftN != null;
+                  let badgeLabel: string | null;
+                  let badgeColor: string;
+                  if (usePerPhotoQty) {
+                    if (leftN! <= 0)      { badgeLabel = 'Sold Out';                  badgeColor = '#E53935'; }
+                    else if (soldN > 0)  { badgeLabel = `${soldN} sold · ${leftN} left`; badgeColor = '#2E7D32'; }
+                    else                 { badgeLabel = null;                          badgeColor = '#2E7D32'; }
+                  } else {
+                    badgeLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
+                    badgeColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
+                  }
+                  const showBadge = isThriftingFree || (usePerPhotoQty ? badgeLabel != null : isSold);
                   return (
                     <TouchableOpacity
                       key={index}
@@ -473,7 +505,7 @@ const MiniServiceCard: React.FC<{
                         <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
                       </View>
                       <Text style={modalStyles.thumbLabel}>#{item.post_id}-{index + 1}</Text>
-                      {(isThriftingFree || isSold) && (
+                      {showBadge && badgeLabel != null && (
                         <View style={[modalStyles.photoBadge, { backgroundColor: badgeColor }]}>
                           <Text style={modalStyles.photoBadgeText}>{badgeLabel}</Text>
                         </View>
@@ -562,6 +594,23 @@ const MiniServiceCard: React.FC<{
                   </View>
                 ) : null;
               })()
+            )}
+
+            {/* 6b. Selected photo's own sold / available breakdown.
+                [2026-09-10] Reflects live inventory including stock released after an
+                expired/cancelled order (server sweep reverts photo_quantities). */}
+            {paymentCategories?.has(item.service_category) && !isThriftingFree
+              && photoRemainingQty?.[selectedPhotoIndex] != null && (
+              <View style={modalStyles.deliveryRow}>
+                <Ionicons name="pricetag-outline" size={14} color="#555" />
+                <Text style={modalStyles.deliveryText}>
+                  {' '}#{item.post_id}-{selectedPhotoIndex + 1}: {photoSoldQty?.[selectedPhotoIndex] ?? 0} sold
+                  {' · '}
+                  {photoRemainingQty[selectedPhotoIndex] > 0
+                    ? `${photoRemainingQty[selectedPhotoIndex]} available`
+                    : 'sold out'}
+                </Text>
+              </View>
             )}
 
             {/* 7. Delivery Timeline — only for payment-enabled non-thrifting categories */}

@@ -221,10 +221,15 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 export default app;
 
 // Finds pending orders whose expires_at has passed, marks them as 'expired', and
-// reverts in_stock for each item so the product becomes available again. Declared
+// reverts stock for each item so the product becomes available again. Declared
 // at module scope (rather than inside the NODE_ENV guard below, where it's actually
 // invoked on a timer) so tests can import and call it directly instead of waiting
 // on the real 30-minute interval.
+// [2026-09-10] Now also reverts photo_quantities[photo_index], mirroring the
+// manual-cancel path in orders.ts. Previously the sweep only bumped post-level
+// in_stock, so an expired boutique order left the per-photo counter permanently
+// short — the buyer modal would show "0 sold" (order gone) but still a reduced
+// "available" count, and that stock was never reclaimable.
 export async function sweepExpiredOrders(): Promise<void> {
   try {
     console.log('⏰ Order expiry sweep: checking for expired pending orders...');
@@ -267,23 +272,42 @@ export async function sweepExpiredOrders(): Promise<void> {
       await supabase.from('payments').update({ status: 'expired' }).eq('id', order.id);
       console.log(`✅ Order #${order.id} marked expired`);
 
-      // Revert in_stock for each item
+      // Revert in_stock (post-level) and photo_quantities (per-photo) for each item —
+      // mirrors the decrement-on-placement + manual-cancel logic in orders.ts.
       if (!order.items) continue;
       const stockIncrements = new Map<number, number>();
+      const photoIncrements = new Map<string, { postId: number; photoIndex: number; qty: number }>();
       for (const item of order.items) {
         const postId = Number(item.post_id);
         const qty    = Number(item.quantity ?? 1);
         if (postId) stockIncrements.set(postId, (stockIncrements.get(postId) ?? 0) + qty);
+        if (postId && item.photo_index != null) {
+          const key = `${postId}_${item.photo_index}`;
+          photoIncrements.set(key, {
+            postId, photoIndex: Number(item.photo_index),
+            qty: (photoIncrements.get(key)?.qty ?? 0) + qty,
+          });
+        }
       }
-      await Promise.all(
-        Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
+      await Promise.all([
+        ...Array.from(stockIncrements.entries()).map(async ([postId, qty]) => {
           const { data: post } = await supabase
             .from('service_posts').select('in_stock').eq('id', postId).single();
           const newStock = Number(post?.in_stock ?? 0) + qty;
           await supabase.from('service_posts').update({ in_stock: newStock }).eq('id', postId);
           console.log(`✅ in_stock reverted for post #${postId} +${qty} → ${newStock} (order expired)`);
         }),
-      );
+        ...Array.from(photoIncrements.values()).map(async ({ postId, photoIndex, qty }) => {
+          const { data: post } = await supabase
+            .from('service_posts').select('photo_quantities').eq('id', postId).single();
+          const quantities = post?.photo_quantities;
+          if (!Array.isArray(quantities) || quantities[photoIndex] == null) return;
+          const updated = [...quantities];
+          updated[photoIndex] = Number(updated[photoIndex]) + qty;
+          await supabase.from('service_posts').update({ photo_quantities: updated }).eq('id', postId);
+          console.log(`✅ photo_quantities reverted for post #${postId} photo ${photoIndex} +${qty} → ${updated[photoIndex]} (order expired)`);
+        }),
+      ]);
     }
 
     console.log('✅ Order expiry sweep complete');
