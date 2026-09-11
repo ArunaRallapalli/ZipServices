@@ -106,6 +106,12 @@ const EditListing: React.FC = () => {
   // State: Service categories fetched from API
   const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number; accepts_payment?: boolean }[]>([]);
   const [inStock, setInStock] = useState('1');
+  // [2026-09-10] Thrift only: how many of this post's photos are already
+  // claimed (an approved request removed that photo from availability — see
+  // thriftRequests approve flow / sold_photo_indexes). Quantity Available should
+  // track (photo count - soldPhotoCount), not the raw photo count, once any
+  // photo has been claimed.
+  const [soldPhotoCount, setSoldPhotoCount] = useState(0);
   
   // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
@@ -143,6 +149,23 @@ const EditListing: React.FC = () => {
 
   // State: Validation errors object - stores error messages for each field
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
+  // [2026-09-10] Thrift only: keep Quantity Available in lockstep with
+  // (photo count - soldPhotoCount) as photos are added/removed, instead of
+  // making the seller do that math. Without this, adding a photo after a
+  // request was approved re-triggers the Quantity Mismatch block against a
+  // stale number the seller has no reason to know (see EditListing bug where
+  // "4 photos, 1 already claimed" still asked for quantity 4, not 3).
+  // Skipped once the seller has explicitly set quantity to 0 ("Not Available")
+  // so this doesn't silently reactivate a post they intentionally paused.
+  useEffect(() => {
+    if (loading) return;
+    if (serviceCategory?.toLowerCase().trim() !== 'preloved & thrifting') return;
+    const totalPhotos = existingPhotos.length + selectedPhotos.length;
+    const available = Math.max(totalPhotos - soldPhotoCount, 0);
+    if (available <= 0) return;
+    setInStock(prev => (prev === '0' || String(available) === prev) ? prev : String(available));
+  }, [existingPhotos.length, selectedPhotos.length, soldPhotoCount, serviceCategory, loading]);
 
   /**
    * Effect: Fetch categories and post data when component mounts
@@ -507,6 +530,7 @@ const EditListing: React.FC = () => {
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
         setInStock(String(post.in_stock ?? 1));
+        setSoldPhotoCount(Array.isArray((post as any).sold_photo_indexes) ? (post as any).sold_photo_indexes.length : 0);
         if ((post as any).shipping_charge_cents != null) {
           setShippingCharge(((post as any).shipping_charge_cents / 100).toFixed(2));
         }
@@ -677,15 +701,22 @@ const EditListing: React.FC = () => {
     // applies to product-sale categories — quantity is per-photo now (see
     // existingPhotoMeta/newPhotoMeta), independent of photo count.
     // [2026-09-10] Thrifting uses the single-quantity model (each photo is a 1-of-1
-    // item), so quantity MUST equal the photo count. Was a soft warning with a
-    // "Continue anyway" option; now a hard block — a mismatch strands stock that no
-    // buyer can request (see thriftRequests approve flow / sold_photo_indexes).
+    // item), so quantity MUST equal the number of NOT-YET-CLAIMED photos — total
+    // photo count minus soldPhotoCount, not the raw photo count. (Was compared
+    // against raw photo count, which could never match again after even one
+    // approved request — see the auto-sync effect above, which normally keeps
+    // inStock correct already; this is the backstop for a manual edit.) Was a
+    // soft warning with a "Continue anyway" option; now a hard block — a
+    // mismatch strands stock that no buyer can request (see thriftRequests
+    // approve flow / sold_photo_indexes).
     const totalPhotos = existingPhotos.length + selectedPhotos.length;
+    const availablePhotoCount = Math.max(totalPhotos - soldPhotoCount, 0);
     const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if (isThriftingEdit && totalPhotos > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== totalPhotos) {
+    if (isThriftingEdit && availablePhotoCount > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== availablePhotoCount) {
+      const claimedNote = soldPhotoCount > 0 ? ` (${soldPhotoCount} already claimed)` : '';
       Alert.alert(
         'Quantity Mismatch',
-        `You have ${totalPhotos} photo(s) but quantity is set to ${inStock}. For Preloved & Thrifting, the quantity must match the number of photos — each item needs its own photo.\n\nPlease review and correct before saving.`,
+        `You have ${totalPhotos} photo(s)${claimedNote}, so quantity available should be ${availablePhotoCount} — but it's set to ${inStock}. For Preloved & Thrifting, quantity must match the number of not-yet-claimed photos.\n\nPlease review and correct before saving.`,
         [{ text: 'Review', style: 'cancel' }]
       );
       return;
