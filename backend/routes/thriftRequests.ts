@@ -1,23 +1,36 @@
 /**
  * Thrift Requests Router — /api/thrift-requests
  *
- * Handles the full lifecycle of FREE thrifting item requests at GoZipMarket.
- * No cart, no checkout, no payment — request/pickup flow only.
+ * Handles the full lifecycle of Preloved & Thrifting item requests at GoZipMarket.
+ * No cart, no checkout, no in-app payment — request/approve flow only. A thrift
+ * photo can carry a real price (set per photo, same as Boutique/Jewelry/Indian
+ * Groceries — see PostServiceScreen.tsx usesPerPhotoInventory), buyer and seller
+ * just settle it directly, off to the side of the app.
+ *
+ * [2026-09-10] Thrifting shares the per-photo Name/Price/Quantity model (and its
+ * inventory counting: photo_quantities) with the paid product-sale categories —
+ * a photo is no longer necessarily 1 unit. Only the finalization step differs:
+ * approve/reject here vs. cart→checkout→payment there.
  *
  * ── Flow ──────────────────────────────────────────────────────────────────────
  *  Buyer taps [Request Item] → status = 'requested'
- *  Seller taps [Approve & Mark Completed] → status = 'completed', in_stock -1
- *    If in_stock hits 0 → all remaining 'requested' rows auto-rejected
+ *  Seller taps [Approve & Mark Completed] → status = 'completed'
+ *    → in_stock -1 (aggregate, back-compat) AND photo_quantities[photo_index] -1
+ *    → that photo's own quantity reaching 0 is what marks it sold_photo_indexes
+ *      and auto-rejects other requesters of the SAME photo (units still left
+ *      otherwise); if new in_stock === 0, ALL remaining requests are rejected
  *  Seller taps [Reject] → status = 'rejected'
  *
- *  Multiple buyers can request the same photo simultaneously.
+ *  Multiple buyers can request the same photo simultaneously, even with qty 1 —
+ *  only the first approval consumes a unit; others are rejected once it's gone.
  *  Stock is only decremented when the seller approves (not on request).
  *
  * ── Endpoints ─────────────────────────────────────────────────────────────────
  *
  *  POST   /api/thrift-requests
- *    Buyer submits a request. Blocked only if in_stock <= 0 or buyer already
- *    has an active (requested) entry for the same post+photo.
+ *    Buyer submits a request. Blocked once the requested photo's own remaining
+ *    quantity (or, for legacy photos with none, the post's in_stock) is 0, or
+ *    the buyer already has an active (requested) entry for the same post+photo.
  *
  *  GET    /api/thrift-requests/my-requests
  *    Buyer sees all their own requests (any status).
@@ -26,11 +39,7 @@
  *    Seller sees all requests across all their posts, newest first.
  *
  *  PATCH  /api/thrift-requests/:id/approve-complete
- *    Seller approves & completes in one step:
- *      • status = 'completed', completed_at = now
- *      • in_stock decremented by 1 (floor 0)
- *      • photo_index added to sold_photo_indexes
- *      • if new in_stock === 0 → all other 'requested' rows auto-rejected
+ *    Seller approves & completes in one step — see Flow above.
  *
  *  PATCH  /api/thrift-requests/:id/reject
  *    Seller rejects one request → status = 'rejected'. No stock change.
@@ -346,10 +355,12 @@ router.post('/api/thrift-requests', async (req: Request, res: Response): Promise
       return;
     }
 
-    // Fetch post: only need in_stock to gate requests
+    // Fetch post: in_stock for the legacy fallback, photo_quantities for the
+    // [2026-09-10] per-photo model Thrifting now shares with Boutique/Jewelry/Indian
+    // Groceries — a photo can carry more than one identical item.
     const { data: postData } = await supabase
       .from('service_posts')
-      .select('in_stock')
+      .select('in_stock, photo_quantities')
       .eq('id', post_id)
       .single();
 
@@ -358,8 +369,15 @@ router.post('/api/thrift-requests', async (req: Request, res: Response): Promise
       return;
     }
 
-    // Block only if all units have already been given away
-    if (Number(postData.in_stock) <= 0) {
+    // Gate on the SPECIFIC photo's own remaining quantity once it has one (set at
+    // posting/editing time via the per-photo Quantity field). Falls back to the
+    // post-level in_stock aggregate for photos that predate this feature.
+    const quantities = postData.photo_quantities;
+    const remaining = (photoIndex !== null && Array.isArray(quantities) && quantities[photoIndex] != null)
+      ? Number(quantities[photoIndex])
+      : Number(postData.in_stock ?? 0);
+
+    if (remaining <= 0) {
       res.status(409).json({ error: 'No units available — all have been given away.', status: 'unavailable' });
       return;
     }
@@ -492,8 +510,14 @@ router.get('/api/thrift-requests/provider', async (req: Request, res: Response):
 // ── PATCH /api/thrift-requests/:id/approve-complete ──────────────────────────
 // Single-step seller action: approve request + mark as completed.
 //  • status = 'completed', completed_at = now
-//  • in_stock decremented by 1 (floors at 0)
-//  • photo_index added to sold_photo_indexes (async)
+//  • in_stock decremented by 1 (floors at 0) — aggregate, back-compat
+//  • [2026-09-10] photo_quantities[photo_index] decremented by 1 too, mirroring
+//    orders.ts, now that a thrift photo can carry more than one identical item.
+//    photo_index is added to sold_photo_indexes only once THAT PHOTO's own
+//    quantity reaches 0 (legacy photos with no photo_quantities entry keep the
+//    old one-request-is-the-whole-photo behavior).
+//  • Auto-reject other requesters of the SAME photo only once its quantity hits 0
+//    — with qty > 1 there are still units left for them to be approved into.
 //  • if new in_stock === 0: all remaining 'requested' rows for same post auto-rejected
 router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, res: Response): Promise<void> => {
   const providerUserId = getAuth(req, res);
@@ -523,10 +547,10 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
 
     if (completeErr) { res.status(500).json({ error: 'Failed to complete request' }); return; }
 
-    // Decrement in_stock by 1
+    // Decrement in_stock (aggregate) and, when set, this photo's own quantity.
     const { data: postData } = await supabase
       .from('service_posts')
-      .select('in_stock, sold_photo_indexes')
+      .select('in_stock, sold_photo_indexes, photo_quantities')
       .eq('id', reqRow.post_id)
       .single();
 
@@ -535,23 +559,42 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
 
     const postUpdate: any = { in_stock: newStock };
 
-    // Track which photo was given away (for SOLD badge display)
+    // [2026-09-10] Decrement the specific photo's own quantity (per-photo model,
+    // shared with Boutique/Jewelry/Indian Groceries). Only mark it fully claimed in
+    // the legacy binary column once ITS OWN quantity reaches 0 — a photo with 3
+    // identical items sold once still has 2 left for other requesters.
+    let photoRemainingAfter: number | null = null;
     if (reqRow.photo_index !== null && reqRow.photo_index !== undefined) {
+      const quantities = postData?.photo_quantities;
       const currentSold: number[] = postData?.sold_photo_indexes ?? [];
-      if (!currentSold.includes(reqRow.photo_index)) {
-        postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
+      if (Array.isArray(quantities) && quantities[reqRow.photo_index] != null) {
+        const updated = [...quantities];
+        updated[reqRow.photo_index] = Math.max(Number(updated[reqRow.photo_index]) - 1, 0);
+        photoRemainingAfter = updated[reqRow.photo_index];
+        postUpdate.photo_quantities = updated;
+        if (photoRemainingAfter === 0 && !currentSold.includes(reqRow.photo_index)) {
+          postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
+        }
+      } else {
+        // Legacy photo (predates per-photo qty) — one request is the whole photo.
+        photoRemainingAfter = 0;
+        if (!currentSold.includes(reqRow.photo_index)) {
+          postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
+        }
       }
     }
 
     await supabase.from('service_posts').update(postUpdate).eq('id', reqRow.post_id);
-    console.log(`✅ Thrift request ${requestId} approved & completed. Post #${reqRow.post_id} in_stock: ${currentStock} → ${newStock}`);
+    console.log(`✅ Thrift request ${requestId} approved & completed. Post #${reqRow.post_id} in_stock: ${currentStock} → ${newStock}` +
+      (photoRemainingAfter !== null ? ` | photo ${reqRow.photo_index} remaining: ${photoRemainingAfter}` : ''));
 
     // Collect auto-rejected buyer info for emails (sent non-blocking after response)
     const autoRejected: Array<{ id: string; buyer_user_id: number; post_photo_url?: string | null; buyer_timezone?: string | null }> = [];
 
-    // Auto-reject step 1: always reject others who requested the exact same photo
-    // (that specific physical item is now gone regardless of remaining stock)
-    if (reqRow.photo_index !== null && reqRow.photo_index !== undefined) {
+    // Auto-reject step 1: reject others who requested the exact same photo ONLY once
+    // that photo's own remaining quantity has hit 0 — with qty > 1 there are still
+    // units left for them to be approved into.
+    if (reqRow.photo_index !== null && reqRow.photo_index !== undefined && photoRemainingAfter === 0) {
       const { data: samePhotoOthers } = await supabase
         .from('thrift_requests')
         .select('id, buyer_user_id, post_photo_url, buyer_timezone')

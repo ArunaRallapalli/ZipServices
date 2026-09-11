@@ -800,27 +800,35 @@ router.get('/api/service-posts/:postId', async (req: Request, res: Response): Pr
       return soldPhotoIndexes.includes(idx) ? 0 : 1;
     });
 
-    // [2026-09-10] Per-photo "sold / reserved" count (completed + active-pending order
-    // quantity). Undefined per index -> 0. Pairs with photo_remaining_qty so the buyer
-    // modal can render "1 sold · 2 left" instead of a binary "Sold" badge.
-    const photoSoldQty: number[] = (data.photos || []).map(
-      (_: any, idx: number) => photoSoldQtyByIndex.get(idx) ?? 0,
-    );
-
     // For thrifting posts, fetch which photo_indexes have at least one active request
-    // so the buyer modal can show Available / Pending Request / Unavailable badges
+    // (for the Pending Request badge) and how many completed requests each photo has
+    // had — [2026-09-10] each completed request is exactly 1 unit given away (thrift
+    // requests have no quantity field), so a plain count feeds photoSoldQtyByIndex the
+    // same way order-item quantities do for Boutique/Jewelry/Indian Groceries below.
     let thriftPendingIndexes: number[] = [];
     if (data.service_category === 'Preloved & Thrifting') {
-      const { data: pendingRows } = await supabase
-        .from('thrift_requests')
-        .select('photo_index')
-        .eq('post_id', postId)
-        .eq('status', 'requested')
-        .not('photo_index', 'is', null);
+      const [{ data: pendingRows }, { data: completedRows }] = await Promise.all([
+        supabase.from('thrift_requests').select('photo_index')
+          .eq('post_id', postId).eq('status', 'requested').not('photo_index', 'is', null),
+        supabase.from('thrift_requests').select('photo_index')
+          .eq('post_id', postId).eq('status', 'completed').not('photo_index', 'is', null),
+      ]);
       if (pendingRows) {
         thriftPendingIndexes = [...new Set(pendingRows.map((r: any) => Number(r.photo_index)))];
       }
+      for (const row of completedRows || []) {
+        const idx = Number(row.photo_index);
+        photoSoldQtyByIndex.set(idx, (photoSoldQtyByIndex.get(idx) ?? 0) + 1);
+      }
     }
+
+    // [2026-09-10] Per-photo "sold / reserved" count (completed + active-pending order
+    // quantity, or completed thrift requests). Undefined per index -> 0. Pairs with
+    // photo_remaining_qty so the buyer modal can render "1 sold · 2 available" instead
+    // of a binary "Sold"/"Unavailable" badge.
+    const photoSoldQty: number[] = (data.photos || []).map(
+      (_: any, idx: number) => photoSoldQtyByIndex.get(idx) ?? 0,
+    );
 
     const mergedSoldIndexes = [...new Set([...soldPhotoIndexes, ...(data.sold_photo_indexes ?? [])])];
 

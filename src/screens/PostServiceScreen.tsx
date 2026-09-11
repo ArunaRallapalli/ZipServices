@@ -581,6 +581,14 @@ const PostServiceScreen: React.FC = () => {
   // 2026-07-31: replaced inline 'boutique'/'jewelry' checks with shared isProductCategory()
   // so Indian Groceries (and any future product category) gets the same posting flow.
   const isBoutiqueOrJewelry = isProductCategory(serviceCategory);
+  // [2026-09-10] Preloved & Thrifting shares the per-photo Name/Price/Quantity model
+  // (and its inventory counting) with Boutique/Jewelry/Indian Groceries — a thrift
+  // photo can have a real price and its own quantity, same fields, same code path.
+  // It does NOT share the checkout machinery (shipping charge, payment methods, cart)
+  // gated separately below by isBoutiqueOrJewelry — thrift stays request/approve,
+  // buyer and seller settle directly.
+  const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
+  const usesPerPhotoInventory = isBoutiqueOrJewelry || isThriftingCategory;
 
   const PAYMENT_OPTIONS = [
     { value: 'zelle',   label: 'Zelle',    handleLabel: 'Zelle email or phone' },
@@ -621,23 +629,11 @@ const PostServiceScreen: React.FC = () => {
 
     if (!validateForm()) return;
 
-    // [2026-08-03] [feature/per-photo-inventory] Boutique/Jewelry/Indian Groceries now
-    // track quantity per photo (see PhotoWithDesc.quantity), so the "overall qty must
-    // equal photo count" rule no longer applies to them — each photo carries its own
-    // quantity, entered below, independent of photo count.
-    // [2026-09-10] Thrifting uses the single-quantity model (each photo is a 1-of-1
-    // item), so quantity MUST equal the photo count. This was a soft warning with a
-    // "Continue anyway" option; it's now a hard block — a mismatch strands stock that
-    // no buyer can request (see thriftRequests approve flow / sold_photo_indexes).
-    const isThriftingCategory = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if (isThriftingCategory && selectedPhotos.length > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== selectedPhotos.length) {
-      Alert.alert(
-        'Quantity Mismatch',
-        `You have ${selectedPhotos.length} photo(s) but quantity is set to ${inStock}. For Preloved & Thrifting, the quantity must match the number of photos — each item needs its own photo.\n\nPlease review and correct before posting.`,
-        [{ text: 'Review', style: 'cancel' }]
-      );
-      return;
-    }
+    // [2026-08-03] [feature/per-photo-inventory] [2026-09-10, superseded 551de81's
+    // photo-count-must-equal-quantity hard block] Thrifting now shares the per-photo
+    // quantity model with Boutique/Jewelry/Indian Groceries (see usesPerPhotoInventory
+    // above) — each photo carries its own quantity, so there's no aggregate count to
+    // mismatch against any more.
 
     try {
       setLoading(true);
@@ -660,10 +656,10 @@ const PostServiceScreen: React.FC = () => {
         title: title.trim(),
         description: description.trim(),
         service_category: serviceCategory,
-        // [feature/per-photo-inventory] For Boutique/Jewelry/Indian Groceries, the top-level
-        // price is a display aggregate (lowest per-photo price) — the real price customers
-        // pay comes from each photo's own price, set above.
-        price: isBoutiqueOrJewelry
+        // [feature/per-photo-inventory] For categories using per-photo inventory, the
+        // top-level price is a display aggregate (lowest per-photo price) — the real
+        // price customers/requesters pay comes from each photo's own price, set above.
+        price: usesPerPhotoInventory
           ? (() => {
               const photoPrices = selectedPhotos.map(p => parseFloat(p.price) || 0).filter(p => p > 0);
               return photoPrices.length > 0 ? String(Math.min(...photoPrices)) : null;
@@ -673,10 +669,10 @@ const PostServiceScreen: React.FC = () => {
         zip_code: zipCode.trim(),
         phone_number: phoneNumber.trim() || null,
         contact_email: contactEmail.trim(),
-        // [2026-08-03] [feature/per-photo-inventory] For Boutique/Jewelry/Indian
-        // Groceries, in_stock is now a display/back-compat aggregate — the sum of each
+        // [2026-08-03] [feature/per-photo-inventory] For categories using per-photo
+        // inventory, in_stock is now a display/back-compat aggregate — the sum of each
         // photo's own quantity — rather than a separately seller-entered number.
-        in_stock: isBoutiqueOrJewelry
+        in_stock: usesPerPhotoInventory
           ? selectedPhotos.reduce((sum, p) => sum + (parseInt(p.quantity, 10) || 1), 0) || 1
           : parseInt(inStock) || 1,
         // [feature/per-photo-inventory] Was `shippingCharge || '10'` — an empty string is
@@ -925,7 +921,7 @@ const PostServiceScreen: React.FC = () => {
           <View style={styles.inputGroup}>
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(isBoutiqueOrJewelry || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
+                Photos {usesPerPhotoInventory
                   ? <Text style={{ color: '#E53935' }}> *</Text>
                   : <Text style={styles.optionalLabel}> (Optional)</Text>}
               </Text>
@@ -935,7 +931,7 @@ const PostServiceScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.addPhotoButton,
-                (isBoutiqueOrJewelry || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && selectedPhotos.length === 0
+                usesPerPhotoInventory && selectedPhotos.length === 0
                   ? { borderColor: '#E53935' } : {},
               ]}
               onPress={pickPhotos}
@@ -978,7 +974,7 @@ const PostServiceScreen: React.FC = () => {
                         and stocked. These inputs existed as unused styles before this
                         change; the price field was being silently overwritten with the
                         overall listing price at upload time. */}
-                    {isBoutiqueOrJewelry && (
+                    {usesPerPhotoInventory && (
                       <View style={styles.photoProductFields}>
                         <TextInput
                           style={styles.photoDescInput}
@@ -1039,40 +1035,11 @@ const PostServiceScreen: React.FC = () => {
           </View>
           {/* ── END PHOTO SECTION ── */}
 
-          {/* Price — hidden for Boutique/Jewelry/Indian Groceries; price is set per photo above instead */}
-          {!isBoutiqueOrJewelry && (
+          {/* Price — hidden when using per-photo inventory (Boutique/Jewelry/Indian
+              Groceries/Thrifting); price is set per photo above instead. */}
+          {!usesPerPhotoInventory && (
           <View style={styles.inputGroup}>
             {serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
-              serviceCategory?.toLowerCase().trim() === 'preloved & thrifting' ? (
-                /* Preloved & Thrifting — seller sets their own price (can be $0.00 for free) */
-                <>
-                  <View style={styles.labelRow}>
-                    <Text style={styles.label}>Price per Item ($)</Text>
-                    <Text style={styles.labelHint}>Enter 0.00 if free</Text>
-                  </View>
-                  <View style={styles.priceInputRow}>
-                    <Text style={styles.currencyPrefix}>$</Text>
-                    <TextInput
-                      style={[styles.input, styles.priceInputFlex]}
-                      value={priceRange}
-                      onChangeText={(t) => {
-                        const clean = t.replace(/[^0-9.]/g, '');
-                        const parts = clean.split('.');
-                        const sanitized = parts.length > 2
-                          ? parts[0] + '.' + parts.slice(1).join('')
-                          : clean;
-                        setPriceRange(sanitized);
-                      }}
-                      placeholder="0.00"
-                      keyboardType="decimal-pad"
-                      returnKeyType="done"
-                      blurOnSubmit={false}
-                      {...(Platform.OS === 'web' ? ({ inputMode: 'decimal' } as any) : {})}
-                      maxLength={10}
-                    />
-                  </View>
-                </>
-              ) : (
               <>
                 <View style={styles.labelRow}>
                   <Text style={styles.label}>Price per Item ($) *</Text>
@@ -1099,7 +1066,6 @@ const PostServiceScreen: React.FC = () => {
                   />
                 </View>
               </>
-              )
             ) : (
               <>
                 <Text style={styles.label}>Price/Rate (Optional)</Text>
@@ -1172,11 +1138,12 @@ const PostServiceScreen: React.FC = () => {
             />
           </View>
 
-          {/* In Stock — payment-enabled categories + Thrifting.
+          {/* In Stock — payment-enabled categories only now.
               [2026-08-03] [feature/per-photo-inventory] Hidden for Boutique/Jewelry/
-              Indian Groceries — quantity is now entered per photo below instead. */}
-          {!isBoutiqueOrJewelry && (serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ||
-            serviceCategory?.toLowerCase().trim() === 'preloved & thrifting') && (
+              Indian Groceries — quantity is entered per photo below instead.
+              [2026-09-10] Thrifting moved to the same per-photo model, so it's hidden
+              here too now — see usesPerPhotoInventory. */}
+          {!usesPerPhotoInventory && serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Quantity Available</Text>
               <TextInput

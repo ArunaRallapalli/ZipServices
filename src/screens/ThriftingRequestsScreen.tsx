@@ -1,10 +1,14 @@
 /**
  * ThriftingRequestsScreen.tsx
  *
- * Seller-only screen showing all incoming requests for their FREE thrifting items.
+ * Seller-only screen showing all incoming requests for their Preloved & Thrifting
+ * items (buyer/seller settle price directly — no in-app cart or payment).
  *
  * Flow:
- *   requested → seller taps [Approve & Mark Completed] (→ completed, in_stock -1)
+ *   requested → seller taps [Approve & Mark Completed]
+ *               (→ completed, in_stock -1, and that photo's own quantity -1 —
+ *               see thriftRequests.ts; only rejects other same-photo requesters
+ *               once that photo's quantity reaches 0)
  *               or [Reject] (→ rejected)
  *               if in_stock hits 0 after approval → all other requests auto-rejected
  *   completed → final state, read-only

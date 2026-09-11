@@ -106,13 +106,7 @@ const EditListing: React.FC = () => {
   // State: Service categories fetched from API
   const [serviceCategories, setServiceCategories] = useState<{ category_name: string; display_order: number; accepts_payment?: boolean }[]>([]);
   const [inStock, setInStock] = useState('1');
-  // [2026-09-10] Thrift only: how many of this post's photos are already
-  // claimed (an approved request removed that photo from availability — see
-  // thriftRequests approve flow / sold_photo_indexes). Quantity Available should
-  // track (photo count - soldPhotoCount), not the raw photo count, once any
-  // photo has been claimed.
-  const [soldPhotoCount, setSoldPhotoCount] = useState(0);
-  
+
   // Form field states - represent all editable fields in the form
   const [postType, setPostType] = useState<"offer" | "request">("offer");
   const [title, setTitle] = useState("");
@@ -150,22 +144,15 @@ const EditListing: React.FC = () => {
   // State: Validation errors object - stores error messages for each field
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  // [2026-09-10] Thrift only: keep Quantity Available in lockstep with
-  // (photo count - soldPhotoCount) as photos are added/removed, instead of
-  // making the seller do that math. Without this, adding a photo after a
-  // request was approved re-triggers the Quantity Mismatch block against a
-  // stale number the seller has no reason to know (see EditListing bug where
-  // "4 photos, 1 already claimed" still asked for quantity 4, not 3).
-  // Skipped once the seller has explicitly set quantity to 0 ("Not Available")
-  // so this doesn't silently reactivate a post they intentionally paused.
-  useEffect(() => {
-    if (loading) return;
-    if (serviceCategory?.toLowerCase().trim() !== 'preloved & thrifting') return;
-    const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    const available = Math.max(totalPhotos - soldPhotoCount, 0);
-    if (available <= 0) return;
-    setInStock(prev => (prev === '0' || String(available) === prev) ? prev : String(available));
-  }, [existingPhotos.length, selectedPhotos.length, soldPhotoCount, serviceCategory, loading]);
+  // [2026-09-10] Preloved & Thrifting now shares the per-photo Name/Price/Quantity
+  // model (and its inventory counting) with Boutique/Jewelry/Indian Groceries — see
+  // PostServiceScreen.tsx for the same flag and full rationale. It does NOT share
+  // the checkout machinery (shipping charge, payment methods) gated separately below
+  // by isProductCategory(serviceCategory) alone — thrift stays request/approve.
+  // [2026-09-10, superseded] This replaces the earlier soldPhotoCount/auto-sync
+  // approach (aggregate quantity vs. claimed-photo math) — with quantity per photo,
+  // there's no aggregate to keep in sync any more.
+  const usesPerPhotoInventory = isProductCategory(serviceCategory) || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
 
   /**
    * Effect: Fetch categories and post data when component mounts
@@ -530,7 +517,6 @@ const EditListing: React.FC = () => {
         setContactEmail(post.contact_email || "");
         setZipCode(post.zip_code || "");
         setInStock(String(post.in_stock ?? 1));
-        setSoldPhotoCount(Array.isArray((post as any).sold_photo_indexes) ? (post as any).sold_photo_indexes.length : 0);
         if ((post as any).shipping_charge_cents != null) {
           setShippingCharge(((post as any).shipping_charge_cents / 100).toFixed(2));
         }
@@ -697,30 +683,11 @@ const EditListing: React.FC = () => {
     // Validate form before saving
     if (!validateForm()) return;
 
-    // [2026-08-03] [feature/per-photo-inventory] Photo/quantity matching no longer
-    // applies to product-sale categories — quantity is per-photo now (see
-    // existingPhotoMeta/newPhotoMeta), independent of photo count.
-    // [2026-09-10] Thrifting uses the single-quantity model (each photo is a 1-of-1
-    // item), so quantity MUST equal the number of NOT-YET-CLAIMED photos — total
-    // photo count minus soldPhotoCount, not the raw photo count. (Was compared
-    // against raw photo count, which could never match again after even one
-    // approved request — see the auto-sync effect above, which normally keeps
-    // inStock correct already; this is the backstop for a manual edit.) Was a
-    // soft warning with a "Continue anyway" option; now a hard block — a
-    // mismatch strands stock that no buyer can request (see thriftRequests
-    // approve flow / sold_photo_indexes).
-    const totalPhotos = existingPhotos.length + selectedPhotos.length;
-    const availablePhotoCount = Math.max(totalPhotos - soldPhotoCount, 0);
-    const isThriftingEdit = serviceCategory?.toLowerCase().trim() === 'preloved & thrifting';
-    if (isThriftingEdit && availablePhotoCount > 0 && parseInt(inStock) > 0 && parseInt(inStock) !== availablePhotoCount) {
-      const claimedNote = soldPhotoCount > 0 ? ` (${soldPhotoCount} already claimed)` : '';
-      Alert.alert(
-        'Quantity Mismatch',
-        `You have ${totalPhotos} photo(s)${claimedNote}, so quantity available should be ${availablePhotoCount} — but it's set to ${inStock}. For Preloved & Thrifting, quantity must match the number of not-yet-claimed photos.\n\nPlease review and correct before saving.`,
-        [{ text: 'Review', style: 'cancel' }]
-      );
-      return;
-    }
+    // [2026-08-03] [feature/per-photo-inventory] [2026-09-10, superseded the
+    // photo-count-vs-claimed-count hard block] Photo/quantity matching no longer
+    // applies — Preloved & Thrifting now shares the per-photo quantity model with
+    // product-sale categories (see usesPerPhotoInventory above), so there's no
+    // aggregate quantity to mismatch against any more.
 
     try {
       setSaving(true);
@@ -728,17 +695,21 @@ const EditListing: React.FC = () => {
 
       const acceptsPayment = serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment;
       // 2026-07-31: now backed by the shared PRODUCT_SALE_CATEGORIES list (see productCategories.ts)
-      const isBoutiqueOrJewelry = isProductCategory(serviceCategory);
+      // [2026-09-10] Split in two: usesPerPhotoInventory (component-level, includes
+      // Thrifting) drives price/quantity — isBoutiqueOnly stays scoped to the
+      // checkout-only fields (shipping charge, payment methods) Thrifting never gets.
+      const isBoutiqueOnly = isProductCategory(serviceCategory);
 
       // Prepare update data object - trim strings and convert empty strings to null
       const updateData = {
         title: title.trim(),
         description: description.trim() || null,
         service_category: serviceCategory,
-        // [feature/per-photo-inventory] For Boutique/Jewelry/Indian Groceries, the top-level
-        // price is a display aggregate (lowest per-photo price) — the real price customers
-        // pay comes from each photo's own price, edited in the Photos section below.
-        price: isBoutiqueOrJewelry
+        // [feature/per-photo-inventory] For categories using per-photo inventory, the
+        // top-level price is a display aggregate (lowest per-photo price) — the real
+        // price customers/requesters pay comes from each photo's own price, edited in
+        // the Photos section below.
+        price: usesPerPhotoInventory
           ? (() => {
               const photoPrices = [...existingPhotoMeta, ...newPhotoMeta]
                 .map(m => parseFloat(m.price) || 0)
@@ -751,16 +722,16 @@ const EditListing: React.FC = () => {
         contact_email: contactEmail.trim(),
         zip_code: zipCode.trim() || null,
         post_type: postType,
-        // [2026-08-03] [feature/per-photo-inventory] For Boutique/Jewelry/Indian
-        // Groceries, in_stock is now a display/back-compat aggregate — the sum of each
+        // [2026-08-03] [feature/per-photo-inventory] For categories using per-photo
+        // inventory, in_stock is now a display/back-compat aggregate — the sum of each
         // photo's own quantity (existing photos are re-priced/re-stocked via the PATCH
         // photo endpoint below, not this field).
-        ...(acceptsPayment ? {
-          in_stock: isBoutiqueOrJewelry
+        ...(acceptsPayment || usesPerPhotoInventory ? {
+          in_stock: usesPerPhotoInventory
             ? ([...existingPhotoMeta, ...newPhotoMeta].reduce((sum, m) => sum + (parseInt(m.quantity, 10) || 1), 0) || 1)
             : (parseInt(inStock) || 1),
         } : {}),
-        ...(isBoutiqueOrJewelry ? {
+        ...(isBoutiqueOnly ? {
           // [2026-08-03] [feature/per-photo-inventory] Was `Math.round(...) || 1000` — 0 is
           // falsy in JS, so an explicit $0.00 shipping charge got silently replaced with
           // $10.00. Dropped the fallback.
@@ -780,7 +751,7 @@ const EditListing: React.FC = () => {
       // Show success message and navigate back if update successful
       if (data.success) {
         // Merge and save payment methods to profile (never remove existing methods)
-        if (isBoutiqueOrJewelry && postPaymentMethods.length > 0) {
+        if (isBoutiqueOnly && postPaymentMethods.length > 0) {
           const mergedMethods = Array.from(new Set([...profilePaymentMethods, ...postPaymentMethods]));
           const mergedInfos = { ...profilePaymentInfos, ...postPaymentInfos };
           api.put(`/business-owners/by-user/${userInfo?.user_id}`, {
@@ -792,7 +763,7 @@ const EditListing: React.FC = () => {
         // [2026-08-03] [feature/per-photo-inventory] Save any Name/Price/Quantity edits
         // to photos that were already uploaded — previously impossible (existing photos
         // could only be removed, never re-priced or re-stocked).
-        if (isBoutiqueOrJewelry && existingPhotoMeta.length > 0) {
+        if (usesPerPhotoInventory && existingPhotoMeta.length > 0) {
           await Promise.all(
             existingPhotoMeta.map((meta, index) =>
               api.patch(`/api/service-posts/${postId}/photos/${index}`, {
@@ -1032,9 +1003,10 @@ const EditListing: React.FC = () => {
             <Text style={styles.charCount}>{description.length}/500</Text>
           </View>
 
-          {/* Price Range / Budget field — hidden for Boutique/Jewelry/Indian Groceries;
-              price is set per photo in the Photos section below instead. */}
-          {!isProductCategory(serviceCategory) && (
+          {/* Price Range / Budget field — hidden when using per-photo inventory
+              (Boutique/Jewelry/Indian Groceries/Thrifting); price is set per photo in
+              the Photos section below instead. */}
+          {!usesPerPhotoInventory && (
           serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment ? (
             <View style={styles.section}>
               <Text style={styles.label}>
@@ -1144,10 +1116,12 @@ const EditListing: React.FC = () => {
             {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
           </View>
 
-          {/* Quantity — only for payment-enabled categories.
+          {/* Quantity — only for payment-enabled categories not already using
+              per-photo inventory.
               [2026-08-03] [feature/per-photo-inventory] Hidden for Boutique/Jewelry/
-              Indian Groceries — quantity is entered per photo in the Photos section below. */}
-          {!isProductCategory(serviceCategory) && serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
+              Indian Groceries — quantity is entered per photo in the Photos section below.
+              [2026-09-10] Thrifting moved to the same per-photo model, hidden here too. */}
+          {!usesPerPhotoInventory && serviceCategories.find(c => c.category_name === serviceCategory)?.accepts_payment && (
             <View style={styles.section}>
               <Text style={styles.label}>Quantity Available</Text>
               <TextInput
@@ -1259,7 +1233,7 @@ const EditListing: React.FC = () => {
             {/* Header row: label + total count */}
             <View style={styles.photoHeader}>
               <Text style={styles.label}>
-                Photos {(isProductCategory(serviceCategory) || serviceCategory?.toLowerCase().trim() === 'preloved & thrifting')
+                Photos {usesPerPhotoInventory
                   ? <Text style={styles.required}> *</Text>
                   : <Text style={{ color: '#888', fontSize: 13 }}> (Optional)</Text>}
               </Text>
@@ -1270,8 +1244,9 @@ const EditListing: React.FC = () => {
 
             {/* [2026-08-03] [feature/per-photo-inventory] Boutique/Jewelry/Indian
                 Groceries: each photo is its own product, so it gets a card with
-                Name/Price/Quantity inputs instead of the plain thumbnail grid. */}
-            {isProductCategory(serviceCategory) ? (
+                Name/Price/Quantity inputs instead of the plain thumbnail grid.
+                [2026-09-10] Thrifting shares this same per-photo model now. */}
+            {usesPerPhotoInventory ? (
               <>
                 {existingPhotos.map((uri, index) => {
                   const meta = existingPhotoMeta[index] || { name: '', price: '', quantity: '1' };

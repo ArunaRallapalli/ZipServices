@@ -177,13 +177,14 @@ const DetailModal: React.FC<{
   const isThriftingFree =
     item.service_category?.toLowerCase().trim() === 'preloved & thrifting';
 
-  // [2026-09-10] A photo index is truly unavailable only when its own remaining
-  // quantity is 0 (paid categories, once loaded); else fall back to the binary
-  // sold_photo_indexes flag (thrift / legacy photos with no per-photo quantity).
+  // [2026-09-10] A photo index is truly unavailable when its own remaining quantity
+  // is 0, once loaded — true for Thrifting now too (shares the per-photo quantity
+  // model with paid categories). Falls back to the binary sold_photo_indexes flag
+  // only for legacy photos with no per-photo quantity.
   const isIndexUnavailable = React.useCallback((idx: number): boolean => {
-    if (!isThriftingFree && photoRemainingQty?.[idx] != null) return photoRemainingQty[idx] <= 0;
+    if (photoRemainingQty?.[idx] != null) return photoRemainingQty[idx] <= 0;
     return soldPhotoIndexes.includes(idx);
-  }, [isThriftingFree, photoRemainingQty, soldPhotoIndexes]);
+  }, [photoRemainingQty, soldPhotoIndexes]);
 
   // Fetch live in_stock + sold_photo_indexes when modal opens
   React.useEffect(() => {
@@ -372,12 +373,15 @@ const DetailModal: React.FC<{
               {photos.map((uri, index) => {
                 const isSold    = soldPhotoIndexes.includes(index);
                 const isPending = !isSold && isThriftingFree && thriftPendingIndexes.includes(index);
-                // [2026-09-10] Paid categories: quantity-aware badge — red "N sold",
-                // green "M available", solid-red "Sold Out" at 0. Legacy photos with
-                // no per-photo qty (and thrift) keep the old binary badge.
+                // [2026-09-10] Badge follows the photo's own remaining quantity, not the
+                // binary sold_photo_indexes flag — applies to Thrifting too now (shares
+                // the per-photo quantity model). Legacy photos with no per-photo qty
+                // keep the old binary badge. Thrifting also layers in an amber "Active
+                // Requests" badge when this photo has a pending request and still has
+                // stock — informational only, other buyers can still request it too.
                 const soldN = photoSoldQty?.[index] ?? 0;
                 const leftN = photoRemainingQty?.[index];
-                const usePerPhotoQty = !isThriftingFree && leftN != null;
+                const usePerPhotoQty = leftN != null;
                 const legacyLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
                 const legacyColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
                 const showLegacyBadge = !usePerPhotoQty && (isThriftingFree || isSold);
@@ -396,6 +400,10 @@ const DetailModal: React.FC<{
                       leftN! <= 0 ? (
                         <View style={[modalStyles.photoBadge, { backgroundColor: '#E53935' }]}>
                           <Text style={modalStyles.photoBadgeText}>Sold Out</Text>
+                        </View>
+                      ) : isPending ? (
+                        <View style={[modalStyles.photoBadge, { backgroundColor: '#F59E0B' }]}>
+                          <Text style={modalStyles.photoBadgeText}>Active Requests</Text>
                         </View>
                       ) : (
                         <View style={[modalStyles.photoBadge, modalStyles.photoBadgeLight]}>
@@ -478,10 +486,10 @@ const DetailModal: React.FC<{
             </View>
           )}
 
-          {/* 6. In Stock — only for payment-enabled non-thrifting categories.
+          {/* 6. In Stock — payment-enabled categories, Thrifting included.
               [2026-08-03] [feature/per-photo-inventory] see SearchResultsList.tsx for
               the same change / rationale. */}
-          {paymentCategories?.has(item.service_category) && !isThriftingFree && photos.length > 0 && (
+          {paymentCategories?.has(item.service_category) && photos.length > 0 && (
             (() => {
               const available = photoRemainingQty
                 ? photoRemainingQty.filter(q => q > 0).length
@@ -498,8 +506,9 @@ const DetailModal: React.FC<{
           {/* 6b. Per-photo sold / available breakdown — one row per photo.
               [2026-09-10] Reflects live inventory including stock released after an
               expired/cancelled order (server sweep reverts photo_quantities).
-              "N sold" red, "M available" green; "N sold" omitted when nothing sold. */}
-          {paymentCategories?.has(item.service_category) && !isThriftingFree && photoRemainingQty && (
+              "N sold" red, "M available" green; "N sold" omitted when nothing sold.
+              Includes Thrifting too — same per-photo model. */}
+          {paymentCategories?.has(item.service_category) && photoRemainingQty && (
             photos.map((_, idx) => {
               const s = photoSoldQty?.[idx] ?? 0;
               const a = photoRemainingQty[idx];
@@ -552,10 +561,13 @@ const DetailModal: React.FC<{
                     <Text style={[modalStyles.expiryNoteLine, { marginTop: 6 }]}><Text style={{ fontWeight: '700' }}>Seller:</Text> Requests are held for <Text style={{ fontWeight: '700' }}>48 hours</Text>. If no action is taken within this time, they will automatically expire and the item will become available again.</Text>
                   </View>
                   {(() => {
+                    // [2026-09-10] Uses isIndexUnavailable (qty-aware) instead of the
+                    // binary soldPhotoIndexes — a thrift photo with qty 3 that's had 1
+                    // claimed is still requestable for the other 2.
                     const hasPhotos = photos.length > 0;
-                    const selectedSold = hasPhotos && soldPhotoIndexes.includes(selectedPhotoIndex);
+                    const selectedSold = hasPhotos && isIndexUnavailable(selectedPhotoIndex);
                     const allUnavailable = hasPhotos
-                      ? photos.every((_: any, idx: number) => soldPhotoIndexes.includes(idx))
+                      ? photos.every((_: any, idx: number) => isIndexUnavailable(idx))
                       : false;
 
                     // All items given away or no stock left
