@@ -483,17 +483,9 @@ const MiniServiceCard: React.FC<{
                   const soldN = photoSoldQty?.[index] ?? 0;
                   const leftN = photoRemainingQty?.[index];
                   const usePerPhotoQty = !isThriftingFree && leftN != null;
-                  let badgeLabel: string | null;
-                  let badgeColor: string;
-                  if (usePerPhotoQty) {
-                    if (leftN! <= 0)      { badgeLabel = 'Sold Out';                  badgeColor = '#E53935'; }
-                    else if (soldN > 0)  { badgeLabel = `${soldN} sold · ${leftN} left`; badgeColor = '#2E7D32'; }
-                    else                 { badgeLabel = null;                          badgeColor = '#2E7D32'; }
-                  } else {
-                    badgeLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
-                    badgeColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
-                  }
-                  const showBadge = isThriftingFree || (usePerPhotoQty ? badgeLabel != null : isSold);
+                  const legacyLabel = isSold ? (isThriftingFree ? 'Unavailable' : 'Sold') : isPending ? 'Active Requests' : 'Available';
+                  const legacyColor = isSold ? (isThriftingFree ? '#9E9E9E' : '#E53935') : isPending ? '#F59E0B' : '#2E7D32';
+                  const showLegacyBadge = !usePerPhotoQty && (isThriftingFree || isSold);
                   return (
                     <TouchableOpacity
                       key={index}
@@ -505,11 +497,27 @@ const MiniServiceCard: React.FC<{
                         <Image source={{ uri }} style={modalStyles.thumbImg} resizeMode="cover" />
                       </View>
                       <Text style={modalStyles.thumbLabel}>#{item.post_id}-{index + 1}</Text>
-                      {showBadge && badgeLabel != null && (
-                        <View style={[modalStyles.photoBadge, { backgroundColor: badgeColor }]}>
-                          <Text style={modalStyles.photoBadgeText}>{badgeLabel}</Text>
+                      {/* [2026-09-10] Paid categories: quantity-aware badge — red "N sold",
+                          green "M available", solid-red "Sold Out" at 0. */}
+                      {usePerPhotoQty ? (
+                        leftN! <= 0 ? (
+                          <View style={[modalStyles.photoBadge, { backgroundColor: '#E53935' }]}>
+                            <Text style={modalStyles.photoBadgeText}>Sold Out</Text>
+                          </View>
+                        ) : (
+                          <View style={[modalStyles.photoBadge, modalStyles.photoBadgeLight]}>
+                            <Text style={modalStyles.photoBadgeQty}>
+                              {soldN > 0 && <Text style={modalStyles.qtySoldText}>{soldN} sold </Text>}
+                              {soldN > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
+                              <Text style={modalStyles.qtyAvailText}>{leftN} available</Text>
+                            </Text>
+                          </View>
+                        )
+                      ) : showLegacyBadge ? (
+                        <View style={[modalStyles.photoBadge, { backgroundColor: legacyColor }]}>
+                          <Text style={modalStyles.photoBadgeText}>{legacyLabel}</Text>
                         </View>
-                      )}
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -596,21 +604,29 @@ const MiniServiceCard: React.FC<{
               })()
             )}
 
-            {/* 6b. Selected photo's own sold / available breakdown.
+            {/* 6b. Per-photo sold / available breakdown — one row per photo.
                 [2026-09-10] Reflects live inventory including stock released after an
-                expired/cancelled order (server sweep reverts photo_quantities). */}
-            {paymentCategories?.has(item.service_category) && !isThriftingFree
-              && photoRemainingQty?.[selectedPhotoIndex] != null && (
-              <View style={modalStyles.deliveryRow}>
-                <Ionicons name="pricetag-outline" size={14} color="#555" />
-                <Text style={modalStyles.deliveryText}>
-                  {' '}#{item.post_id}-{selectedPhotoIndex + 1}: {photoSoldQty?.[selectedPhotoIndex] ?? 0} sold
-                  {' · '}
-                  {photoRemainingQty[selectedPhotoIndex] > 0
-                    ? `${photoRemainingQty[selectedPhotoIndex]} available`
-                    : 'sold out'}
-                </Text>
-              </View>
+                expired/cancelled order (server sweep reverts photo_quantities).
+                "N sold" red, "M available" green; "N sold" omitted when nothing sold. */}
+            {paymentCategories?.has(item.service_category) && !isThriftingFree && photoRemainingQty && (
+              (item.photos ?? []).map((_, idx) => {
+                const s = photoSoldQty?.[idx] ?? 0;
+                const a = photoRemainingQty[idx];
+                if (a == null) return null;
+                return (
+                  <View key={idx} style={modalStyles.deliveryRow}>
+                    <Ionicons name="pricetag-outline" size={14} color="#555" />
+                    <Text style={modalStyles.deliveryText}>
+                      {' '}#{item.post_id}-{idx + 1}:{' '}
+                      {s > 0 && <Text style={modalStyles.qtySoldText}>{s} sold </Text>}
+                      {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
+                      {a > 0
+                        ? <Text style={modalStyles.qtyAvailText}>{a} available</Text>
+                        : <Text style={modalStyles.qtySoldText}>sold out</Text>}
+                    </Text>
+                  </View>
+                );
+              })
             )}
 
             {/* 7. Delivery Timeline — only for payment-enabled non-thrifting categories */}
@@ -876,6 +892,12 @@ const modalStyles = StyleSheet.create({
   thumbLabel: { fontSize: 10, fontWeight: '700', color: '#4A90E2', marginTop: 3, textAlign: 'center' },
   photoBadge: { marginTop: 3, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' as const },
   photoBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  // [2026-09-10] Quantity-aware badge: light pill with two-colour text.
+  photoBadgeLight: { backgroundColor: '#F2F2F2', borderWidth: 1, borderColor: '#E0E0E0' },
+  photoBadgeQty: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  qtySoldText: { color: '#E53935', fontWeight: '700' as const },
+  qtySepText: { color: '#999' },
+  qtyAvailText: { color: '#2E7D32', fontWeight: '700' as const },
   photoCard: { width: 130, marginRight: 10, alignItems: 'center' },
   photoCardImg: { width: 120, height: 120, borderRadius: 8 },
   postTitle: {
