@@ -547,7 +547,7 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
 
     if (completeErr) { res.status(500).json({ error: 'Failed to complete request' }); return; }
 
-    // Decrement in_stock (aggregate) and, when set, this photo's own quantity.
+    // Decrement in_stock and, when set, this photo's own quantity.
     const { data: postData } = await supabase
       .from('service_posts')
       .select('in_stock, sold_photo_indexes, photo_quantities')
@@ -555,34 +555,42 @@ router.patch('/api/thrift-requests/:id/approve-complete', async (req: Request, r
       .single();
 
     const currentStock = Number(postData?.in_stock ?? 0);
-    const newStock = Math.max(currentStock - 1, 0);
-
-    const postUpdate: any = { in_stock: newStock };
+    const postUpdate: any = {};
 
     // [2026-09-10] Decrement the specific photo's own quantity (per-photo model,
     // shared with Boutique/Jewelry/Indian Groceries). Only mark it fully claimed in
     // the legacy binary column once ITS OWN quantity reaches 0 — a photo with 3
     // identical items sold once still has 2 left for other requesters.
     let photoRemainingAfter: number | null = null;
-    if (reqRow.photo_index !== null && reqRow.photo_index !== undefined) {
-      const quantities = postData?.photo_quantities;
-      const currentSold: number[] = postData?.sold_photo_indexes ?? [];
-      if (Array.isArray(quantities) && quantities[reqRow.photo_index] != null) {
-        const updated = [...quantities];
-        updated[reqRow.photo_index] = Math.max(Number(updated[reqRow.photo_index]) - 1, 0);
-        photoRemainingAfter = updated[reqRow.photo_index];
-        postUpdate.photo_quantities = updated;
-        if (photoRemainingAfter === 0 && !currentSold.includes(reqRow.photo_index)) {
-          postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
-        }
-      } else {
+    let newStock: number;
+    const quantities = postData?.photo_quantities;
+    const currentSold: number[] = postData?.sold_photo_indexes ?? [];
+    if (
+      reqRow.photo_index !== null && reqRow.photo_index !== undefined &&
+      Array.isArray(quantities) && quantities[reqRow.photo_index] != null
+    ) {
+      const updated = [...quantities];
+      updated[reqRow.photo_index] = Math.max(Number(updated[reqRow.photo_index]) - 1, 0);
+      photoRemainingAfter = updated[reqRow.photo_index];
+      postUpdate.photo_quantities = updated;
+      if (photoRemainingAfter === 0 && !currentSold.includes(reqRow.photo_index)) {
+        postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
+      }
+      // [2026-09-19] Re-derive in_stock from the per-photo quantities themselves
+      // instead of decrementing it independently — keeps the two counters from
+      // drifting apart if quantities were ever edited directly after posting.
+      newStock = updated.reduce((sum: number, q: any) => sum + Math.max(Number(q) || 0, 0), 0);
+    } else {
+      if (reqRow.photo_index !== null && reqRow.photo_index !== undefined) {
         // Legacy photo (predates per-photo qty) — one request is the whole photo.
         photoRemainingAfter = 0;
         if (!currentSold.includes(reqRow.photo_index)) {
           postUpdate.sold_photo_indexes = [...currentSold, reqRow.photo_index];
         }
       }
+      newStock = Math.max(currentStock - 1, 0);
     }
+    postUpdate.in_stock = newStock;
 
     await supabase.from('service_posts').update(postUpdate).eq('id', reqRow.post_id);
     console.log(`✅ Thrift request ${requestId} approved & completed. Post #${reqRow.post_id} in_stock: ${currentStock} → ${newStock}` +

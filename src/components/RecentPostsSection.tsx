@@ -507,7 +507,10 @@ const DetailModal: React.FC<{
               [2026-09-10] Reflects live inventory including stock released after an
               expired/cancelled order (server sweep reverts photo_quantities).
               "N sold" red, "M available" green; "N sold" omitted when nothing sold.
-              Includes Thrifting too — same per-photo model. */}
+              Includes Thrifting too — same per-photo model.
+              [2026-09-19] A fully-claimed photo used to show both "N taken" AND
+              "all taken" together (e.g. "1 taken · all taken") — redundant. Now
+              shows just "all taken"/"sold out" alone once nothing is left. */}
           {paymentCategories?.has(item.service_category) && photoRemainingQty && (
             photos.map((_, idx) => {
               const s = photoSoldQty?.[idx] ?? 0;
@@ -518,11 +521,15 @@ const DetailModal: React.FC<{
                   <Ionicons name="pricetag-outline" size={14} color="#555" />
                   <Text style={modalStyles.deliveryText}>
                     {' '}#{item.post_id}-{idx + 1}:{' '}
-                    {s > 0 && <Text style={modalStyles.qtySoldText}>{s} {isThriftingFree ? 'taken' : 'sold'} </Text>}
-                    {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
-                    {a > 0
-                      ? <Text style={modalStyles.qtyAvailText}>{a} available</Text>
-                      : <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>}
+                    {a > 0 ? (
+                      <>
+                        {s > 0 && <Text style={modalStyles.qtySoldText}>{s} {isThriftingFree ? 'taken' : 'sold'} </Text>}
+                        {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
+                        <Text style={modalStyles.qtyAvailText}>{a} available</Text>
+                      </>
+                    ) : (
+                      <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>
+                    )}
                   </Text>
                 </View>
               );
@@ -788,10 +795,13 @@ const MiniServiceCard: React.FC<{
   return (
     <>
       {(() => {
+        // [2026-09-19] badgeLabel now checks actual price too — a priced Preloved &
+        // Thrifting listing was always shown as "FREE", regardless of its price.
         const isThrifting = item.service_category?.toLowerCase().trim() === 'preloved & thrifting';
+        const isThriftingFree = isThrifting && (!item.price || parseFloat(item.price) === 0);
         const isBoutique = !isThrifting && paymentCategories?.has(item.service_category);
         const accentColor = isThrifting ? '#27AE60' : isBoutique ? '#E67E22' : '#4A90E2';
-        const badgeLabel = isThrifting ? 'FREE' : isBoutique ? 'SALE' : 'SERVICE';
+        const badgeLabel = isThrifting ? (isThriftingFree ? 'FREE' : 'REQUEST') : isBoutique ? 'SALE' : 'SERVICE';
         return (
       <TouchableOpacity
         style={[miniStyles.card, { borderLeftWidth: 4, borderLeftColor: accentColor }]}
@@ -839,6 +849,21 @@ const MiniServiceCard: React.FC<{
         {/* Text content — right side */}
         <View style={miniStyles.content}>
           <Text style={miniStyles.title} numberOfLines={2}>{item.title}</Text>
+
+          {/* [2026-09-19] Category pill — this card had no visible category name at
+              all (only the SALE/FREE/REQUEST/SERVICE badge on the photo), so a
+              customer couldn't tell Boutique from Preloved & Thrifting without
+              opening the post. Mirrors the pill already used in SearchResultsList.tsx. */}
+          <View
+            style={[
+              miniStyles.categoryPill,
+              { backgroundColor: (CATEGORY_META[item.service_category] ?? DEFAULT_META).color },
+            ]}
+          >
+            <Text style={miniStyles.categoryPillText} numberOfLines={1}>
+              {item.service_category}
+            </Text>
+          </View>
 
           {/* Stars — tap opens ReviewsModal */}
           <TouchableOpacity
@@ -1133,6 +1158,19 @@ const miniStyles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 4,
     minHeight: 34,
+  },
+  categoryPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  categoryPillText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   starsRow: {
     flexDirection: 'row',

@@ -619,7 +619,10 @@ const MiniServiceCard: React.FC<{
                 [2026-09-10] Reflects live inventory including stock released after an
                 expired/cancelled order (server sweep reverts photo_quantities).
                 "N sold" red, "M available" green; "N sold" omitted when nothing sold.
-                Includes Thrifting too — same per-photo model. */}
+                Includes Thrifting too — same per-photo model.
+                [2026-09-19] A fully-claimed photo used to show both "N taken" AND
+                "all taken" together (e.g. "1 taken · all taken") — redundant. Now
+                shows just "all taken"/"sold out" alone once nothing is left. */}
             {paymentCategories?.has(item.service_category) && photoRemainingQty && (
               (item.photos ?? []).map((_, idx) => {
                 const s = photoSoldQty?.[idx] ?? 0;
@@ -630,11 +633,15 @@ const MiniServiceCard: React.FC<{
                     <Ionicons name="pricetag-outline" size={14} color="#555" />
                     <Text style={modalStyles.deliveryText}>
                       {' '}#{item.post_id}-{idx + 1}:{' '}
-                      {s > 0 && <Text style={modalStyles.qtySoldText}>{s} {isThriftingFree ? 'taken' : 'sold'} </Text>}
-                      {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
-                      {a > 0
-                        ? <Text style={modalStyles.qtyAvailText}>{a} available</Text>
-                        : <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>}
+                      {a > 0 ? (
+                        <>
+                          {s > 0 && <Text style={modalStyles.qtySoldText}>{s} {isThriftingFree ? 'taken' : 'sold'} </Text>}
+                          {s > 0 && <Text style={modalStyles.qtySepText}>· </Text>}
+                          <Text style={modalStyles.qtyAvailText}>{a} available</Text>
+                        </>
+                      ) : (
+                        <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>
+                      )}
                     </Text>
                   </View>
                 );
