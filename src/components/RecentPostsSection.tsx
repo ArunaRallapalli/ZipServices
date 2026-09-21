@@ -399,7 +399,14 @@ const DetailModal: React.FC<{
                     {usePerPhotoQty ? (
                       leftN! <= 0 ? (
                         <View style={[modalStyles.photoBadge, { backgroundColor: '#E53935' }]}>
-                          <Text style={modalStyles.photoBadgeText}>{isThriftingFree ? 'All Taken' : 'Sold Out'}</Text>
+                          {/* [2026-09-20] "All Taken"/"Sold Out" only when this photo ever
+                              had more than 1 unit — a single-unit photo just says "Taken"/
+                              "Sold", since "All" reads oddly when there was only ever one. */}
+                          <Text style={modalStyles.photoBadgeText}>
+                            {soldN <= 1
+                              ? (isThriftingFree ? 'Taken' : 'Sold')
+                              : (isThriftingFree ? 'All Taken' : 'Sold Out')}
+                          </Text>
                         </View>
                       ) : isPending ? (
                         <View style={[modalStyles.photoBadge, { backgroundColor: '#F59E0B' }]}>
@@ -510,7 +517,10 @@ const DetailModal: React.FC<{
               Includes Thrifting too — same per-photo model.
               [2026-09-19] A fully-claimed photo used to show both "N taken" AND
               "all taken" together (e.g. "1 taken · all taken") — redundant. Now
-              shows just "all taken"/"sold out" alone once nothing is left. */}
+              shows just "all taken"/"sold out" alone once nothing is left.
+              [2026-09-20] "all taken"/"sold out" only when the photo ever had more
+              than 1 unit — a single-unit photo says "taken"/"sold" instead, since
+              "all" reads oddly when there was only ever one. */}
           {paymentCategories?.has(item.service_category) && photoRemainingQty && (
             photos.map((_, idx) => {
               const s = photoSoldQty?.[idx] ?? 0;
@@ -528,7 +538,11 @@ const DetailModal: React.FC<{
                         <Text style={modalStyles.qtyAvailText}>{a} available</Text>
                       </>
                     ) : (
-                      <Text style={modalStyles.qtySoldText}>{isThriftingFree ? 'all taken' : 'sold out'}</Text>
+                      <Text style={modalStyles.qtySoldText}>
+                        {s <= 1
+                          ? (isThriftingFree ? 'taken' : 'sold')
+                          : (isThriftingFree ? 'all taken' : 'sold out')}
+                      </Text>
                     )}
                   </Text>
                 </View>
